@@ -52,25 +52,45 @@ A comprehensive tool for analyzing scientific research papers using Large Langua
 ## 📁 Project Structure
 
 ```
-├── Maximum_Context_Scientific_Analyzer.ipynb  # Main analysis notebook
-├── citation_extractor.py                      # Citation extraction module
-├── d4sc03921a.pdf                            # Example research paper
-├── README.md                                  # This file
-└── .gitignore                                # Git ignore rules
+├── src/                                       # Core Python modules
+│   ├── citation_extractor.py                 # Citation extraction engine
+│   ├── enhanced_citation_extractor.py        # Database-integrated extractor
+│   ├── database_manager.py                   # PostgreSQL database operations
+│   └── __init__.py                           # Package initialization
+├── notebooks/                                # Jupyter notebooks
+│   ├── Maximum_Context_Scientific_Analyzer.ipynb  # Main analysis notebook
+│   ├── Tutorial.ipynb                        # Beginner tutorial
+│   ├── Scientific_Paper_Analyzer.ipynb       # Intermediate analysis
+│   └── README.md                             # Notebook documentation
+├── database/                                 # Database setup files
+│   └── database_setup.sql                   # PostgreSQL schema
+├── docs/                                     # Documentation
+│   ├── database_setup_instructions.md       # Database setup guide
+│   ├── API_REFERENCE.md                     # API documentation
+│   └── INSTALLATION.md                      # Installation instructions
+├── examples/                                 # Example files and papers
+│   ├── d4sc03921a.pdf                       # Example research paper
+│   └── README.md                            # Examples documentation
+├── config/                                   # Configuration files
+│   ├── database_config.py                   # Database configuration
+│   └── __init__.py                          # Config package
+├── requirements.txt                          # Python dependencies
+├── README.md                                # This file
+└── .gitignore                               # Git ignore rules
 ```
 
 ## 🚀 Usage
 
 ### Quick Start
 
-1. Open the Jupyter notebook:
+1. Open the main Jupyter notebook:
    ```bash
-   jupyter notebook Maximum_Context_Scientific_Analyzer.ipynb
+   jupyter notebook notebooks/Maximum_Context_Scientific_Analyzer.ipynb
    ```
 
 2. Update the PDF path in the first cell:
    ```python
-   pdf_path = "path/to/your/research_paper.pdf"
+   pdf_path = "../examples/d4sc03921a.pdf"  # or your own paper
    ```
 
 3. Run all cells to:
@@ -83,13 +103,13 @@ A comprehensive tool for analyzing scientific research papers using Large Langua
 To use just the citation extractor:
 
 ```python
-from citation_extractor import display_citation_info, get_acs_citation
+from src import display_citation_info, get_acs_citation
 
 # Extract and display full citation info
-citation_result = display_citation_info("paper.pdf", show_all_formats=True)
+citation_result = display_citation_info("examples/d4sc03921a.pdf", show_all_formats=True)
 
 # Get just ACS formatted citation
-acs_citation = get_acs_citation("paper.pdf")
+acs_citation = get_acs_citation("examples/d4sc03921a.pdf")
 print(acs_citation)
 ```
 
