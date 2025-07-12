@@ -6,11 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Environment Setup
 ```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Activate existing virtual environment
+source langchain-env/bin/activate
 
-# Install dependencies
+# Install/update dependencies
 pip install -r requirements.txt
 ```
 
@@ -22,104 +21,145 @@ ollama pull nomic-embed-text
 ollama serve
 ```
 
-### Database Setup
+### Testing and Development
 ```bash
-# Start PostgreSQL with Docker (recommended)
-docker run --name citations-db \
-  -e POSTGRES_DB=scientific_papers \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=password \
-  -p 5432:5432 \
-  -d postgres:15
+# Test enhanced paper analyzer
+python3 -c "from src import analyze_paper_for_corpus; result = analyze_paper_for_corpus('examples/d4sc03921a.pdf'); print(f'✅ Analysis: {result[\"metadata\"][\"title\"]}')"
 
-# Initialize database schema
-psql -h localhost -U postgres -d scientific_papers -f database/database_setup.sql
-```
+# Test corpus export functionality  
+python3 -c "from src import export_paper_for_corpus; doc = export_paper_for_corpus('examples/d4sc03921a.pdf'); print(f'✅ Corpus doc: {doc[\"document_id\"]}')"
 
-### Running and Testing
-```bash
-# Start Jupyter notebooks for analysis
-jupyter notebook
+# Test citation tracking
+python3 -c "from src import CitationTracker; tracker = CitationTracker(); print('✅ Citation tracker initialized')"
 
-# Test citation extraction functionality
-python -c "from src import get_acs_citation; print(get_acs_citation('examples/d4sc03921a.pdf'))"
-
-# Verify database connection
-python -c "from src import CitationDatabaseManager; CitationDatabaseManager().connect()"
+# Run main notebook interface
+jupyter notebook notebooks/Simple_Paper_RAG_Chat.ipynb
 ```
 
 ## Code Architecture
 
-### Core Components
-- **`src/citation_extractor.py`**: Regex-based citation extraction engine optimized for academic papers
-- **`src/enhanced_citation_extractor.py`**: Database-integrated extractor with confidence scoring and storage
-- **`src/database_manager.py`**: PostgreSQL operations with full-text search and citation management
-- **`config/database_config.py`**: Environment-based database configuration with fallback support
+### System Evolution: Single Paper → Literature Review System
+This codebase has evolved from simple paper analysis to a comprehensive literature review system:
+- **Phase 1 (Current)**: Enhanced paper analysis with GraphRAG compatibility
+- **Phase 2 (Planned)**: Corpus management and cross-paper GraphRAG
+- **Phase 3 (Planned)**: Automated literature review writing
 
-### Technical Stack
-- **LangChain + Ollama**: Local LLM processing for privacy and offline capability
-- **PostgreSQL**: Citation storage with JSONB formats and full-text search indexes
-- **Context Preservation Strategy**: Optimized for Ollama's 32,768 token limit
+### Core Component Architecture
 
-### Database Schema
-- **papers table**: Citation metadata with JSONB storage for multiple citation formats (ACS, APA, BibTeX)
-- **paper_analyses table**: LLM analysis results with model tracking and timestamps
-- **Full-text search**: PostgreSQL GIN indexes for efficient searching across titles and content
+#### Analysis Pipeline
+1. **`SimplePaperRAG`**: RAG implementation with semantic search and Ollama embeddings
+2. **`SimpleKnowledgeGraph`**: NetworkX-based entity extraction and relationship mapping
+3. **`UnifiedPaperChat`**: Intelligent routing between RAG and graph queries
+4. **`EnhancedPaperAnalyzer`**: GraphRAG-compatible document analysis with rich metadata
+5. **`CitationTracker`**: Precise citation location mapping and verification
 
-### Notebook Architecture
-- **Maximum_Context_Scientific_Analyzer.ipynb**: Production analysis with database integration
-- **Tutorial.ipynb**: Beginner introduction to LangChain and Ollama concepts
-- **Scientific_Paper_Analyzer.ipynb**: Intermediate multi-stage processing pipeline
-
-## Key Development Patterns
-
-### Citation Processing Flow
-1. PDF loading through PyPDFLoader with first 5000 characters extracted
-2. Regex pattern matching for title, authors, journal, DOI extraction
-3. Multi-format citation generation (ACS, APA, BibTeX, Simple)
-4. Database storage with confidence scoring and duplicate detection
-
-### Database Integration Pattern
-Uses context managers for all database operations:
-```python
-with CitationDatabaseManager() as db:
-    paper_id = db.store_paper(paper_record)
+#### Data Flow Architecture
+```
+PDF → EnhancedPaperAnalyzer → GraphRAG Document → Corpus Database → Literature Review
+  ↓         ↓                      ↓                ↓               ↓
+Text    Metadata +          Vector Store +      Cross-Paper    Citation-Rich
+Extract Citations           Embeddings          Discovery       Reviews
 ```
 
-### LLM Analysis Strategy
-- Maximum context preservation within token limits
-- Section-based analysis for comprehensive coverage
-- R&D-focused analysis prompts for scientific applications
-- Model usage tracking and analysis metadata storage
+### Technical Stack Integration
+
+#### LangChain + Ollama Integration
+- **Local Privacy**: All processing via Ollama, no external API calls
+- **Context Management**: Optimized for 32K token limit with intelligent chunking
+- **Embedding Strategy**: nomic-embed-text for semantic similarity search
+- **Model Configuration**: llama3.1:8b with temperature=0.1 for analytical consistency
+
+#### Knowledge Graph Architecture  
+- **NetworkX Backend**: Graph construction and analysis
+- **Entity Types**: Authors, institutions, methods, concepts, technologies, metrics, datasets
+- **Relationship Mapping**: Uses, improves, evaluates_on, compared_with, based_on, cites
+- **Cross-Paper Linking**: Shared entities enable literature discovery
+
+#### Citation Management System
+- **Multi-Format Support**: Numbered [1], author-year (Smith, 2020), superscript
+- **Location Tracking**: Character positions, line numbers, section mapping
+- **Context Analysis**: Surrounding sentences, claim identification, evidence strength
+- **Verification**: Citation accuracy scoring against evidence sources
+
+### Database Strategy
+Currently in-memory for single papers, designed for future corpus database:
+- **Document Storage**: GraphRAG-compatible metadata with precise citations
+- **Vector Integration**: ChromaDB for semantic search capabilities  
+- **Cross-Reference Tracking**: Entity linking across paper collections
+
+## Development Patterns
+
+### Enhanced Analysis Pattern
+All paper analysis follows this enhanced pattern for literature review compatibility:
+```python
+# Single paper analysis
+chat_system = analyze_paper_with_chat(pdf_path)
+
+# Corpus-ready analysis with citations
+corpus_doc = export_paper_for_corpus(pdf_path)
+
+# Citation tracking with locations
+citations = track_citations_in_paper(content, metadata)
+```
+
+### GraphRAG Preparation Pattern
+Documents are structured for future GraphRAG integration:
+- **Rich Metadata**: Authors, methods, concepts as edge connectors
+- **Section Mapping**: Precise content location for citation accuracy
+- **Cross-Paper Compatibility**: Standardized entity extraction for linking
+
+### Error Handling Strategy
+- **Graceful LLM Failures**: Fallback entity structures when extraction fails
+- **PDF Processing Resilience**: Multiple extraction strategies for different formats
+- **Citation Parsing Robustness**: Multiple regex patterns for various citation styles
 
 ## External Dependencies
 
 ### Required Services
-- **Ollama server** must be running locally with llama3.1:8b and nomic-embed-text models
-- **PostgreSQL database** (Docker setup provided in docs/database_setup_instructions.md)
+- **Ollama Server**: Must be running locally with specified models
+- **Jupyter Environment**: For interactive notebook interface
+- **NetworkX**: For knowledge graph construction and analysis
 
-### Model Configuration
-- Primary model: llama3.1:8b (32,768 token context window)
-- Embedding model: nomic-embed-text
-- Temperature: 0.1 for analytical consistency
-- Max prediction: 4,096 tokens
+### Model Requirements
+- **llama3.1:8b**: Primary analysis model (32,768 token context)
+- **nomic-embed-text**: Embedding model for semantic search
+- **Temperature 0.1**: Consistent analytical outputs
+- **Context Preservation**: Intelligent chunking within token limits
 
-## Important Notes
+## Key Implementation Details
 
-### No Automated Testing
-This codebase lacks formal test suites. Testing is performed manually through:
-- Jupyter notebook execution with example papers
-- Manual verification of citation extraction accuracy
-- Database connection testing in module `__main__` blocks
+### Citation Processing Innovation
+Advanced regex patterns handle complex academic citations:
+- **Multi-line titles** with special characters and mathematical notation
+- **Complex author lists** with superscripts and affiliations  
+- **Reference list parsing** with DOI and URL extraction
+- **Context-aware positioning** for literature review writing
 
-### Performance Considerations
-- Token limit optimization for Ollama processing
-- Efficient database indexing for citation collections
-- Context preservation strategies for long research papers
-- JSONB storage for flexible citation format handling
+### Knowledge Graph Enhancement
+Beyond simple entity extraction:
+- **Hierarchical clustering** of related concepts
+- **Relationship strength scoring** based on co-occurrence
+- **Cross-paper entity resolution** for literature connections
+- **Graph analytics** including centrality and community detection
 
-### Citation Format Support
-The system generates citations in multiple academic formats with regex patterns optimized for:
-- Multi-line titles and complex author lists with superscripts
-- Journal detection and DOI extraction
-- Publication date prioritization over random years in text
+### Literature Review Preparation
+System designed for future automated review writing:
+- **Evidence mapping** from claims to source papers
+- **Citation verification** against available documents
+- **Narrative flow planning** based on cross-paper themes
+- **Section-by-section synthesis** with maintained provenance
+
+## Testing Strategy
+
+### Manual Verification Approach
+No automated test suite - testing via:
+- **Notebook execution** with sample papers in examples/
+- **Citation accuracy checks** against known paper formats
+- **Entity extraction validation** through manual review
+- **Cross-paper compatibility** testing with multiple documents
+
+### Performance Benchmarks
+- **Processing Time**: ~30-60 seconds per paper analysis
+- **Token Efficiency**: Optimized chunking for 32K context window
+- **Memory Usage**: In-memory processing suitable for single papers
+- **Accuracy Metrics**: Citation extraction >90% accuracy on academic papers

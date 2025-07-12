@@ -1,6 +1,6 @@
 # Notebooks
 
-This directory contains the main Jupyter notebook for the Simple Scientific Paper RAG + Knowledge Graph system.
+This directory contains Jupyter notebooks for the Scientific Paper Literature Review System.
 
 ## Main Notebook
 
@@ -13,19 +13,19 @@ This directory contains the main Jupyter notebook for the Simple Scientific Pape
 - Knowledge graph entity extraction (authors, methods, concepts)
 - Interactive chat interface for exploring the paper
 - Citation extraction and formatting
-- Visual relationship mapping
+- Enhanced metadata extraction for literature reviews
 
 **Workflow:**
 1. **Load Paper**: Upload PDF and extract content
 2. **Build Knowledge**: Create embeddings and extract entities
 3. **Chat Interface**: Ask questions using natural language
 4. **Explore Graph**: Discover relationships and connections
-5. **Export Results**: Get citations and insights
+5. **Export for Corpus**: Generate GraphRAG-compatible documents
 
 **Perfect for:**
 - Personal research and paper analysis
 - Understanding complex scientific papers
-- Discovering hidden connections in research
+- Preparing papers for literature review corpus
 - Quick literature exploration
 
 ## Getting Started
@@ -34,12 +34,14 @@ This directory contains the main Jupyter notebook for the Simple Scientific Pape
 1. **Ollama running** with required models:
    ```bash
    ollama pull llama3.1:8b
+   ollama pull nomic-embed-text
    ollama serve
    ```
 
-2. **PostgreSQL database** (for main notebook):
+2. **Python environment**:
    ```bash
-   # See docs/database_setup_instructions.md for setup
+   source langchain-env/bin/activate
+   pip install -r requirements.txt
    ```
 
 3. **Jupyter installed**:
@@ -47,7 +49,7 @@ This directory contains the main Jupyter notebook for the Simple Scientific Pape
    pip install jupyter
    ```
 
-### Running the Notebooks
+### Running the Notebook
 
 1. **Start Jupyter**:
    ```bash
@@ -56,7 +58,7 @@ This directory contains the main Jupyter notebook for the Simple Scientific Pape
 
 2. **Navigate to notebooks directory**
 
-3. **Open desired notebook**
+3. **Open `Simple_Paper_RAG_Chat.ipynb`**
 
 4. **Update PDF path** in the first code cell:
    ```python
@@ -65,34 +67,57 @@ This directory contains the main Jupyter notebook for the Simple Scientific Pape
 
 5. **Run all cells**
 
-## Recommended Learning Path
+## Features Available
 
-1. **Start with `Tutorial.ipynb`**
-   - Learn basic concepts
-   - Understand PDF processing
-   - Get familiar with Ollama
+### Basic Analysis
+- Paper loading and processing
+- Entity extraction (authors, methods, concepts)
+- Knowledge graph construction
+- Interactive chat interface
 
-2. **Move to `Scientific_Paper_Analyzer.ipynb`**
-   - Learn about chunking strategies
-   - Understand multi-stage processing
-   - Experiment with analysis approaches
+### Enhanced Analysis (New)
+- GraphRAG-compatible metadata extraction
+- Precise citation tracking and location mapping
+- Section structure analysis
+- Domain and research type classification
+- Export functionality for literature review corpus
 
-3. **Use `Maximum_Context_Scientific_Analyzer.ipynb`**
-   - Production-ready analysis
-   - Database integration
-   - Comprehensive R&D analysis
+### Example Usage
+
+```python
+# Basic paper analysis
+from src import analyze_paper_with_chat
+chat_system = analyze_paper_with_chat("path/to/paper.pdf")
+
+# Enhanced corpus-ready analysis  
+from src import export_paper_for_corpus
+corpus_doc = export_paper_for_corpus("path/to/paper.pdf")
+
+# Citation tracking
+from src import track_citations_in_paper
+citations = track_citations_in_paper(content, metadata)
+```
+
+## Future Notebooks
+
+Coming soon for the complete literature review system:
+- `Literature_Review_System.ipynb` - Complete corpus management and GraphRAG
+- `Corpus_Builder.ipynb` - Batch processing of multiple papers
+- `Review_Writer.ipynb` - Automated literature review generation
 
 ## Customization
 
 ### Changing Analysis Focus
-Modify the analysis prompt in the notebooks to focus on different aspects:
+Modify the analysis to focus on different aspects:
 - **Technical focus**: Emphasize methodology and implementation
-- **Business focus**: Highlight commercial applications and market impact
-- **Academic focus**: Focus on research contributions and citations
+- **Review focus**: Highlight findings and comparisons
+- **Citation focus**: Track references and evidence
 
 ### Using Different Models
 Update the Ollama configuration:
 ```python
+from langchain_ollama import ChatOllama
+
 llm = ChatOllama(
     model="mistral",  # or other models
     temperature=0.1,
@@ -100,24 +125,13 @@ llm = ChatOllama(
 )
 ```
 
-### Processing Multiple Papers
-Create a loop to process multiple PDFs:
-```python
-import os
-
-pdf_directory = "../examples/"
-for filename in os.listdir(pdf_directory):
-    if filename.endswith(".pdf"):
-        pdf_path = os.path.join(pdf_directory, filename)
-        # Run analysis...
-```
-
 ## Output Examples
 
-Each notebook produces different types of output:
+The notebook produces:
+- **Interactive chat responses** with paper insights
+- **Entity graphs** showing relationships
+- **Citation maps** with precise locations
+- **Corpus-ready documents** for literature reviews
+- **Metadata extracts** including domain classification
 
-- **Tutorial**: Simple abstract summaries
-- **Scientific_Paper_Analyzer**: Structured multi-section analysis
-- **Maximum_Context_Scientific_Analyzer**: Comprehensive R&D analysis with database storage
-
-See the individual notebooks for example outputs and expected results.
+See the notebook for example outputs and expected results.

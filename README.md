@@ -1,194 +1,217 @@
-# Simple Scientific Paper RAG + Knowledge Graph
+# Scientific Paper Literature Review System
 
-A simple, personal tool for intelligent analysis of scientific papers using RAG (Retrieval-Augmented Generation) and Knowledge Graph extraction. Built with LangChain, LangGraph, and Ollama for local, private analysis.
+An intelligent system for analyzing scientific papers and building comprehensive literature reviews. Features enhanced paper analysis, knowledge graph extraction, citation tracking, and GraphRAG integration for cross-paper discovery and citation-accurate writing.
 
-## 🎯 Features
+Built with LangChain, LangGraph, and Ollama for local, private analysis.
 
-- **🤖 RAG Chat Interface**: Ask natural language questions about your paper
-- **🕸️ Knowledge Graph**: Automatically extract entities (authors, methods, concepts) and relationships
-- **📚 Smart Retrieval**: Find relevant content using semantic similarity
-- **🧠 Local AI**: Uses Ollama for complete privacy - no data sent to external APIs
-- **📝 Citation Management**: Extract and format citations in academic styles
-- **🔍 Entity Discovery**: Identify key concepts, methods, and relationships in papers
+## 🎯 Key Features
 
-## 🛠️ Setup
+### 📄 Enhanced Paper Analysis
+- **Deep Content Extraction**: Comprehensive metadata including authors, year, domain, research type
+- **Section Structure Analysis**: Precise mapping of document sections with line numbers
+- **Citation Tracking**: Location-aware citation extraction and verification
+- **Entity & Relationship Mapping**: Knowledge graph construction with NetworkX
+
+### 🕸️ Literature Review Capabilities  
+- **GraphRAG Integration**: Cross-paper discovery using LangChain GraphRAG
+- **Corpus Management**: Store and index analyzed papers for literature reviews
+- **Citation-Accurate Writing**: Maintain precise source traceability for every claim
+- **Theme Discovery**: Identify research trends and gaps across paper collections
+
+### 🤖 Interactive Analysis
+- **RAG Chat Interface**: Ask natural language questions about papers
+- **Smart Retrieval**: Semantic similarity search with context preservation
+- **Knowledge Graph Exploration**: Discover relationships between concepts and methods
+- **Local Privacy**: Complete analysis using Ollama - no external API calls
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **Ollama**: Install and run Ollama locally
+1. **Ollama** with required models:
    ```bash
-   # Install Ollama (visit https://ollama.ai for installation instructions)
-   # Pull required models
    ollama pull llama3.1:8b
    ollama pull nomic-embed-text
-   ```
-
-2. **Python Environment**: Python 3.8+ recommended
-   ```bash
-   # Create virtual environment (optional but recommended)
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Dependencies**: Install required packages
-   ```bash
-   pip install langchain langchain-community langchain-ollama
-   ```
-
-### Installation
-
-1. Clone this repository:
-   ```bash
-   git clone <repository-url>
-   cd scientific-paper-analyzer
-   ```
-
-2. Ensure Ollama is running:
-   ```bash
    ollama serve
    ```
 
-3. Place your PDF research paper in the project directory or update the `pdf_path` in the notebook
+2. **Python Environment**:
+   ```bash
+   source langchain-env/bin/activate
+   pip install -r requirements.txt
+   ```
+
+### Basic Paper Analysis
+
+```python
+from src import analyze_paper_with_chat
+
+# Analyze a single paper
+chat_system = analyze_paper_with_chat("path/to/paper.pdf")
+
+# Ask questions
+response = chat_system.chat("What are the main findings?")
+print(response['answer'])
+
+# Explore entities
+entities = chat_system.get_entities()
+print(f"Authors: {entities['authors']}")
+print(f"Methods: {entities['methods']}")
+```
+
+### Literature Review Preparation
+
+```python
+from src import export_paper_for_corpus, track_citations_in_paper
+
+# Export paper for corpus inclusion
+corpus_doc = export_paper_for_corpus("path/to/paper.pdf")
+
+# Track citations with precise locations
+citations = track_citations_in_paper(
+    corpus_doc['content'], 
+    corpus_doc['metadata']
+)
+
+print(f"Found {len(citations['inline_citations'])} citations")
+print(f"Document ready for GraphRAG: {corpus_doc['document_id']}")
+```
+
+## 📊 System Architecture
+
+```
+Papers → Enhanced Analysis → Corpus Database → GraphRAG → Literature Reviews
+   ↓          ↓                   ↓             ↓           ↓
+Single     Rich Metadata      Vector Store   Cross-Paper  Citation-Rich
+Paper      + Citations        + Graph        Discovery    Reviews
+```
+
+### Core Components
+
+1. **`EnhancedPaperAnalyzer`**: GraphRAG-compatible document analysis
+2. **`CitationTracker`**: Precise citation location mapping  
+3. **`UnifiedPaperChat`**: Interactive paper exploration
+4. **`SimplePaperRAG`**: Semantic search and retrieval
+5. **`SimpleKnowledgeGraph`**: Entity and relationship extraction
 
 ## 📁 Project Structure
 
 ```
-├── src/                                       # Core Python modules
-│   ├── citation_extractor.py                 # Citation extraction engine
-│   ├── enhanced_citation_extractor.py        # Database-integrated extractor
-│   ├── database_manager.py                   # PostgreSQL database operations
-│   └── __init__.py                           # Package initialization
-├── notebooks/                                # Jupyter notebooks
-│   ├── Maximum_Context_Scientific_Analyzer.ipynb  # Main analysis notebook
-│   ├── Tutorial.ipynb                        # Beginner tutorial
-│   ├── Scientific_Paper_Analyzer.ipynb       # Intermediate analysis
-│   └── README.md                             # Notebook documentation
-├── database/                                 # Database setup files
-│   └── database_setup.sql                   # PostgreSQL schema
-├── docs/                                     # Documentation
-│   ├── database_setup_instructions.md       # Database setup guide
-│   ├── API_REFERENCE.md                     # API documentation
-│   └── INSTALLATION.md                      # Installation instructions
-├── examples/                                 # Example files and papers
-│   ├── d4sc03921a.pdf                       # Example research paper
-│   └── README.md                            # Examples documentation
-├── config/                                   # Configuration files
-│   ├── database_config.py                   # Database configuration
-│   └── __init__.py                          # Config package
-├── requirements.txt                          # Python dependencies
-├── README.md                                # This file
-└── .gitignore                               # Git ignore rules
+├── src/                          # Core system components
+│   ├── enhanced_paper_analyzer.py   # GraphRAG-compatible analysis
+│   ├── citation_tracker.py          # Citation location mapping
+│   ├── unified_paper_chat.py        # Chat interface + corpus export
+│   ├── simple_paper_rag.py          # RAG implementation
+│   └── simple_knowledge_graph.py    # Knowledge graph extraction
+├── notebooks/                    # Jupyter interfaces
+│   └── Simple_Paper_RAG_Chat.ipynb  # Main analysis notebook
+├── examples/                     # Sample papers
+├── docs/                        # Documentation
+└── requirements.txt             # Dependencies
 ```
 
-## 🚀 Usage
+## 🔬 Analysis Capabilities
 
-### Quick Start
+### Paper Metadata Extraction
+- **Publication Details**: Authors, year, domain, research type
+- **Content Analysis**: Word count, section structure, citation density
+- **Quality Indicators**: Abstract presence, methodology detection
+- **Domain Classification**: Chemistry, biology, computer science, etc.
 
-1. Open the main Jupyter notebook:
-   ```bash
-   jupyter notebook notebooks/Maximum_Context_Scientific_Analyzer.ipynb
-   ```
+### Citation & Reference Management
+- **Inline Citations**: [1], (Smith, 2020), superscript references
+- **Reference Lists**: Parsed with author, title, journal extraction
+- **Location Mapping**: Precise character positions and line numbers
+- **Context Analysis**: Surrounding sentences and claim identification
 
-2. Update the PDF path in the first cell:
-   ```python
-   pdf_path = "../examples/d4sc03921a.pdf"  # or your own paper
-   ```
+### Knowledge Graph Features
+- **Entity Types**: Authors, institutions, methods, concepts, technologies
+- **Relationship Mapping**: Uses, improves, evaluates, compares
+- **Graph Analytics**: Centrality measures, connected components
+- **Cross-Paper Linking**: Shared entities across document collection
 
-3. Run all cells to:
-   - Extract paper citations
-   - Analyze paper sections
-   - Generate comprehensive scientific analysis
+## 📚 Usage Examples
 
-### Citation Extraction Only
-
-To use just the citation extractor:
-
+### Research Paper Understanding
 ```python
-from src import display_citation_info, get_acs_citation
+# Load and analyze paper
+chat = analyze_paper_with_chat("transformer_chemistry.pdf")
 
-# Extract and display full citation info
-citation_result = display_citation_info("examples/d4sc03921a.pdf", show_all_formats=True)
+# Understand methodology
+response = chat.chat("What methods were used?")
 
-# Get just ACS formatted citation
-acs_citation = get_acs_citation("examples/d4sc03921a.pdf")
-print(acs_citation)
+# Explore relationships
+authors = chat.explore_entity("BERT")
+print(f"BERT connections: {authors['connections']}")
 ```
 
-## 📊 Analysis Output
+### Literature Review Preparation
+```python
+# Analyze multiple papers for corpus
+papers = ["paper1.pdf", "paper2.pdf", "paper3.pdf"]
+corpus_docs = []
 
-The tool generates a comprehensive analysis including:
+for pdf in papers:
+    doc = export_paper_for_corpus(pdf)
+    corpus_docs.append(doc)
+    print(f"Processed: {doc['metadata']['title']}")
 
-- **Executive Summary**: Core findings and scientific impact
-- **Technical Architecture**: Model details and training approaches
-- **Scientific Applications**: Demonstrated use cases and performance
-- **Research Acceleration Potential**: Time savings and productivity gains
-- **Implementation Considerations**: Deployment and infrastructure needs
-- **Strategic R&D Implications**: Business and competitive insights
-- **Future Research Directions**: Limitations and opportunities
-
-## 🎯 Example Output
-
-```
-📖 PAPER CITATION (ACS Style):
-Ramos, M. C.; Collison, C. J.; White, A. D. A review of large language models 
-and autonomous agents in chemistry. Chemical Science 2024. DOI: 10.1039/d4sc03921a.
-
-📊 ANALYSIS METADATA:
-🧠 Context used: 24,567 characters (~6,142 tokens)
-📄 Sections analyzed: 5
-⏱️ Analysis date: 2024-07-11 14:30
+# Ready for GraphRAG and literature review writing
 ```
 
-## 🔧 Configuration
+### Citation Verification
+```python
+# Verify citations in written content
+section_text = "BERT achieves 89% accuracy [Smith et al., 2020]..."
+evidence = [corpus_doc1, corpus_doc2, corpus_doc3]
 
-### Ollama Settings
+verification = verify_citation_accuracy(section_text, evidence)
+print(f"Citation accuracy: {verification['accuracy_score']:.1%}")
+```
 
-The notebook is configured for optimal performance with:
-- **Model**: llama3.1:8b
-- **Context Window**: 32,768 tokens
-- **Temperature**: 0.1 (for analytical consistency)
-- **Max Prediction**: 4,096 tokens
+## 🔧 Advanced Configuration
 
-### Customization
+### Custom Analysis Focus
+```python
+# Domain-specific analysis
+analyzer = EnhancedPaperAnalyzer()
+analyzer.domain_keywords = {
+    'materials': ['polymer', 'crystal', 'synthesis'],
+    'ai': ['neural', 'learning', 'algorithm']
+}
+```
 
-You can modify the analysis by:
-- Changing the analysis prompt in the notebook
-- Adjusting Ollama parameters for different models
-- Modifying section extraction patterns for different paper formats
-- Adding new citation formats in `citation_extractor.py`
+### Citation Style Customization
+```python
+# Different citation formats
+tracker = CitationTracker()
+tracker.citation_patterns.update({
+    'numbered_brackets': [r'\[(\d+)\]'],
+    'author_year': [r'\(([A-Za-z]+,\s*\d{4})\)']
+})
+```
 
-## 📋 Supported Citation Formats
+## 🚀 Next Steps: Complete Literature Review System
 
-- **ACS** (American Chemical Society)
-- **APA** (American Psychological Association)
-- **BibTeX** (LaTeX bibliography format)
-- **Simple** (Quick reference format)
+**Phase 2 (Planned)**: Corpus Management & GraphRAG
+- Multi-paper corpus database
+- LangChain GraphRAG implementation  
+- Cross-paper entity linking
+
+**Phase 3 (Planned)**: Automated Review Writing
+- Literature review planning system
+- Section-by-section writing with citations
+- Evidence synthesis and narrative generation
 
 ## 🤝 Contributing
 
-Contributions are welcome! Areas for improvement:
-- Support for additional citation formats
-- Enhanced section extraction for different journal formats
-- Integration with additional LLM providers
-- Multi-language paper support
+This is a personal research tool, but feedback and suggestions are welcome! 
 
 ## 📄 License
 
-This project is open source. Please ensure you comply with the terms of service for Ollama and any models you use.
-
-## 🙏 Acknowledgments
-
-- Built with [LangChain](https://github.com/langchain-ai/langchain) for LLM orchestration
-- Uses [Ollama](https://ollama.ai) for local LLM deployment
-- Designed for scientific research acceleration and R&D applications
-
-## 📞 Support
-
-For issues or questions:
-1. Check the existing issues in this repository
-2. Create a new issue with detailed description
-3. Include sample outputs and error messages when relevant
+Open source for research and educational use.
 
 ---
 
-**Note**: This tool is designed for educational and research purposes. Always verify citations and analysis results for academic or professional use.
+**🎉 Start analyzing papers with AI today!**
+Transform how you read, understand, and synthesize scientific literature with intelligent automation and precise citation tracking.

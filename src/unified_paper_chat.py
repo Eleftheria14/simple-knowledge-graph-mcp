@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from .simple_paper_rag import SimplePaperRAG
 from .simple_knowledge_graph import SimpleKnowledgeGraph
+from .enhanced_paper_analyzer import EnhancedPaperAnalyzer
+from .citation_tracker import CitationTracker
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,8 @@ class UnifiedPaperChat:
         """Initialize the unified system"""
         self.rag = SimplePaperRAG(embedding_model, llm_model)
         self.kg = SimpleKnowledgeGraph(llm_model)
+        self.enhanced_analyzer = EnhancedPaperAnalyzer(embedding_model, llm_model)
+        self.citation_tracker = CitationTracker()
         
         self.paper_loaded = False
         self.entities_extracted = False
@@ -315,6 +319,55 @@ class UnifiedPaperChat:
             suggestions.append(f"How is {concept} used in this paper?")
         
         return suggestions
+    
+    def export_for_corpus(self, pdf_path: str) -> Dict:
+        """
+        Export paper analysis in corpus-ready format for GraphRAG
+        
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            GraphRAG-compatible document format
+        """
+        logger.info(f"📤 Exporting paper for corpus: {Path(pdf_path).name}")
+        
+        # Use enhanced analyzer for comprehensive analysis
+        corpus_doc = self.enhanced_analyzer.analyze_for_corpus(pdf_path)
+        
+        # Add citation tracking
+        citation_map = self.citation_tracker.build_citation_map(
+            corpus_doc['content'], 
+            corpus_doc['metadata']
+        )
+        
+        # Enhance with chat system capabilities
+        if not self.paper_loaded:
+            self.load_paper(pdf_path)
+        
+        # Add chat-ready features
+        corpus_doc.update({
+            "chat_capabilities": {
+                "entities": self.get_entities(),
+                "graph_summary": self.kg.get_graph_summary() if self.entities_extracted else None,
+                "suggested_questions": self.suggest_questions()
+            },
+            "citation_tracking": citation_map,
+            "corpus_metadata": {
+                "export_date": citation_map["paper_info"]["processed_date"] if "paper_info" in citation_map else None,
+                "analysis_version": "enhanced_v1.0",
+                "capabilities": [
+                    "rag_queries",
+                    "entity_exploration", 
+                    "relationship_discovery",
+                    "precise_citations",
+                    "cross_paper_linking"
+                ]
+            }
+        })
+        
+        logger.info(f"✅ Corpus export complete: {corpus_doc['metadata']['title'][:50]}...")
+        return corpus_doc
 
 
 # Convenience function for quick paper analysis
@@ -345,6 +398,21 @@ def analyze_paper_with_chat(pdf_path: str) -> UnifiedPaperChat:
         print(f"❌ Error loading paper: {result['error']}")
     
     return chat_system
+
+
+# Convenience function for corpus export
+def export_paper_for_corpus(pdf_path: str) -> Dict:
+    """
+    Quick export of paper for corpus inclusion
+    
+    Args:
+        pdf_path: Path to PDF file
+        
+    Returns:
+        GraphRAG-compatible document
+    """
+    chat_system = UnifiedPaperChat()
+    return chat_system.export_for_corpus(pdf_path)
 
 
 if __name__ == "__main__":
