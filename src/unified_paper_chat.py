@@ -1,0 +1,372 @@
+"""
+Unified Paper Chat Interface
+Combines RAG and Knowledge Graph for intelligent paper analysis and chat.
+"""
+
+from typing import Dict, List, Optional, Tuple
+import logging
+from pathlib import Path
+from .simple_paper_rag import SimplePaperRAG
+from .simple_knowledge_graph import SimpleKnowledgeGraph
+
+logger = logging.getLogger(__name__)
+
+
+class UnifiedPaperChat:
+    """
+    Unified interface combining RAG and Knowledge Graph for comprehensive paper analysis.
+    Provides intelligent routing between RAG queries and graph exploration.
+    """
+    
+    def __init__(self, embedding_model: str = "nomic-embed-text", 
+                 llm_model: str = "llama3.1:8b"):
+        """Initialize the unified system"""
+        self.rag = SimplePaperRAG(embedding_model, llm_model)
+        self.kg = SimpleKnowledgeGraph(llm_model)
+        
+        self.paper_loaded = False
+        self.entities_extracted = False
+        
+        logger.info("🚀 UnifiedPaperChat initialized")
+    
+    def load_paper(self, pdf_path: str) -> Dict:
+        """
+        Load paper and build both RAG and Knowledge Graph
+        
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            Complete analysis results
+        """
+        logger.info(f"📚 Loading paper for unified analysis: {pdf_path}")
+        
+        # Load paper into RAG system
+        paper_info = self.rag.load_paper(pdf_path)
+        self.paper_loaded = True
+        
+        # Extract entities and build knowledge graph
+        logger.info("🕸️ Building knowledge graph...")
+        kg_result = self.kg.extract_entities_and_relationships(
+            self.rag.paper_data['content'],
+            self.rag.paper_data['title']
+        )
+        self.entities_extracted = True
+        
+        # Also store entities in RAG system for cross-reference
+        self.rag.paper_data['entities'] = kg_result['entities']
+        
+        result = {
+            'paper_info': paper_info,
+            'knowledge_graph': kg_result,
+            'status': 'ready',
+            'capabilities': [
+                'rag_queries',
+                'entity_exploration', 
+                'relationship_discovery',
+                'graph_navigation'
+            ]
+        }
+        
+        logger.info("✅ Paper fully loaded with RAG + Knowledge Graph")
+        return result
+    
+    def chat(self, message: str, mode: str = "auto") -> Dict:
+        """
+        Intelligent chat interface that routes queries appropriately
+        
+        Args:
+            message: User's question or command
+            mode: "auto", "rag", "graph", or "both"
+            
+        Returns:
+            Response with source information
+        """
+        if not self.paper_loaded:
+            return {
+                'error': 'No paper loaded. Please load a paper first.',
+                'suggestion': 'Use load_paper(pdf_path) to get started.'
+            }
+        
+        # Determine the best approach based on message content
+        if mode == "auto":
+            mode = self._determine_mode(message)
+        
+        if mode == "rag":
+            return self._rag_response(message)
+        elif mode == "graph":
+            return self._graph_response(message)
+        elif mode == "both":
+            return self._combined_response(message)
+        else:
+            return {'error': f'Unknown mode: {mode}'}
+    
+    def _determine_mode(self, message: str) -> str:
+        """Determine the best mode based on message content"""
+        message_lower = message.lower()
+        
+        # Graph-oriented keywords
+        graph_keywords = [
+            'entities', 'relationships', 'connections', 'related to',
+            'authors', 'methods', 'concepts', 'who', 'what methods',
+            'connected', 'network', 'graph', 'entity'
+        ]
+        
+        # RAG-oriented keywords  
+        rag_keywords = [
+            'explain', 'describe', 'how', 'why', 'findings', 'results',
+            'conclusion', 'discussion', 'analysis', 'detailed',
+            'methodology', 'approach', 'experiments'
+        ]
+        
+        # Count keyword matches
+        graph_score = sum(1 for keyword in graph_keywords if keyword in message_lower)
+        rag_score = sum(1 for keyword in rag_keywords if keyword in message_lower)
+        
+        if graph_score > rag_score:
+            return "graph"
+        elif rag_score > graph_score:
+            return "rag"
+        else:
+            return "both"  # Use both when unclear
+    
+    def _rag_response(self, message: str) -> Dict:
+        """Generate response using RAG system"""
+        try:
+            answer = self.rag.query(message)
+            return {
+                'answer': answer,
+                'mode': 'rag',
+                'source': 'document_content',
+                'confidence': 'high'
+            }
+        except Exception as e:
+            return {
+                'error': f'RAG query failed: {str(e)}',
+                'mode': 'rag'
+            }
+    
+    def _graph_response(self, message: str) -> Dict:
+        """Generate response using Knowledge Graph"""
+        try:
+            # Simple entity-based responses
+            message_lower = message.lower()
+            
+            if 'authors' in message_lower:
+                authors = self.kg.entities.get('authors', [])
+                if authors:
+                    return {
+                        'answer': f"The authors of this paper are: {', '.join(authors)}",
+                        'mode': 'graph',
+                        'source': 'knowledge_graph',
+                        'entities': authors
+                    }
+            
+            elif 'methods' in message_lower:
+                methods = self.kg.entities.get('methods', [])
+                if methods:
+                    return {
+                        'answer': f"The methods mentioned in this paper include: {', '.join(methods)}",
+                        'mode': 'graph',
+                        'source': 'knowledge_graph',
+                        'entities': methods
+                    }
+            
+            elif 'concepts' in message_lower:
+                concepts = self.kg.entities.get('concepts', [])
+                if concepts:
+                    return {
+                        'answer': f"Key concepts in this paper: {', '.join(concepts)}",
+                        'mode': 'graph',
+                        'source': 'knowledge_graph',
+                        'entities': concepts
+                    }
+            
+            # Try to find entity in message and get its connections
+            for entity_type, entity_list in self.kg.entities.items():
+                if isinstance(entity_list, list):
+                    for entity in entity_list:
+                        if entity.lower() in message_lower:
+                            connections = self.kg.get_node_connections(entity)
+                            if 'connections' in connections:
+                                conn_text = ", ".join([f"{c['target']} ({c['relationship']})" 
+                                                     for c in connections['connections']])
+                                return {
+                                    'answer': f"'{entity}' is connected to: {conn_text}",
+                                    'mode': 'graph',
+                                    'source': 'knowledge_graph',
+                                    'entity': entity,
+                                    'connections': connections
+                                }
+            
+            # Default graph response
+            summary = self.kg.get_graph_summary()
+            return {
+                'answer': f"This paper's knowledge graph contains {summary.get('total_nodes', 0)} entities and {summary.get('total_edges', 0)} relationships.",
+                'mode': 'graph',
+                'source': 'knowledge_graph',
+                'graph_summary': summary
+            }
+            
+        except Exception as e:
+            return {
+                'error': f'Graph query failed: {str(e)}',
+                'mode': 'graph'
+            }
+    
+    def _combined_response(self, message: str) -> Dict:
+        """Generate response using both RAG and Knowledge Graph"""
+        try:
+            # Get RAG response
+            rag_result = self._rag_response(message)
+            
+            # Get relevant entities for context
+            graph_summary = self.kg.get_graph_summary()
+            
+            # Enhance RAG response with graph context
+            if 'answer' in rag_result:
+                enhanced_answer = rag_result['answer']
+                
+                # Add entity context if available
+                if graph_summary.get('total_nodes', 0) > 0:
+                    enhanced_answer += f"\n\n**Related entities from knowledge graph:** "
+                    
+                    # Add top entities
+                    most_connected = graph_summary.get('most_connected', [])
+                    if most_connected:
+                        top_entities = [item['node'] for item in most_connected[:3]]
+                        enhanced_answer += f"{', '.join(top_entities)}"
+                
+                return {
+                    'answer': enhanced_answer,
+                    'mode': 'both',
+                    'rag_source': 'document_content',
+                    'graph_context': graph_summary,
+                    'confidence': 'high'
+                }
+            else:
+                return rag_result
+                
+        except Exception as e:
+            return {
+                'error': f'Combined query failed: {str(e)}',
+                'mode': 'both'
+            }
+    
+    def get_entities(self) -> Dict:
+        """Get all extracted entities"""
+        if not self.entities_extracted:
+            return {'error': 'Entities not extracted yet. Load a paper first.'}
+        
+        return self.kg.entities
+    
+    def explore_entity(self, entity_name: str) -> Dict:
+        """Explore a specific entity and its connections"""
+        if not self.entities_extracted:
+            return {'error': 'Knowledge graph not built yet. Load a paper first.'}
+        
+        connections = self.kg.get_node_connections(entity_name)
+        
+        if 'error' not in connections:
+            # Also get RAG context about this entity
+            try:
+                rag_context = self.rag.query(f"Tell me about {entity_name}")
+                connections['rag_context'] = rag_context
+            except:
+                connections['rag_context'] = "No additional context available."
+        
+        return connections
+    
+    def get_paper_overview(self) -> Dict:
+        """Get comprehensive overview of the loaded paper"""
+        if not self.paper_loaded:
+            return {'error': 'No paper loaded'}
+        
+        overview = {
+            'paper_info': self.rag.get_paper_summary(),
+            'knowledge_graph': self.kg.get_graph_summary() if self.entities_extracted else None,
+            'chat_history': len(self.rag.chat_history),
+            'status': 'ready' if self.paper_loaded and self.entities_extracted else 'partial'
+        }
+        
+        return overview
+    
+    def suggest_questions(self) -> List[str]:
+        """Suggest interesting questions based on the paper content"""
+        if not self.entities_extracted:
+            return ["Load a paper first to get question suggestions."]
+        
+        suggestions = [
+            "What are the main findings of this paper?",
+            "What methods were used in this research?",
+            "Who are the authors and what are their contributions?",
+            "What concepts are most important in this work?",
+            "How do the different methods relate to each other?",
+        ]
+        
+        # Add entity-specific suggestions
+        entities = self.kg.entities
+        if entities.get('methods'):
+            method = entities['methods'][0]
+            suggestions.append(f"Tell me more about {method}")
+        
+        if entities.get('concepts'):
+            concept = entities['concepts'][0]
+            suggestions.append(f"How is {concept} used in this paper?")
+        
+        return suggestions
+
+
+# Convenience function for quick paper analysis
+def analyze_paper_with_chat(pdf_path: str) -> UnifiedPaperChat:
+    """
+    Quick setup for paper analysis with chat interface
+    
+    Args:
+        pdf_path: Path to PDF file
+        
+    Returns:
+        Ready-to-use UnifiedPaperChat instance
+    """
+    chat_system = UnifiedPaperChat()
+    result = chat_system.load_paper(pdf_path)
+    
+    if 'error' not in result:
+        print("✅ Paper loaded successfully!")
+        print(f"📊 {result['knowledge_graph']['graph_stats']}")
+        print("💬 Ready for chat! Try asking questions about the paper.")
+        
+        # Show suggested questions
+        suggestions = chat_system.suggest_questions()
+        print("\n🤔 Suggested questions:")
+        for i, suggestion in enumerate(suggestions[:5], 1):
+            print(f"  {i}. {suggestion}")
+    else:
+        print(f"❌ Error loading paper: {result['error']}")
+    
+    return chat_system
+
+
+if __name__ == "__main__":
+    # Test the unified system
+    test_pdf = "../examples/d4sc03921a.pdf"
+    
+    if Path(test_pdf).exists():
+        print("🧪 Testing UnifiedPaperChat...")
+        chat_system = analyze_paper_with_chat(test_pdf)
+        
+        # Test some queries
+        test_queries = [
+            "What are the main findings?",
+            "Who are the authors?",
+            "What methods were used?"
+        ]
+        
+        for query in test_queries:
+            print(f"\n❓ {query}")
+            response = chat_system.chat(query)
+            print(f"💬 {response.get('answer', response.get('error', 'No response'))}")
+        
+        print("\n✅ Test completed!")
+    else:
+        print("❌ Test PDF not found")

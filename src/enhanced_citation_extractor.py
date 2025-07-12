@@ -3,14 +3,50 @@ Enhanced Citation Extractor with Database Integration
 Extends the original citation extractor to automatically store results in PostgreSQL
 """
 
-from citation_extractor import extract_citation_info, format_citations, display_citation_info
-from database_manager import store_citation_data, CitationDatabaseManager
+from .citation_extractor import extract_citation_info_improved
+from .database_manager import store_citation_data, CitationDatabaseManager
 import logging
 from typing import Dict, Optional, Tuple
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def format_simple_acs_citation(citation_info: Dict) -> str:
+    """
+    Format citation in ACS style
+    """
+    title = citation_info.get('title', 'Unknown Title')
+    authors = citation_info.get('authors', [])
+    journal = citation_info.get('journal', 'Unknown Journal')
+    year = citation_info.get('year', 'Unknown Year')
+    doi = citation_info.get('doi', '')
+    
+    # Format authors (ACS style: Last, F. M.)
+    if authors:
+        if isinstance(authors, str):
+            authors_str = authors
+        else:
+            authors_str = '; '.join(authors[:3])  # Limit to first 3 authors
+    else:
+        authors_str = 'Unknown Author'
+    
+    # Build ACS citation
+    citation = f"{authors_str} {title}. {journal} {year}"
+    if doi:
+        citation += f". DOI: {doi}"
+    citation += "."
+    
+    return citation
+
+
+def get_acs_citation(pdf_path: str) -> str:
+    """
+    Quick function to get just the ACS formatted citation
+    """
+    citation_info = extract_citation_info_improved(pdf_path)
+    return format_simple_acs_citation(citation_info)
 
 
 def extract_and_store_citation(pdf_path: str, store_in_db: bool = True, 
@@ -29,8 +65,9 @@ def extract_and_store_citation(pdf_path: str, store_in_db: bool = True,
     logger.info(f"🔍 Extracting citation from: {pdf_path}")
     
     # Extract citation using existing extractor
-    citation_info = extract_citation_info(pdf_path)
-    formatted_citations = format_citations(citation_info)
+    citation_info = extract_citation_info_improved(pdf_path)
+    # For now, we'll create a simple ACS format - we need to implement format_citations
+    formatted_citations = {'ACS': format_simple_acs_citation(citation_info)}
     
     # Calculate confidence score if not provided
     if extraction_confidence is None:

@@ -1,14 +1,15 @@
-# Scientific Paper Analyzer with LangChain & Ollama
+# Simple Scientific Paper RAG + Knowledge Graph
 
-A comprehensive tool for analyzing scientific research papers using Large Language Models (LLMs) through LangChain and Ollama. This project focuses on maximum context preservation and detailed scientific analysis with proper academic citation extraction.
+A simple, personal tool for intelligent analysis of scientific papers using RAG (Retrieval-Augmented Generation) and Knowledge Graph extraction. Built with LangChain, LangGraph, and Ollama for local, private analysis.
 
 ## 🎯 Features
 
-- **Maximum Context Preservation**: Extracts and preserves key sections while staying within Ollama's token limits
-- **Comprehensive Citation Extraction**: Automatically extracts and formats citations in multiple academic styles (ACS, APA, BibTeX)
-- **Scientific Analysis**: Generates detailed analysis focused on R&D implications and scientific applications
-- **Local LLM Integration**: Uses Ollama for private, local analysis without sending data to external APIs
-- **Modular Design**: Clean, reusable components for citation extraction and analysis
+- **🤖 RAG Chat Interface**: Ask natural language questions about your paper
+- **🕸️ Knowledge Graph**: Automatically extract entities (authors, methods, concepts) and relationships
+- **📚 Smart Retrieval**: Find relevant content using semantic similarity
+- **🧠 Local AI**: Uses Ollama for complete privacy - no data sent to external APIs
+- **📝 Citation Management**: Extract and format citations in academic styles
+- **🔍 Entity Discovery**: Identify key concepts, methods, and relationships in papers
 
 ## 🛠️ Setup
 

@@ -1,49 +1,32 @@
 # Notebooks
 
-This directory contains Jupyter notebooks for different aspects of the Scientific Paper Analyzer.
+This directory contains the main Jupyter notebook for the Simple Scientific Paper RAG + Knowledge Graph system.
 
-## Notebooks
+## Main Notebook
 
-### `Maximum_Context_Scientific_Analyzer.ipynb` ⭐
-**Main notebook** - Complete scientific paper analysis with maximum context preservation.
-
-**Features:**
-- Citation extraction and database storage
-- Maximum context preservation within Ollama limits
-- Comprehensive LLM analysis focused on R&D implications
-- Integration with PostgreSQL database
-
-**Use this notebook for:**
-- Production analysis of research papers
-- Comprehensive R&D-focused analysis
-- Building a database of analyzed papers
-
-### `Tutorial.ipynb`
-**Beginner-friendly tutorial** - Simple introduction to LangChain and Ollama.
+### `Simple_Paper_RAG_Chat.ipynb` ⭐
+**Complete RAG + Knowledge Graph system** - Analyze one paper with intelligent chat interface.
 
 **Features:**
-- Basic PDF loading and processing
-- Simple abstract summarization
-- Step-by-step explanations
-- Good for learning LangChain concepts
+- Upload and process a single PDF paper
+- RAG-based question answering with semantic search
+- Knowledge graph entity extraction (authors, methods, concepts)
+- Interactive chat interface for exploring the paper
+- Citation extraction and formatting
+- Visual relationship mapping
 
-**Use this notebook for:**
-- Learning how LangChain works
-- Understanding the basics of PDF processing
-- Getting started with Ollama
+**Workflow:**
+1. **Load Paper**: Upload PDF and extract content
+2. **Build Knowledge**: Create embeddings and extract entities
+3. **Chat Interface**: Ask questions using natural language
+4. **Explore Graph**: Discover relationships and connections
+5. **Export Results**: Get citations and insights
 
-### `Scientific_Paper_Analyzer.ipynb`
-**Intermediate notebook** - Multi-stage analysis with chunking approach.
-
-**Features:**
-- Document chunking and processing
-- Multi-stage analysis pipeline
-- More complex than tutorial, simpler than main notebook
-
-**Use this notebook for:**
-- Understanding chunking strategies
-- Learning about multi-stage processing
-- Experimenting with different analysis approaches
+**Perfect for:**
+- Personal research and paper analysis
+- Understanding complex scientific papers
+- Discovering hidden connections in research
+- Quick literature exploration
 
 ## Getting Started
 
