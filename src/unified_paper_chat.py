@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import logging
 from pathlib import Path
 from .simple_paper_rag import SimplePaperRAG
-from .simple_knowledge_graph import SimpleKnowledgeGraph
+from .langchain_graph_rag import LangChainGraphRAG
 from .enhanced_paper_analyzer import EnhancedPaperAnalyzer
 from .citation_tracker import CitationTracker
 
@@ -24,7 +24,7 @@ class UnifiedPaperChat:
                  llm_model: str = "llama3.1:8b"):
         """Initialize the unified system"""
         self.rag = SimplePaperRAG(embedding_model, llm_model)
-        self.kg = SimpleKnowledgeGraph(llm_model)
+        self.kg = LangChainGraphRAG(llm_model, embedding_model)
         self.enhanced_analyzer = EnhancedPaperAnalyzer(embedding_model, llm_model)
         self.citation_tracker = CitationTracker()
         
@@ -51,9 +51,11 @@ class UnifiedPaperChat:
         
         # Extract entities and build knowledge graph
         logger.info("🕸️ Building knowledge graph...")
+        paper_id = f"paper_{hash(pdf_path) % 10000}"
         kg_result = self.kg.extract_entities_and_relationships(
             self.rag.paper_data['content'],
-            self.rag.paper_data['title']
+            self.rag.paper_data['title'],
+            paper_id
         )
         self.entities_extracted = True
         
@@ -157,51 +159,65 @@ class UnifiedPaperChat:
             message_lower = message.lower()
             
             if 'authors' in message_lower:
-                authors = self.kg.entities.get('authors', [])
-                if authors:
-                    return {
-                        'answer': f"The authors of this paper are: {', '.join(authors)}",
-                        'mode': 'graph',
-                        'source': 'knowledge_graph',
-                        'entities': authors
-                    }
+                papers = self.kg.get_all_papers()
+                if papers:
+                    paper = papers[0]
+                    authors = paper.get('authors', [])
+                    if authors:
+                        return {
+                            'answer': f"The authors of this paper are: {', '.join(authors)}",
+                            'mode': 'graph',
+                            'source': 'knowledge_graph',
+                            'entities': authors
+                        }
             
             elif 'methods' in message_lower:
-                methods = self.kg.entities.get('methods', [])
-                if methods:
-                    return {
-                        'answer': f"The methods mentioned in this paper include: {', '.join(methods)}",
-                        'mode': 'graph',
-                        'source': 'knowledge_graph',
-                        'entities': methods
-                    }
+                result = self.kg.query_graph("methods")
+                papers = result.get('papers', {})
+                if papers:
+                    paper = list(papers.values())[0]
+                    methods = paper.get('entities', {}).get('methods', [])
+                    if methods:
+                        return {
+                            'answer': f"The methods mentioned in this paper include: {', '.join(methods)}",
+                            'mode': 'graph',
+                            'source': 'knowledge_graph',
+                            'entities': methods
+                        }
             
             elif 'concepts' in message_lower:
-                concepts = self.kg.entities.get('concepts', [])
-                if concepts:
-                    return {
-                        'answer': f"Key concepts in this paper: {', '.join(concepts)}",
-                        'mode': 'graph',
-                        'source': 'knowledge_graph',
-                        'entities': concepts
-                    }
+                result = self.kg.query_graph("concepts")
+                papers = result.get('papers', {})
+                if papers:
+                    paper = list(papers.values())[0]
+                    concepts = paper.get('entities', {}).get('concepts', [])
+                    if concepts:
+                        return {
+                            'answer': f"Key concepts in this paper: {', '.join(concepts)}",
+                            'mode': 'graph',
+                            'source': 'knowledge_graph',
+                            'entities': concepts
+                        }
             
-            # Try to find entity in message and get its connections
-            for entity_type, entity_list in self.kg.entities.items():
-                if isinstance(entity_list, list):
-                    for entity in entity_list:
-                        if entity.lower() in message_lower:
-                            connections = self.kg.get_node_connections(entity)
-                            if 'connections' in connections:
-                                conn_text = ", ".join([f"{c['target']} ({c['relationship']})" 
-                                                     for c in connections['connections']])
-                                return {
-                                    'answer': f"'{entity}' is connected to: {conn_text}",
-                                    'mode': 'graph',
-                                    'source': 'knowledge_graph',
-                                    'entity': entity,
-                                    'connections': connections
-                                }
+            # Query graph for entity connections
+            query_result = self.kg.query_graph(message)
+            if query_result.get('papers'):
+                papers = query_result['papers']
+                paper_summaries = []
+                for paper_id, paper_data in papers.items():
+                    title = paper_data.get('paper_title', paper_id)
+                    entities = paper_data.get('entities', {})
+                    paper_summaries.append(f"Paper: {title}")
+                    for entity_type, entity_list in entities.items():
+                        if entity_list:
+                            paper_summaries.append(f"  {entity_type}: {', '.join(entity_list[:3])}")
+                
+                return {
+                    'answer': f"Found related information:\n" + "\n".join(paper_summaries[:10]),
+                    'mode': 'graph',
+                    'source': 'knowledge_graph',
+                    'query_result': query_result
+                }
             
             # Default graph response
             summary = self.kg.get_graph_summary()
@@ -262,24 +278,37 @@ class UnifiedPaperChat:
         if not self.entities_extracted:
             return {'error': 'Entities not extracted yet. Load a paper first.'}
         
-        return self.kg.entities
+        papers = self.kg.get_all_papers()
+        if papers:
+            # Return entities from the first (or latest) paper
+            first_paper = papers[0]
+            paper_id = first_paper['paper_id']
+            corpus_doc = self.kg.export_for_corpus(paper_id)
+            if corpus_doc:
+                return corpus_doc.get('metadata', {})
+        
+        return {'error': 'No entities found'}
     
     def explore_entity(self, entity_name: str) -> Dict:
         """Explore a specific entity and its connections"""
         if not self.entities_extracted:
             return {'error': 'Knowledge graph not built yet. Load a paper first.'}
         
-        connections = self.kg.get_node_connections(entity_name)
+        # Find related papers using the entity
+        related_papers = self.kg.find_related_papers(
+            f"paper_{hash(self.rag.current_pdf_path) % 10000}" if hasattr(self.rag, 'current_pdf_path') else "paper_1",
+            "concepts"  # Default to concepts, could be made dynamic
+        )
         
-        if 'error' not in connections:
+        if 'error' not in related_papers:
             # Also get RAG context about this entity
             try:
                 rag_context = self.rag.query(f"Tell me about {entity_name}")
-                connections['rag_context'] = rag_context
+                related_papers['rag_context'] = rag_context
             except:
-                connections['rag_context'] = "No additional context available."
+                related_papers['rag_context'] = "No additional context available."
         
-        return connections
+        return related_papers
     
     def get_paper_overview(self) -> Dict:
         """Get comprehensive overview of the loaded paper"""

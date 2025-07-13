@@ -20,6 +20,11 @@ from .unified_paper_chat import UnifiedPaperChat, analyze_paper_with_chat, expor
 from .enhanced_paper_analyzer import EnhancedPaperAnalyzer, analyze_paper_for_corpus
 from .citation_tracker import CitationTracker, track_citations_in_paper, verify_citation_accuracy
 
+# GraphRAG and visualization components
+from .langchain_graph_rag import LangChainGraphRAG
+from .yfiles_visualization import create_yfiles_visualization, YFilesGraphRAGVisualizer
+from .notebook_visualization import show_knowledge_graph
+
 __all__ = [
     # Main components
     'SimplePaperRAG',
@@ -29,6 +34,12 @@ __all__ = [
     # Enhanced components
     'EnhancedPaperAnalyzer',
     'CitationTracker',
+    
+    # GraphRAG components
+    'LangChainGraphRAG',
+    'create_yfiles_visualization',
+    'YFilesGraphRAGVisualizer',
+    'show_knowledge_graph',
     
     # Analysis functions
     'analyze_paper',

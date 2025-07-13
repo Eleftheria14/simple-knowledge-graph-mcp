@@ -4,13 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Essential Development Commands
 
-### Environment Setup
+### Environment Setup (REQUIRED)
 ```bash
-# Activate existing virtual environment
+# ⚠️ ALWAYS activate the virtual environment first
 source langchain-env/bin/activate
 
 # Install/update dependencies
 pip install -r requirements.txt
+
+# Verify installation
+python3 -c "from src import LangChainGraphRAG; print('✅ All dependencies installed')"
 ```
 
 ### Ollama Setup (Required)
@@ -23,17 +26,21 @@ ollama serve
 
 ### Testing and Development
 ```bash
-# Test enhanced paper analyzer
-python3 -c "from src import analyze_paper_for_corpus; result = analyze_paper_for_corpus('examples/d4sc03921a.pdf'); print(f'✅ Analysis: {result[\"metadata\"][\"title\"]}')"
+# Test GraphRAG system
+python3 -c "from src import LangChainGraphRAG; graph = LangChainGraphRAG(); print('✅ GraphRAG system ready')"
 
-# Test corpus export functionality  
-python3 -c "from src import export_paper_for_corpus; doc = export_paper_for_corpus('examples/d4sc03921a.pdf'); print(f'✅ Corpus doc: {doc[\"document_id\"]}')"
+# Test yFiles visualization
+python3 -c "from src import create_yfiles_visualization, LangChainGraphRAG; print('✅ Visualization system ready')"
 
-# Test citation tracking
-python3 -c "from src import CitationTracker; tracker = CitationTracker(); print('✅ Citation tracker initialized')"
+# Quick knowledge graph tutorial
+jupyter notebook tutorial/04_Building_Knowledge_Graphs.ipynb
 
-# Run main notebook interface
+# Run main notebook interface  
 jupyter notebook notebooks/Simple_Paper_RAG_Chat.ipynb
+
+# Legacy tests (still functional)
+python3 -c "from src import analyze_paper_for_corpus; print('✅ Legacy analyzer ready')"
+python3 -c "from src import CitationTracker; tracker = CitationTracker(); print('✅ Citation tracker ready')"
 ```
 
 ## Code Architecture
