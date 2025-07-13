@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation and Learning Resources
+
+When working on GraphRAG, knowledge graphs, agentic RAG, or related AI topics, ALWAYS refer to the comprehensive documentation links in `docs_links.md` which includes:
+
+- **LangChain integration guides** - Official documentation for graph construction, ChromaDB integration, and GraphRAG retrievers
+- **Agentic RAG implementations** - Production examples and conceptual guides from Weaviate and Ottomator
+- **Advanced knowledge graph systems** - Graphiti for real-time temporal knowledge graphs
+- **Local AI deployment** - Complete Docker stacks for self-hosted AI infrastructure
+- **Model Context Protocol (MCP)** - Anthropic's standard for AI system integration
+
+These resources provide crucial context for:
+- Architectural decisions and evolution paths
+- Implementation patterns and best practices  
+- Understanding the broader ecosystem this project fits into
+- Planning future enhancements and integrations
+
+**Always check docs_links.md when discussing system architecture, suggesting improvements, or explaining how this system relates to the broader AI/ML landscape.**
+
 ## Essential Development Commands
 
 ### Environment Setup (REQUIRED)

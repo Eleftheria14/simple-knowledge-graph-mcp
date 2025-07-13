@@ -13,11 +13,19 @@
 - [LangChain GraphRAG Guide](https://blog.langchain.com/enhancing-rag-based-applications-accuracy-by-constructing-and-leveraging-knowledge-graphs/)
 - [GraphRAG Implementation Patterns](https://medium.com/data-science/how-to-implement-graph-rag-using-knowledge-graphs-and-vector-databases-60bb69a22759)
 
+## Agentic RAG
+- [What is Agentic RAG? (Weaviate)](https://weaviate.io/blog/what-is-agentic-rag)
+- [Agentic RAG Knowledge Graph Implementation](https://github.com/coleam00/ottomator-agents/tree/main/agentic-rag-knowledge-graph)
+
+## Advanced Knowledge Graph Systems
+- [Graphiti - Real-time Knowledge Graphs for AI Agents](https://github.com/getzep/graphiti)
+
 ## LangChain
 - [LangChain Introduction](https://python.langchain.com/docs/introduction/)
 - [LangChain GraphRAG Retrievers](https://python.langchain.com/docs/integrations/retrievers/graph_rag/)
 - [LangChain Graph Retriever Package](https://pypi.org/project/langchain-graph-retriever/)
 - [LangChain Knowledge Graph Construction](https://python.langchain.com/docs/how_to/graph_constructing/)
+- [LangChain ChromaDB Integration](https://python.langchain.com/docs/integrations/vectorstores/chroma/)
 
 ## ChromaDB
 - [ChromaDB Overview](https://docs.trychroma.com/docs/overview/introduction)
@@ -28,6 +36,9 @@
 - [Ollama Documentation](https://ollama.ai/docs)
 - [Ollama Python Library](https://github.com/ollama/ollama-python)
 - [LangChain-Ollama Integration](https://python.langchain.com/docs/integrations/llms/ollama/)
+
+## Local AI Deployment
+- [Local AI Packaged - Complete Docker Stack](https://github.com/coleam00/local-ai-packaged)
 
 ## Visualization
 - [yFiles Jupyter Graphs](https://github.com/yWorks/yfiles-jupyter-graphs)
