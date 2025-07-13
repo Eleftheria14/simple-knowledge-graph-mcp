@@ -44,23 +44,23 @@ Building an intelligent scientific paper analysis platform that combines **Retri
 
 ### Core Components:
 
-#### 1. **RAG System (LangChain)**
+#### 1. **RAG System (LangChain + ChromaDB)**
 - **Document Ingestion**: PDF loading, chunking, and preprocessing
-- **Vector Storage**: Persistent embeddings in PostgreSQL
+- **Vector Storage**: Persistent embeddings in ChromaDB
 - **Semantic Search**: Find relevant content using natural language queries
 - **Generation**: LLM-powered answers with source attribution
 
-#### 2. **Knowledge Graph (LangGraph)**  
+#### 2. **Knowledge Graph (NetworkX)**  
 - **Entity Extraction**: Papers, authors, concepts, methods, metrics, institutions
 - **Relationship Mapping**: Citations, influences, improvements, contradictions
-- **Graph Storage**: Nodes and edges in PostgreSQL with graph capabilities
+- **Graph Storage**: NetworkX graphs with in-memory processing
 - **Graph Traversal**: Multi-hop reasoning and relationship discovery
 
 #### 3. **Unified Intelligence**
 - **Combined Queries**: RAG + Graph for comprehensive answers
 - **Chat Interface**: Natural language interaction with the knowledge base
-- **Visualization**: Interactive graphs showing paper relationships
-- **Analytics**: Trend analysis, impact metrics, research evolution
+- **Visualization**: Interactive graphs using yFiles Jupyter Graphs
+- **Analytics**: Entity relationship analysis, paper connections
 
 ---
 
@@ -104,37 +104,49 @@ Building an intelligent scientific paper analysis platform that combines **Retri
 ## 🛠️ Technical Specifications
 
 ### **Technology Stack:**
-- **Backend**: Python, LangChain, LangGraph
-- **Database**: PostgreSQL with vector extensions
+- **Backend**: Python, LangChain, ChromaDB
+- **Database**: ChromaDB vector database (local storage)
 - **LLM**: Ollama (llama3.1:8b for generation, nomic-embed-text for embeddings)
-- **Interface**: Jupyter Notebooks → Web Interface (future)
-- **Graph Processing**: NetworkX, PyVis for visualization
+- **Interface**: Jupyter Notebooks (current)
+- **Graph Processing**: NetworkX, yFiles Jupyter Graphs for visualization
 - **ML Libraries**: scikit-learn, NumPy
 
 ### **Data Storage:**
-```sql
--- Papers table (existing)
-papers (id, title, authors, journal, year, doi, pdf_path, citations, embeddings_stored)
+```python
+# ChromaDB Collections (Local Vector Storage)
+paper_chunks = {
+    "documents": ["chunk_text"],
+    "embeddings": [[embedding_vectors]],
+    "metadatas": [{"paper_id": "", "section": "", "page": ""}],
+    "ids": ["unique_chunk_ids"]
+}
 
--- Document chunks with embeddings
-document_embeddings (id, paper_id, chunk_text, embedding_vector, section_type)
+# Knowledge Graph Storage (NetworkX + In-Memory)
+entities = {
+    "authors": [],
+    "methods": [],
+    "concepts": [], 
+    "metrics": [],
+    "institutions": []
+}
 
--- Knowledge graph entities  
-entities (id, type, name, properties, paper_id)
+# Graph Relationships (NetworkX Edges)
+relationships = [
+    ("entity1", "entity2", {"type": "cites", "confidence": 0.9}),
+    ("author", "institution", {"type": "affiliated_with", "confidence": 1.0})
+]
 
--- Knowledge graph relationships
-relationships (id, source_entity_id, target_entity_id, relationship_type, confidence)
-
--- Chat sessions and queries
-chat_sessions (id, user_id, created_at)
-queries (id, session_id, query_text, response, timestamp)
+# Chat History (In-Memory Session Storage)
+chat_sessions = [
+    {"question": "", "answer": "", "sources": [], "timestamp": ""}
+]
 ```
 
 ### **Performance Requirements:**
 - **Query Response**: <5 seconds for RAG queries
-- **Graph Traversal**: <3 seconds for 3-hop relationships
-- **Embedding Generation**: <30 seconds per paper
-- **Storage**: Support 1000+ papers initially, scalable to 100K+
+- **Graph Traversal**: <3 seconds for relationship discovery
+- **Embedding Generation**: <60 seconds per paper (local processing)
+- **Storage**: Support 100+ papers initially (local ChromaDB), expandable with optimization
 
 ---
 

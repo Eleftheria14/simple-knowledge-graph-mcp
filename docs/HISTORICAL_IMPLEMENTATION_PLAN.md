@@ -1,4 +1,6 @@
-# Implementation Plan: Scientific RAG + Knowledge Graph Platform
+# HISTORICAL REFERENCE: Implementation Plan: Scientific RAG + Knowledge Graph Platform
+
+**⚠️ HISTORICAL DOCUMENT - This represents the original implementation plan but the system evolved differently. See current CLAUDE.md for actual architecture.**
 
 ## 🧹 Current Codebase Analysis & Cleanup
 
