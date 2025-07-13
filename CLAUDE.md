@@ -74,6 +74,9 @@ python3 -c "import time; from src import LangChainGraphRAG; start = time.time();
 # Build research corpus from paper collection (RTX 4090 optimized)
 python3 build_research_corpus.py /path/to/papers/ --enhanced-extraction
 
+# Load pre-built corpus from Colab (recommended workflow)
+python3 start_mcp_server.py --corpus ./my_research_corpus.zip
+
 # Start MCP server for knowledge graph access (when implemented)
 python3 start_mcp_server.py /path/to/corpus/
 
@@ -81,15 +84,32 @@ python3 start_mcp_server.py /path/to/corpus/
 python3 test_mcp_integration.py --corpus /path/to/corpus/ --query "transformer drug discovery"
 ```
 
+### Colab Corpus Building Workflow
+```bash
+# For users without GPU hardware - use Colab for corpus building
+# 1. Open Colab_Corpus_Builder.ipynb in Google Colab
+# 2. Upload research papers via file widget
+# 3. Build knowledge graphs using Colab T4 GPU (free)
+# 4. Download corpus package (my_research_corpus.zip)
+# 5. Use locally with MCP server:
+
+python3 start_mcp_server.py --corpus ./my_research_corpus.zip
+```
+
 ## Code Architecture
 
-### System Evolution: Educational Prototype → Production Research Tool
-This codebase has evolved from educational tutorials to a production literature review system:
+### System Evolution: Educational Prototype → Open Source Research Tool
+This codebase has evolved from educational tutorials to an open-source literature review system:
 - **Phase 1 (Complete)**: Enhanced paper analysis with GraphRAG + professional visualization + tutorial system
-- **Phase 2 (Current Development)**: MCP-based architecture for literature review automation
-- **Phase 3 (Planned)**: RTX 4090 corpus building + Claude Max integration for citation-accurate review writing
+- **Phase 2 (Current Development)**: Colab corpus builder + MCP-based architecture for literature review automation
+- **Phase 3 (In Progress)**: GPU-agnostic workflow (Colab builds → Local MCP server → Claude Max integration)
 
-**Current Focus**: Building MCP server to expose knowledge graphs for LLM-powered literature synthesis (see PRD.md)
+**Current Focus**: Colab corpus builder for GPU-free access + MCP server for local literature synthesis (see PRD.md)
+
+### Deployment Strategy for Open Source
+**Problem**: Most users don't have RTX 4090 for enhanced extraction
+**Solution**: Build knowledge graphs in Colab (free T4 GPU) → Download corpus → Use locally with MCP server
+**Benefit**: Democratizes access while maintaining privacy for research and writing
 
 ### Core Component Architecture (Layered Design)
 
@@ -173,10 +193,18 @@ Extract  Citations       Graph Traversal         + Export Options      Interface
 - **Cross-Reference Tracking**: Entity linking across paper collections enables literature synthesis
 
 ### MCP Architecture (In Development)
-**Goal**: Bridge local knowledge graphs with cloud LLM writing capabilities
-- **Knowledge Graph Builder**: Offline enhanced extraction on RTX 4090 (10-15 min per paper)
-- **MCP Server**: Local API exposing query_literature(), find_evidence(), generate_citations() 
+**Goal**: Bridge pre-built knowledge graphs with cloud LLM writing capabilities
+- **Colab Corpus Builder**: Enhanced extraction using free Colab T4 GPU (20-30 min per paper)
+- **Corpus Package**: Downloadable knowledge graphs + metadata for local use
+- **Local MCP Server**: API exposing query_literature(), find_evidence(), generate_citations()
 - **Claude Max Integration**: Citation-accurate literature review generation via MCP protocol
+
+### Corpus Management Architecture
+**Corpus Package Format**: Standardized zip containing knowledge graphs, vector stores, citations, and metadata
+- **Portable**: Built in Colab, used locally
+- **Version-controlled**: Metadata tracks papers, creation date, compatibility
+- **Incremental**: Support for adding new papers to existing corpora
+- **Shareable**: Researchers can share domain-specific knowledge bases
 
 ## Development Patterns
 
@@ -261,11 +289,12 @@ System designed for MCP-based automated review writing:
 - **Section-by-section synthesis** with maintained citation provenance
 
 ### MCP Development Roadmap
-**Current Status**: Foundation components complete, MCP server in development
-**Next Steps** (see PRD.md for full timeline):
-1. **Batch Corpus Builder**: Process paper collections with enhanced extraction
-2. **MCP Server Implementation**: Expose knowledge graphs via standardized protocol
-3. **Claude Max Integration**: Literature review generation with citation accuracy
+**Current Status**: Foundation components complete, implementing Colab workflow
+**Next Steps** (approved implementation plan):
+1. **Colab Corpus Builder**: Notebook for GPU-free knowledge graph building (Weeks 1-2)
+2. **Corpus Package Standard**: Export/import format for portable knowledge graphs (Week 2)
+3. **Local MCP Server**: Load pre-built corpora and expose via MCP protocol (Weeks 2-3)
+4. **Claude Max Integration**: Literature review generation with citation accuracy (Week 4)
 
 ## Testing Strategy
 
@@ -307,6 +336,9 @@ No automated test suite - testing via:
 
 # Check what's in current databases
 python3 -c "from src import LangChainGraphRAG; graph = LangChainGraphRAG(); print(graph.get_graph_summary())"
+
+# Validate corpus package integrity (when implemented)
+python3 -c "from src.corpus_loader import validate_corpus; validate_corpus('./my_research_corpus.zip')"
 ```
 
 ### Tutorial System
@@ -316,6 +348,9 @@ python3 -c "from src import LangChainGraphRAG; graph = LangChainGraphRAG(); prin
 
 # Manual tutorial launch
 source langchain-env/bin/activate && jupyter notebook tutorial/
+
+# Launch Colab corpus builder (upload to Colab)
+# Open: notebooks/Colab_Corpus_Builder.ipynb in Google Colab
 ```
 
 ### Debugging and Diagnostics
@@ -325,6 +360,9 @@ python3 debug_entity_extraction.py
 
 # Test LLM connection and JSON generation
 python3 -c "from src.enhanced_knowledge_graph import EnhancedKnowledgeGraph; kg = EnhancedKnowledgeGraph(); print('LLM ready')"
+
+# Test corpus loading workflow (when implemented)
+python3 -c "from src.corpus_loader import LocalCorpusLoader; loader = LocalCorpusLoader(); print('✅ Corpus loader ready')"
 ```
 
 ### Sample Data
@@ -337,6 +375,7 @@ python3 -c "from src.enhanced_knowledge_graph import EnhancedKnowledgeGraph; kg 
 - **PRD.md**: Complete product requirements for MCP-based literature review system
 - **start_tutorial.sh**: Complete environment setup with Jupyter kernel configuration
 - **clear_chromadb.sh**: Database cleanup utility for fresh starts
+- **docs_links.md**: Curated documentation links for project dependencies and integrations
 
 ## Important Project Files
 
@@ -350,6 +389,7 @@ python3 -c "from src.enhanced_knowledge_graph import EnhancedKnowledgeGraph; kg 
 - **examples/d3dd00113j.pdf**: Secondary paper for cross-paper linking tests
 
 ### Production Development Focus
-**Current Priority**: Implementing MCP server architecture per PRD.md specifications
-**Target Architecture**: RTX 4090 knowledge building → MCP server → Claude Max literature writing
+**Current Priority**: Implementing Colab corpus builder + MCP server architecture per approved plan
+**Target Architecture**: Colab knowledge building → Corpus package → Local MCP server → Claude Max literature writing
 **Success Metric**: Generate citation-accurate literature review sections in minutes vs weeks
+**Open Source Goal**: Democratize access by removing GPU hardware requirements
