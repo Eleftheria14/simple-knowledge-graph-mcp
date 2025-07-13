@@ -122,7 +122,7 @@ source langchain-env/bin/activate
 export JUPYTER_PATH=\$VIRTUAL_ENV/share/jupyter:\$JUPYTER_PATH
 export PYTHONPATH=\$(pwd):\$PYTHONPATH
 cd tutorial
-nohup jupyter notebook 04_Building_Knowledge_Graphs.ipynb > ../jupyter.log 2>&1 &
+nohup jupyter notebook --browser=default > ../jupyter.log 2>&1 &
 " 
 
 # Get the process ID
@@ -134,15 +134,22 @@ if [ ! -z "$JUPYTER_PID" ]; then
     echo "📋 Process ID: $JUPYTER_PID"
     echo "📄 Logs: jupyter.log"
     echo ""
-    echo "🌐 Server URLs:"
-    echo "   http://localhost:8888/notebooks/04_Building_Knowledge_Graphs.ipynb"
+    echo "🌐 Tutorial Files Available:"
+    echo "   📚 01_Introduction_to_LLMs_and_Ollama.ipynb"
+    echo "   📚 02_LangChain_Fundamentals.ipynb" 
+    echo "   📚 03_Understanding_RAG.ipynb"
+    echo "   📚 04_Building_Knowledge_Graphs.ipynb"
+    echo "   📚 05_Your_First_Paper_Analysis_System.ipynb"
+    echo ""
+    echo "🌐 Server should open in your default browser automatically"
+    echo "   If not, visit: http://localhost:8888"
     echo "   (Check jupyter.log for the token if needed)"
     echo ""
     echo "🛑 To stop the server later:"
     echo "   kill $JUPYTER_PID"
     echo "   or: pkill -f jupyter-notebook"
     echo ""
-    echo "📖 The tutorial is now ready to use!"
+    echo "📖 All tutorials are now ready to use!"
 else
     echo "❌ Failed to start Jupyter server"
     echo "📄 Check jupyter.log for details"
