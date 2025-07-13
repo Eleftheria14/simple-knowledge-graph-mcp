@@ -4,6 +4,12 @@
 echo "🚀 Starting Knowledge Graph Tutorial..."
 echo "=================================="
 
+# Get script directory and navigate there
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "📁 Working directory: $SCRIPT_DIR"
+
 # Check if virtual environment exists
 if [ ! -d "langchain-env" ]; then
     echo "❌ Virtual environment not found!"
@@ -23,6 +29,11 @@ else
     echo "⚠️ Installing core dependencies..."
     pip install -r requirements.txt
 fi
+
+# Fix urllib3 warning for LibreSSL compatibility
+echo "🔧 Fixing urllib3 compatibility..."
+pip install "urllib3<2.0" >/dev/null 2>&1
+echo "✅ urllib3 compatibility fixed"
 
 # Check visualization dependencies
 echo "🎨 Checking visualization dependencies..."
@@ -66,13 +77,19 @@ if python3 -c "import ipywidgets; print('✅ Widgets OK')" 2>/dev/null; then
 else
     echo "⚠️ Installing Jupyter widgets..."
     pip install ipywidgets
-    echo "💡 You may need to enable widget extensions:"
-    echo "   jupyter nbextension enable --py widgetsnbextension"
 fi
+
+# Enable Jupyter extensions for browser compatibility
+echo "🔧 Enabling Jupyter extensions..."
+jupyter nbextension enable --py widgetsnbextension --sys-prefix >/dev/null 2>&1
+jupyter serverextension enable --py jupyter_server --sys-prefix >/dev/null 2>&1
+echo "✅ Browser extensions enabled"
 
 # Install virtual environment as Jupyter kernel
 echo "🔧 Setting up Jupyter kernel..."
-if python3 -m ipykernel install --user --name=langchain-env --display-name="Python (langchain-env)" >/dev/null 2>&1; then
+# Remove existing kernel to avoid conflicts
+jupyter kernelspec remove langchain-env -f >/dev/null 2>&1
+if python -m ipykernel install --user --name=langchain-env --display-name="Python (langchain-env)" >/dev/null 2>&1; then
     echo "✅ Virtual environment kernel installed"
 else
     echo "⚠️ Kernel installation failed - notebook may use wrong Python"
@@ -98,5 +115,35 @@ echo "   3. Run all cells: Cell → Run All"
 echo "   4. If imports fail, check that Python (langchain-env) kernel is selected!"
 echo ""
 
-# Start Jupyter in the tutorial directory
-jupyter notebook tutorial/04_Building_Knowledge_Graphs.ipynb
+# Start Jupyter from within the virtual environment
+echo "🚀 Starting Jupyter server..."
+bash -c "
+source langchain-env/bin/activate
+export JUPYTER_PATH=\$VIRTUAL_ENV/share/jupyter:\$JUPYTER_PATH
+export PYTHONPATH=\$(pwd):\$PYTHONPATH
+cd tutorial
+nohup jupyter notebook 04_Building_Knowledge_Graphs.ipynb > ../jupyter.log 2>&1 &
+" 
+
+# Get the process ID
+sleep 3
+JUPYTER_PID=$(pgrep -f "jupyter-notebook")
+
+if [ ! -z "$JUPYTER_PID" ]; then
+    echo "✅ Jupyter server started successfully!"
+    echo "📋 Process ID: $JUPYTER_PID"
+    echo "📄 Logs: jupyter.log"
+    echo ""
+    echo "🌐 Server URLs:"
+    echo "   http://localhost:8888/notebooks/04_Building_Knowledge_Graphs.ipynb"
+    echo "   (Check jupyter.log for the token if needed)"
+    echo ""
+    echo "🛑 To stop the server later:"
+    echo "   kill $JUPYTER_PID"
+    echo "   or: pkill -f jupyter-notebook"
+    echo ""
+    echo "📖 The tutorial is now ready to use!"
+else
+    echo "❌ Failed to start Jupyter server"
+    echo "📄 Check jupyter.log for details"
+fi
