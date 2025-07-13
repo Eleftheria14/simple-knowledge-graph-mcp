@@ -15,6 +15,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from .enhanced_knowledge_graph import EnhancedKnowledgeGraph
 
 GRAPH_RETRIEVER_AVAILABLE = True  # Using custom implementation
 
@@ -45,6 +46,9 @@ class LangChainGraphRAG:
         self.embeddings = OllamaEmbeddings(
             model=embedding_model
         )
+        
+        # Enhanced knowledge graph for richer entity extraction
+        self.enhanced_kg = EnhancedKnowledgeGraph(llm_model)
         
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(exist_ok=True)
@@ -134,8 +138,14 @@ class LangChainGraphRAG:
         if not paper_id:
             paper_id = f"paper_{len(self.get_all_papers()) + 1}"
         
-        # Extract entities using LLM
-        entities = self._extract_entities(paper_content[:4000], paper_title)
+        # Use enhanced entity extraction for comprehensive results
+        logger.info("🚀 Using enhanced entity extraction for richer knowledge graph...")
+        enhanced_result = self.enhanced_kg.extract_comprehensive_entities(paper_content, paper_title)
+        entities = enhanced_result['entities']
+        
+        # Log the improvement
+        total_entities = sum(len(entity_list) for entity_list in entities.values())
+        logger.info(f"📈 Enhanced extraction: {total_entities} entities from {enhanced_result['graph_stats']['sections_processed']} sections")
         
         # Create documents with rich metadata
         documents = self._create_documents_with_metadata(
@@ -156,7 +166,9 @@ class LangChainGraphRAG:
             'entities': entities,
             'documents_added': len(documents),
             'document_ids': document_ids,
-            'total_papers': len(self.get_all_papers())
+            'total_papers': len(self.get_all_papers()),
+            'graph_stats': enhanced_result['graph_stats'],
+            'relationships': enhanced_result['relationships']
         }
         
         logger.info(f"✅ Added paper to graph: {len(documents)} documents")

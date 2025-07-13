@@ -25,6 +25,15 @@ from .langchain_graph_rag import LangChainGraphRAG
 from .yfiles_visualization import create_yfiles_visualization, YFilesGraphRAGVisualizer
 from .notebook_visualization import show_knowledge_graph
 
+# Tutorial helper functions
+from .tutorial_helpers import (
+    interactive_paper_chat, test_question_routing, analyze_system_performance,
+    generate_comprehensive_summary, display_tutorial_results, show_suggested_next_steps
+)
+
+# Enhanced knowledge graph extraction
+from .enhanced_knowledge_graph import EnhancedKnowledgeGraph, create_enhanced_knowledge_graph
+
 __all__ = [
     # Main components
     'SimplePaperRAG',
@@ -49,5 +58,17 @@ __all__ = [
     
     # Citation functions
     'track_citations_in_paper',
-    'verify_citation_accuracy'
+    'verify_citation_accuracy',
+    
+    # Tutorial helpers
+    'interactive_paper_chat',
+    'test_question_routing', 
+    'analyze_system_performance',
+    'generate_comprehensive_summary',
+    'display_tutorial_results',
+    'show_suggested_next_steps',
+    
+    # Enhanced knowledge graphs
+    'EnhancedKnowledgeGraph',
+    'create_enhanced_knowledge_graph'
 ]

@@ -337,15 +337,17 @@ class UnifiedPaperChat:
             "How do the different methods relate to each other?",
         ]
         
-        # Add entity-specific suggestions
-        entities = self.kg.entities
-        if entities.get('methods'):
-            method = entities['methods'][0]
-            suggestions.append(f"Tell me more about {method}")
-        
-        if entities.get('concepts'):
-            concept = entities['concepts'][0]
-            suggestions.append(f"How is {concept} used in this paper?")
+        # Add entity-specific suggestions from RAG system if available
+        if hasattr(self.rag, 'paper_data') and self.rag.paper_data:
+            entities = self.rag.paper_data.get('entities', {})
+            
+            if entities.get('methods'):
+                method = entities['methods'][0]
+                suggestions.append(f"Tell me more about {method}")
+            
+            if entities.get('concepts'):
+                concept = entities['concepts'][0]
+                suggestions.append(f"How is {concept} used in this paper?")
         
         return suggestions
     
@@ -415,7 +417,15 @@ def analyze_paper_with_chat(pdf_path: str) -> UnifiedPaperChat:
     
     if 'error' not in result:
         print("✅ Paper loaded successfully!")
-        print(f"📊 {result['knowledge_graph']['graph_stats']}")
+        
+        # Show graph stats if available
+        kg_result = result.get('knowledge_graph', {})
+        if 'graph_stats' in kg_result:
+            stats = kg_result['graph_stats']
+            print(f"📊 Knowledge Graph: {stats['nodes']} entities, {stats['edges']} relationships")
+        else:
+            print("📊 Knowledge Graph: Built successfully")
+            
         print("💬 Ready for chat! Try asking questions about the paper.")
         
         # Show suggested questions
