@@ -6,7 +6,6 @@ A streamlined tool for analyzing one scientific paper with RAG and basic knowled
 import re
 import json
 from typing import List, Dict, Tuple, Optional
-import networkx as nx
 from pathlib import Path
 import logging
 

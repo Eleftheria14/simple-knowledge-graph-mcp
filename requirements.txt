@@ -10,7 +10,6 @@ chromadb>=0.4.0
 
 # Database (for corpus management)
 psycopg2-binary>=2.9.0
-sqlite3
 
 # Core ML and processing
 scikit-learn>=1.6.0
@@ -30,7 +29,6 @@ spacy>=3.7.0
 
 # Additional dependencies for enhanced analysis
 python-dateutil>=2.8.0
-pathlib2>=2.3.0
 
 # Visualization for knowledge graphs
 matplotlib>=3.5.0

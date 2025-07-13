@@ -67,3 +67,13 @@ Thumbs.db
 *.bin
 *.safetensors
 models/
+
+# Analysis output files
+Machine_Learning_for_Drug_Disc_*
+optimized_*
+*.graphml
+*.pkl
+
+# Database files
+chroma_graph_db/
+/tmp/chroma*

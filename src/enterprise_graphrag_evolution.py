@@ -3,7 +3,7 @@ Enterprise GraphRAG Evolution: From Tutorial to Production
 Shows how our tutorial approach aligns with Google Cloud Spanner Graph + LangChain patterns
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List
 import logging
 
 logger = logging.getLogger(__name__)

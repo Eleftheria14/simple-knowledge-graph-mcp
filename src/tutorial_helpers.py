@@ -3,7 +3,7 @@ Tutorial helper functions for clean notebook interfaces
 Provides simple functions that hide complex implementation details
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import logging
 
 logger = logging.getLogger(__name__)
