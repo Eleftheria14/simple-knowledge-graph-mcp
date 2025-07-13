@@ -1,0 +1,19 @@
+
+Introduction to Machine Learning
+
+Machine learning is a type of artificial intelligence that allows computers to learn 
+and make decisions without being explicitly programmed for every task.
+
+There are three main types of machine learning:
+1. Supervised Learning: Learning from examples with correct answers
+2. Unsupervised Learning: Finding patterns in data without examples
+3. Reinforcement Learning: Learning through trial and error with rewards
+
+Applications of machine learning include:
+- Email spam detection
+- Image recognition
+- Voice assistants
+- Recommendation systems
+
+Machine learning is used in many industries including healthcare, finance, 
+transportation, and entertainment.
