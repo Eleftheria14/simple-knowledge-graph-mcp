@@ -13,81 +13,82 @@ Example research paper: "A review of large language models and autonomous agents
 
 This paper is used for testing citation extraction and analysis functionality.
 
-### `improved_citation_extractor.py`
-Earlier version of the citation extractor with detailed debugging and analysis capabilities.
-
-### `working_regex_patterns.py`
-Collection of regex patterns that were developed and tested for citation extraction.
+### `sample_analysis_outputs/`
+Directory containing example outputs from the GraphRAG MCP analysis system showing:
+- Natural knowledge graph discovery
+- Comprehensive paper analysis
+- Multiple export formats (GraphML, JSON, Markdown)
+- Processing metadata and statistics
 
 ## Usage Examples
 
-### Basic Citation Extraction
+### Basic Paper Analysis with GraphRAG MCP
 ```python
-from src import get_acs_citation
+from graphrag_mcp.core.analyzer import analyze_paper_with_chat
 
-# Extract ACS citation from example paper
-citation = get_acs_citation("examples/d4sc03921a.pdf")
-print(citation)
+# Analyze paper with interactive chat interface
+chat_system = analyze_paper_with_chat("examples/d4sc03921a.pdf")
+response = chat_system.chat("What are the main findings?")
+entities = chat_system.get_entities()
 ```
 
-### Database Storage
+### Graphiti Knowledge Graph Creation
 ```python
-from src import extract_and_store_citation
+from graphrag_mcp.core.graphiti_engine import create_graphiti_knowledge_graph
+import asyncio
 
-# Extract and store in database
-citation_info, formatted_citations, paper_id = extract_and_store_citation(
-    "examples/d4sc03921a.pdf"
-)
-print(f"Paper stored with ID: {paper_id}")
+# Create Graphiti-powered knowledge graph
+asyncio.run(create_graphiti_knowledge_graph())
 ```
 
-### Search Stored Papers
+### Export for Corpus Building
 ```python
-from src import search_stored_citations
+from graphrag_mcp.core.analyzer import export_paper_for_corpus
 
-# Search by author
-search_stored_citations(author="Andrew D. White")
-
-# Search by journal
-search_stored_citations(journal="Chemical Science")
+# Export paper for GraphRAG corpus
+corpus_doc = export_paper_for_corpus("examples/d4sc03921a.pdf")
+print(f"Extracted {len(corpus_doc['entities'])} entities")
 ```
 
 ## Testing Your Own Papers
 
 1. Place your PDF files in this directory
 2. Update the file path in the examples
-3. Run the citation extraction:
+3. Run the GraphRAG MCP analysis:
 
 ```python
-from src import display_and_store_citation
+from graphrag_mcp.core.analyzer import analyze_paper_with_chat
 
-result = display_and_store_citation("examples/your_paper.pdf")
+# Analyze your own paper
+chat_system = analyze_paper_with_chat("examples/your_paper.pdf")
+response = chat_system.chat("What are the main contributions?")
 ```
 
 ## Expected Output
 
-When running citation extraction on the example paper, you should see:
+When running GraphRAG MCP analysis on the example paper, you should see:
 
 ```
-📚 Extracting citation information from research paper...
+🔄 Loading paper: d4sc03921a.pdf
+✅ Document processed successfully
+🔄 Building knowledge graph...
+✅ Knowledge graph created with entities and relationships
+🔄 Initializing chat system...
+✅ Chat system ready
 
-📖 PAPER CITATION INFORMATION
-======================================================================
-🗄️ Database ID: 1
-📊 Extraction Confidence: 1.00
-
-🔍 EXTRACTED METADATA:
-📌 Title: A review of large language models and autonomous agents in chemistry
-📌 Authors: Mayk Caldas Ramos, Christopher J. Collison, Andrew D. White
-📌 Journal: Chemical Science
-📌 Year: 2024
-📌 Doi: 10.1039/d4sc03921a
-
-📝 FORMATTED CITATIONS:
---------------------------------------------------
-
-🧪 ACS Style (American Chemical Society):
-   Ramos, M. C.; Collison, C. J.; White, A. D. A review of large
-   language models and autonomous agents in chemistry. Chemical
-   Science 2024. DOI: 10.1039/d4sc03921a.
+📊 Paper Analysis Results:
+- Title: A review of large language models and autonomous agents in chemistry
+- Authors: Mayk Caldas Ramos, Christopher J. Collison, Andrew D. White
+- Entities extracted: 20+ (methods, concepts, technologies)
+- Citations tracked: Multiple format support
+- Knowledge graph: Graphiti-powered (NetworkX legacy support)
 ```
+
+## Integration with Current System
+
+The examples work with the current GraphRAG MCP architecture:
+- **Core Engine**: Ollama + ChromaDB + Graphiti
+- **Analysis**: Enhanced entity extraction with 20+ categories
+- **Chat Interface**: Interactive exploration of paper content
+- **Export**: GraphRAG-compatible corpus documents
+- **Visualization**: yFiles professional graphs

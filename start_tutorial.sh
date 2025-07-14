@@ -23,7 +23,7 @@ source langchain-env/bin/activate
 
 # Check if dependencies are installed
 echo "🔍 Checking dependencies..."
-if python3 -c "from src import LangChainGraphRAG; print('✅ Dependencies OK')" 2>/dev/null; then
+if python3 -c "from graphrag_mcp.core import AdvancedAnalyzer; print('✅ Dependencies OK')" 2>/dev/null; then
     echo "✅ Core dependencies installed"
 else
     echo "⚠️ Installing core dependencies..."
@@ -48,11 +48,11 @@ fi
 # Verify everything works together
 echo "🧪 Running integration test..."
 if python3 -c "
-from src.notebook_visualization import show_knowledge_graph
-from src import LangChainGraphRAG
+from graphrag_mcp.core import AdvancedAnalyzer, OllamaEngine
+from graphrag_mcp.visualization import display_graphiti_knowledge_graph
 import matplotlib
 matplotlib.use('Agg')
-graph_rag = LangChainGraphRAG()
+analyzer = AdvancedAnalyzer()
 print('✅ GraphRAG + Visualization ready!')
 " 2>/dev/null; then
     echo "✅ Integration test passed"

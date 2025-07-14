@@ -16,6 +16,10 @@
 ## Agentic RAG
 - [What is Agentic RAG? (Weaviate)](https://weaviate.io/blog/what-is-agentic-rag)
 - [Agentic RAG Knowledge Graph Implementation](https://github.com/coleam00/ottomator-agents/tree/main/agentic-rag-knowledge-graph)
+- [Agentic RAG Fundamentals (GeeksforGeeks)](https://www.geeksforgeeks.org/artificial-intelligence/what-is-agentic-rag/)
+- [LangGraph Agentic RAG Tutorial](https://langchain-ai.lang.chat/langgraph/tutorials/rag/langgraph_agentic_rag/)
+- [GraphRAG and Agentic Architecture with Neo4j](https://neo4j.com/blog/developer/graphrag-and-agentic-architecture-with-neoconverse/)
+- [Agentic RAG Survey Paper (arXiv)](https://arxiv.org/html/2501.09136v3)
 
 ## Advanced Knowledge Graph Systems
 - [Graphiti - Real-time Knowledge Graphs for AI Agents](https://github.com/getzep/graphiti)
@@ -42,7 +46,8 @@
 
 ## Visualization
 - [yFiles Jupyter Graphs](https://github.com/yWorks/yfiles-jupyter-graphs)
-- [NetworkX Documentation](https://networkx.org/documentation/stable/)
+- [Graphiti - Real-time Knowledge Graphs](https://github.com/getzep/graphiti)
+- [NetworkX Documentation](https://networkx.org/documentation/stable/) - Legacy support only
 - [Pyvis Interactive Networks](https://pyvis.readthedocs.io/en/latest/)
 
 ## Academic Paper Processing

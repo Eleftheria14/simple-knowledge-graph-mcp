@@ -30,6 +30,7 @@ ENV/
 env.bak/
 venv.bak/
 langchain-env/
+graphiti-env/
 
 # IDE
 .vscode/
@@ -76,4 +77,16 @@ optimized_*
 
 # Database files
 chroma_graph_db/
+chroma_db/
+*chroma*_db/
+tutorial/chroma*
+notebooks/chroma*
+*.sqlite3
 /tmp/chroma*
+
+# Neo4j data
+neo4j_data/
+
+# Test outputs
+test_outputs/
+test_viz_*
