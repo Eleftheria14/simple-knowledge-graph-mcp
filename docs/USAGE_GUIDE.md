@@ -30,8 +30,11 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ollama serve
 
+# Install and start Neo4j (required for Graphiti)
+docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
+
 # Verify installation
-python3 -c "from graphrag_mcp.core import DocumentProcessor; print('✅ Ready')"
+python3 -c "from graphrag_mcp.core.graphiti_engine import GraphitiKnowledgeGraph; print('✅ Graphiti Ready')"
 ```
 
 ### Your First Analysis
@@ -215,11 +218,21 @@ graphrag-mcp status
 graphrag-mcp status research-assistant
 ```
 
+## 🔄 Dual-Mode Architecture
+
+The system provides two specialized modes for different research approaches:
+
+### Chat Tools - Conversational Research Exploration
+Natural, exploratory tools for research discovery and understanding.
+
+### Literature Review Tools - Formal Academic Writing  
+Citation-aware tools for systematic literature review and formal academic writing.
+
 ## 📚 Academic Template Guide
 
-The academic template is optimized for literature reviews and research analysis.
+The academic template supports both conversational and literature review modes.
 
-### MCP Tools Available
+### Dual-Mode Tool Categories
 
 #### `query_papers`
 Semantic search across your document corpus.

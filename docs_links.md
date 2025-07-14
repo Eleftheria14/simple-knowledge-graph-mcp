@@ -23,6 +23,11 @@
 
 ## Advanced Knowledge Graph Systems
 - [Graphiti - Real-time Knowledge Graphs for AI Agents](https://github.com/getzep/graphiti)
+- [Zep Knowledge Graph MCP Server](https://www.getzep.com/product/knowledge-graph-mcp/)
+- [Graphiti Getting Started Guide](https://help.getzep.com/graphiti/getting-started/welcome)
+- [Graphiti MCP Server Documentation](https://help.getzep.com/graphiti/getting-started/mcp-server)
+- [Graphiti Quickstart Tutorial](https://help.getzep.com/graphiti/getting-started/quickstart)
+- [Graphiti Python SDK](https://help.getzep.com/graphiti/getting-started/graphiti-python)
 
 ## LangChain
 - [LangChain Introduction](https://python.langchain.com/docs/introduction/)

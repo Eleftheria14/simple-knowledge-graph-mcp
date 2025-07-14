@@ -1,6 +1,6 @@
 # GraphRAG MCP Data Flow Visualization
 
-## Real-Time Data Processing Pipeline
+## Dual-Mode Real-Time Data Processing Pipeline
 
 ### 1. Document Processing Data Flow
 
@@ -12,12 +12,12 @@
 INPUT → PROCESSING → STORAGE → RETRIEVAL → OUTPUT
 
 ┌─────────────┐   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────┐
-│ PDF Document│──▶│ Text Extraction │──▶│ Chunk Creation  │──▶│ Embedding Gen   │──▶│ Vector Store│
-│ (Binary)    │   │ (PyPDF)         │   │ (800-1000 chars)│   │ (nomic-embed)   │   │ (ChromaDB)  │
+│ PDF Document│──▶│ Enhanced        │──▶│ Graphiti        │──▶│ Citation        │──▶│ Neo4j       │
+│ (Binary)    │   │ Analyzer        │   │ Processing      │   │ Integration     │   │ Database    │
 │             │   │                 │   │                 │   │                 │   │             │
-│ • Research  │   │ • Clean Text    │   │ • Overlap 100   │   │ • Semantic Vec  │   │ • Indexed   │
-│ • Papers    │   │ • Metadata      │   │ • Context Pres  │   │ • Similarity    │   │ • Searchable│
-│ • Citations │   │ • Structure     │   │ • Boundaries    │   │ • Normalized    │   │ • Persistent│
+│ • Research  │   │ • 20+ Entities  │   │ • AI Extraction │   │ • 4 Styles      │   │ • Project NS│
+│ • Papers    │   │ • Citation Track│   │ • Relationships │   │ • Location Map  │   │ • Persistent│
+│ • Citations │   │ • Multi-pass    │   │ • Real-time     │   │ • Usage Track   │   │ • Scalable  │
 └─────────────┘   └─────────────────┘   └─────────────────┘   └─────────────────┘   └─────────────┘
        │                   │                   │                   │                   │
        ▼                   ▼                   ▼                   ▼                   ▼

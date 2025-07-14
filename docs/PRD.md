@@ -1,10 +1,10 @@
 # 📋 Product Requirements Document (PRD)
 ## GraphRAG MCP Toolkit - Open Source Platform
 
-**Version**: 2.0  
+**Version**: 3.0  
 **Date**: January 2025  
 **Owner**: Research Team  
-**Status**: Updated Implementation Plan  
+**Status**: Dual-Mode Architecture Implementation Complete  
 
 ---
 
@@ -31,7 +31,7 @@ Every professional field has unique knowledge structures, but AI systems treat a
 - **Proven Technology**: Advanced knowledge graph extraction already demonstrated
 
 ### **Strategic Vision**
-**Position as "the WordPress of GraphRAG"** - make it as easy to create a domain-specific AI assistant as it is to create a website. Transform any professional's document collection into an intelligent, domain-aware AI that understands their field's unique knowledge structures.
+**Position as "the WordPress of GraphRAG"** - make it as easy to create a domain-specific AI assistant as it is to create a website. Transform any professional's document collection into an intelligent, dual-mode AI assistant with persistent Graphiti knowledge graphs and comprehensive citation management.
 
 ---
 
@@ -95,15 +95,15 @@ cd ~/dissertation/ml_drug_discovery
 
 # Install and setup (one-time)
 pip install graphrag-mcp-toolkit
+docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
+
+# Phase 1: Build persistent knowledge graph
 graphrag-mcp create literature-assistant --template academic
+graphrag-mcp add-documents literature-assistant ./papers/
+graphrag-mcp process literature-assistant  # Populates Neo4j via Graphiti
 
-# Upload her paper collection
-graphrag-mcp add-documents ./papers/
-# Processing: 50 papers × 8 minutes = ~7 hours (runs overnight)
-
-# Generate MCP server
-graphrag-mcp generate-server --domain-config chemistry
-graphrag-mcp serve --port 8080
+# Phase 2: Serve via MCP
+graphrag-mcp serve literature-assistant --transport stdio
 ```
 
 #### **Phase 2: Discovery and Exploration (Monday Research)**
@@ -158,12 +158,15 @@ GraphRAG Response:
 
 #### **Phase 3: Literature Review Writing (Tuesday-Wednesday Writing)**
 
-**Sarah connects Claude Max to her MCP server and begins systematic writing:**
+**Sarah connects Claude Desktop to her dual-mode MCP server and begins systematic writing:**
 
-**Sarah's Prompt to Claude Max**:
-> "Write a methodology overview section for transformer-based approaches to molecular property prediction. Focus on the evolution from sequence-only to graph-aware methods. Include specific performance numbers and proper citations."
+**Conversational Mode** (for exploration):
+> "Ask knowledge graph: How have transformer approaches to molecular property prediction evolved?"
 
-**Claude Max Response** (with real-time MCP queries):
+**Literature Review Mode** (for formal writing):
+> "Get facts with citations about transformer architectures in drug discovery using APA style"
+
+**Claude Desktop Response** (with real-time Graphiti queries):
 ```markdown
 ## Transformer-Based Approaches to Molecular Property Prediction
 
@@ -179,24 +182,27 @@ The breakthrough came with Chen et al. (2023), who developed ChemFormer by combi
 #### **Phase 4: Research Gap Identification**
 
 ```
-Query: "What research gaps exist in transformer approaches to drug discovery?"
+Literature Review Mode Query: "Gather sources for topic: research gaps in transformer drug discovery"
 
-GraphRAG Response:
-🔍 Identified Research Gaps:
+Graphiti MCP Response:
+🔍 Literature Review: Research Gaps Analysis
 
-1. Protein-Drug Interaction Modeling
-   ├── Current state: Most work focuses on molecular properties only
-   ├── Gap: Few papers combine molecular and protein transformers
-   ├── Opportunity: Multi-modal protein-molecule attention
-   └── Evidence: Only 2/50 papers address this (Torres et al., Liu et al.)
+**Sources Organized by Gap Type:**
 
-2. Multi-Target Drug Discovery
-   ├── Current state: Single-target optimization focus
-   ├── Gap: Polypharmacology not addressed by transformers
-   ├── Opportunity: Graph transformers for drug-target networks
-   └── Evidence: Mentioned as limitation in 8 papers but not addressed
+1. **Protein-Drug Interaction Modeling** (Strong Evidence)
+   • Torres, M. et al. (2024). "Limitations of current molecular transformers" - Nature Chemistry, 15(3), 123-135
+   • Liu, X. et al. (2024). "Protein-molecule interaction challenges" - Science, 384(6698), 891-895
+   • Evidence strength: Strong (systematic review + experimental validation)
+   • Citation count in corpus: 8 supporting papers
 
-🎯 Recommendation: Gap #1 (protein-drug interactions) has the strongest foundation for novel research based on your corpus.
+2. **Multi-Target Drug Discovery** (Moderate Evidence)  
+   • Singh, R. et al. (2023). "Polypharmacology gap analysis" - Drug Discovery Today, 28(4), 103580
+   • Anderson, K. et al. (2024). "Network-based drug design limitations" - Journal of Medicinal Chemistry, 67(8), 3421-3435
+   • Evidence strength: Moderate (mentioned but not systematically addressed)
+   • Citation count in corpus: 5 supporting papers
+
+**Recommendation for Literature Review:**
+Gap #1 provides strongest foundation for discussion with multiple high-impact citations and systematic evidence.
 ```
 
 ### **🎯 User Value Delivered**
@@ -207,18 +213,20 @@ GraphRAG Response:
 - **Connections**: Missed relationships between papers
 - **Quality**: Inconsistent depth and coverage
 
-#### **After GraphRAG MCP**:
-- **Time**: 3-4 days for comprehensive literature review
-- **Citations**: 100% accurate with precise source locations
-- **Connections**: Systematic discovery of relationships and gaps
-- **Quality**: Consistent, evidence-backed analysis with cross-paper insights
+#### **After Dual-Mode GraphRAG MCP**:
+- **Time**: 2-3 days for comprehensive literature review (improved with dual-mode efficiency)
+- **Citations**: 100% accurate with 4 academic styles (APA, IEEE, Nature, MLA)
+- **Connections**: Real-time discovery via Graphiti knowledge graphs
+- **Quality**: Dual-mode approach (conversational exploration + formal writing)
+- **Persistence**: Knowledge graphs survive across sessions in Neo4j
 
 #### **Specific Benefits**:
-- ✅ **Discovery**: Found 3 major research gaps not obvious from manual reading
-- ✅ **Accuracy**: All 47 citations verified with exact source locations
-- ✅ **Efficiency**: 85% time reduction compared to traditional methods
-- ✅ **Insight**: Identified evolution patterns and future directions
-- ✅ **Quality**: Publication-ready sections with proper academic formatting
+- ✅ **Dual-Mode Efficiency**: Conversational exploration + formal citation management
+- ✅ **Persistent Knowledge**: Graphiti graphs survive restarts and build over time
+- ✅ **Citation Excellence**: 4 academic styles with automatic usage tracking
+- ✅ **Real-time Discovery**: Graphiti AI-powered relationship extraction
+- ✅ **Scalable Architecture**: Neo4j backend supports enterprise-scale corpora
+- ✅ **Research Continuity**: Pick up where you left off with persistent graphs
 
 ---
 

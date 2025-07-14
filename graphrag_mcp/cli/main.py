@@ -260,16 +260,24 @@ def add_documents(
 @app.command()
 def process(
     project: str = typer.Argument(..., help="Project name to process"),
-    force: bool = typer.Option(False, "--force", "-f", help="Reprocess existing documents")
+    force: bool = typer.Option(False, "--force", "-f", help="Reprocess existing documents"),
+    graphiti_only: bool = typer.Option(False, "--graphiti-only", help="Only populate Graphiti, skip JSON export")
 ):
     """
-    Process documents into knowledge graphs.
+    Process documents into persistent Graphiti knowledge graphs.
+    
+    This command:
+    1. Analyzes documents using enhanced extraction
+    2. Populates persistent Graphiti/Neo4j knowledge graph
+    3. Saves metadata for MCP server reference
     
     Examples:
     
         graphrag-mcp process literature-assistant
         
         graphrag-mcp process legal-helper --force
+        
+        graphrag-mcp process my-research --graphiti-only
     """
     console.print(f"⚙️  Processing project: [bold blue]{project}[/bold blue]")
     
@@ -287,43 +295,193 @@ def process(
         console.print("❌ No PDF documents found. Add documents first.", style="red")
         return
     
-    # Initialize analyzer
+    # Load project config to get template
+    config_file = project_dir / "config.json"
+    template = "academic"  # Default
+    if config_file.exists():
+        with open(config_file) as f:
+            config = json.load(f)
+            template = config.get('template', 'academic')
+    
+    console.print(f"📋 Template: {template}")
+    console.print(f"📁 Documents: {len(pdf_files)} PDF files")
+    console.print(f"🧠 Knowledge Graph: Persistent Graphiti/Neo4j")
+    
+    # Initialize components
     analyzer = AdvancedAnalyzer()
     
     # Create output directory
     output_dir = project_dir / "processed"
     output_dir.mkdir(exist_ok=True)
     
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
+    # Initialize Graphiti with project namespace
+    async def process_with_graphiti():
+        from ..core.graphiti_engine import GraphitiKnowledgeGraph
         
-        for i, pdf_file in enumerate(pdf_files):
-            task = progress.add_task(f"Processing {pdf_file.name}...", total=None)
+        # Create project-specific Graphiti instance
+        graphiti_engine = GraphitiKnowledgeGraph()
+        
+        # Initialize Graphiti connection
+        console.print("🔌 Connecting to Neo4j/Graphiti...")
+        init_success = await graphiti_engine.initialize()
+        if not init_success:
+            console.print("❌ Failed to connect to Neo4j. Make sure Neo4j is running.", style="red")
+            console.print("💡 Start Neo4j: make setup-neo4j", style="yellow")
+            return False
+        
+        console.print("✅ Connected to Graphiti knowledge graph")
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
             
+            # Track processed documents for this project
+            project_metadata = {
+                "project_name": project,
+                "template": template,
+                "processed_date": datetime.now().isoformat(),
+                "documents_processed": [],
+                "graphiti_stats": {}
+            }
+            
+            for i, pdf_file in enumerate(pdf_files):
+                task = progress.add_task(f"Processing {pdf_file.name}...", total=None)
+                
+                try:
+                    # Check if already processed (JSON file exists)
+                    output_file = output_dir / f"{pdf_file.stem}.json"
+                    if output_file.exists() and not force:
+                        progress.update(task, description=f"⏭️  Skipping {pdf_file.name} (already processed)")
+                        
+                        # Load existing metadata
+                        with open(output_file) as f:
+                            existing_data = json.load(f)
+                            project_metadata["documents_processed"].append({
+                                "filename": pdf_file.name,
+                                "document_id": pdf_file.stem,
+                                "status": "skipped",
+                                "title": existing_data.get("title", pdf_file.stem)
+                            })
+                        continue
+                    
+                    progress.update(task, description=f"📄 Analyzing {pdf_file.name}...")
+                    
+                    # Analyze document
+                    corpus_doc = analyzer.analyze_for_corpus(str(pdf_file))
+                    
+                    progress.update(task, description=f"🧠 Adding to knowledge graph...")
+                    
+                    # Add to Graphiti knowledge graph
+                    success = await graphiti_engine.add_document(
+                        document_content=corpus_doc.content,
+                        document_id=f"{project}_{pdf_file.stem}",  # Project-namespaced ID
+                        metadata={
+                            "title": corpus_doc.title,
+                            "project": project,
+                            "template": template,
+                            "filename": pdf_file.name,
+                            "entities": corpus_doc.entities,
+                            "processing_date": datetime.now().isoformat(),
+                            **corpus_doc.metadata
+                        },
+                        source_description=f"{template} document from {project} project"
+                    )
+                    
+                    if success:
+                        progress.update(task, description=f"✅ Added to knowledge graph: {pdf_file.name}")
+                        
+                        # Save JSON metadata (unless graphiti-only mode)
+                        if not graphiti_only:
+                            with open(output_file, 'w') as f:
+                                json.dump(corpus_doc.model_dump(), f, indent=2)
+                        
+                        # Update project metadata
+                        project_metadata["documents_processed"].append({
+                            "filename": pdf_file.name,
+                            "document_id": f"{project}_{pdf_file.stem}",
+                            "status": "processed",
+                            "title": corpus_doc.title,
+                            "entities_count": len(corpus_doc.entities),
+                            "graphiti_success": True
+                        })
+                        
+                    else:
+                        progress.update(task, description=f"⚠️  Knowledge graph failed, saved locally: {pdf_file.name}")
+                        
+                        # Save JSON as fallback
+                        with open(output_file, 'w') as f:
+                            json.dump(corpus_doc.model_dump(), f, indent=2)
+                        
+                        project_metadata["documents_processed"].append({
+                            "filename": pdf_file.name,
+                            "document_id": pdf_file.stem,
+                            "status": "processed_local_only",
+                            "title": corpus_doc.title,
+                            "graphiti_success": False
+                        })
+                
+                except Exception as e:
+                    progress.update(task, description=f"❌ Failed {pdf_file.name}: {str(e)}")
+                    logger.error(f"Processing failed for {pdf_file}: {e}")
+                    
+                    project_metadata["documents_processed"].append({
+                        "filename": pdf_file.name,
+                        "status": "failed",
+                        "error": str(e)
+                    })
+            
+            # Get Graphiti statistics
             try:
-                # Check if already processed
-                output_file = output_dir / f"{pdf_file.stem}.json"
-                if output_file.exists() and not force:
-                    progress.update(task, description=f"⏭️  Skipping {pdf_file.name} (already processed)")
-                    continue
-                
-                # Analyze document
-                corpus_doc = analyzer.analyze_for_corpus(str(pdf_file))
-                
-                # Save results
-                with open(output_file, 'w') as f:
-                    json.dump(corpus_doc.model_dump(), f, indent=2)
-                
-                progress.update(task, description=f"✅ Processed {pdf_file.name}")
-                
+                stats = await graphiti_engine.get_graph_stats()
+                project_metadata["graphiti_stats"] = stats
+                console.print(f"📊 Knowledge Graph Stats: {stats.get('total_nodes', 0)} nodes, {stats.get('total_edges', 0)} relationships")
             except Exception as e:
-                progress.update(task, description=f"❌ Failed {pdf_file.name}: {str(e)}")
-                logger.error(f"Processing failed for {pdf_file}: {e}")
+                logger.warning(f"Could not get Graphiti stats: {e}")
+            
+            # Save project processing metadata
+            metadata_file = project_dir / "processing_metadata.json"
+            with open(metadata_file, 'w') as f:
+                json.dump(project_metadata, f, indent=2)
+            
+            # Update project config
+            if config_file.exists():
+                with open(config_file) as f:
+                    config = json.load(f)
+                config["last_processed"] = datetime.now().isoformat()
+                config["documents_in_graph"] = len([d for d in project_metadata["documents_processed"] if d.get("graphiti_success", False)])
+                config["graphiti_enabled"] = True
+                with open(config_file, 'w') as f:
+                    json.dump(config, f, indent=2)
+        
+        await graphiti_engine.close()
+        return True
     
-    console.print(f"🎉 Processing complete! Results saved to: {output_dir}")
+    # Run async processing
+    try:
+        import asyncio
+        success = asyncio.run(process_with_graphiti())
+        
+        if success:
+            processed_count = len([f for f in pdf_files])
+            console.print()
+            console.print(Panel.fit(
+                f"[green]🎉 Processing Complete![/green]\\n\\n"
+                f"📄 Documents: {processed_count} processed\\n"
+                f"🧠 Knowledge Graph: Populated in Neo4j\\n"
+                f"📁 Metadata: Saved to {output_dir}\\n\\n"
+                f"[dim]Next step:[/dim]\\n"
+                f"  Start MCP server: [code]graphrag-mcp serve {project}[/code]",
+                title="✅ Success",
+                border_style="green"
+            ))
+        else:
+            console.print("❌ Processing failed. Check Neo4j connection.", style="red")
+            
+    except Exception as e:
+        console.print(f"❌ Processing failed: {e}", style="red")
+        logger.error(f"Async processing failed: {e}")
 
 
 @app.command()
@@ -335,7 +493,10 @@ def serve(
     background: bool = typer.Option(False, "--background", "-b", help="Run in background")
 ):
     """
-    Start MCP server for a project.
+    Start Graphiti MCP server for a project.
+    
+    Serves the persistent knowledge graph created during 'process' phase.
+    Connects to existing Neo4j/Graphiti data for the project.
     
     Examples:
     
@@ -343,16 +504,22 @@ def serve(
         
         graphrag-mcp serve legal-helper --port 8081 --transport stdio
     """
-    console.print(f"🚀 Starting MCP server for: [bold blue]{project}[/bold blue]")
+    console.print(f"🚀 Starting Graphiti MCP server for: [bold blue]{project}[/bold blue]")
     
     project_dir = _get_project_dir(project)
     if not project_dir:
         return
     
-    processed_dir = project_dir / "processed"
-    if not processed_dir.exists():
-        console.print("❌ No processed documents found. Run 'process' first.", style="red")
+    # Check if project has been processed
+    metadata_file = project_dir / "processing_metadata.json"
+    if not metadata_file.exists():
+        console.print("❌ No processing metadata found. Run 'process' first.", style="red")
+        console.print("💡 Process documents: [code]graphrag-mcp process {project}[/code]", style="yellow")
         return
+    
+    # Load project metadata
+    with open(metadata_file) as f:
+        metadata = json.load(f)
     
     # Load project config
     config_file = project_dir / "config.json"
@@ -360,32 +527,86 @@ def serve(
         with open(config_file) as f:
             config = json.load(f)
         template = config.get('template', 'academic')
+        graphiti_enabled = config.get('graphiti_enabled', False)
     else:
         template = 'academic'
+        graphiti_enabled = False
+    
+    if not graphiti_enabled:
+        console.print("⚠️  Project not processed with Graphiti. Run 'process' with current version.", style="yellow")
+        console.print("💡 Reprocess: [code]graphrag-mcp process {project} --force[/code]", style="yellow")
+    
+    # Display server info
+    documents_in_graph = metadata.get("documents_processed", [])
+    successful_docs = [d for d in documents_in_graph if d.get("graphiti_success", False)]
     
     console.print(f"📋 Server: {host}:{port} ({transport})")
     console.print(f"🎯 Template: {template}")
-    console.print(f"📁 Documents: {processed_dir}")
+    console.print(f"🧠 Knowledge Graph: Neo4j/Graphiti")
+    console.print(f"📊 Documents in Graph: {len(successful_docs)}/{len(documents_in_graph)}")
+    
+    if metadata.get("graphiti_stats"):
+        stats = metadata["graphiti_stats"]
+        console.print(f"📈 Graph Stats: {stats.get('total_nodes', 0)} nodes, {stats.get('total_edges', 0)} relationships")
     
     if background:
         console.print("⚠️  Background mode not yet implemented", style="yellow")
         return
     
-    # Import and start server
+    # Start Graphiti MCP server
+    async def start_graphiti_server():
+        try:
+            from ..mcp.graphiti_server import GraphitiMCPServer
+            
+            console.print("🔌 Connecting to Graphiti knowledge graph...")
+            
+            # Create Graphiti MCP server with project context
+            server = GraphitiMCPServer(
+                name=f"GraphRAG {project.title()} Assistant",
+                instructions=f"Graphiti-powered research assistant for {project} project",
+                host=host,
+                port=port
+            )
+            
+            # Initialize server and connect to existing Graphiti graph
+            await server.initialize()
+            
+            # Set project context for queries
+            server.project_name = project
+            server.template_name = template
+            
+            console.print("✅ Connected to knowledge graph")
+            console.print()
+            console.print(Panel.fit(
+                f"[green]🚀 Graphiti MCP Server Running![/green]\\n\\n"
+                f"📡 Endpoint: {host}:{port}\\n"
+                f"🧠 Knowledge Graph: Connected to Neo4j\\n"
+                f"📋 Project: {project} ({template} template)\\n"
+                f"📊 Documents: {len(successful_docs)} in knowledge graph\\n\\n"
+                f"[dim]Claude Desktop Integration:[/dim]\\n"
+                f'[code]{{"mcpServers": {{"graphrag-{project}": {{"command": "graphrag-mcp", "args": ["serve", "{project}", "--transport", "stdio"]}}}}[/code]\\n\\n'
+                f"[dim]Stop server:[/dim] Ctrl+C",
+                title="🎯 Server Ready",
+                border_style="green"
+            ))
+            
+            # Start server
+            if transport == "http":
+                await server.run_server(transport="http", host=host, port=port)
+            else:
+                await server.run_server(transport="stdio")
+                
+        except Exception as e:
+            console.print(f"❌ Failed to start Graphiti server: {e}", style="red")
+            logger.error(f"Graphiti server startup failed: {e}")
+            raise
+    
     try:
         import asyncio
-        from ..mcp.server_generator import run_universal_server_cli
-        
-        console.print("🚀 Starting Universal MCP Server...")
-        asyncio.run(run_universal_server_cli(
-            template=template,
-            host=host,
-            port=port,
-            transport=transport
-        ))
+        asyncio.run(start_graphiti_server())
     
     except KeyboardInterrupt:
-        console.print("\n👋 Server stopped by user")
+        console.print("\n👋 Graphiti MCP server stopped by user")
     except Exception as e:
         console.print(f"❌ Server failed to start: {e}", style="red")
         logger.error(f"Server startup failed: {e}")

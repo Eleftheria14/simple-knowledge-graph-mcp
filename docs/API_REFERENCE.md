@@ -1,15 +1,17 @@
 # GraphRAG MCP Toolkit API Reference
 
-This document provides comprehensive API documentation for the GraphRAG MCP Toolkit.
+This document provides comprehensive API documentation for the GraphRAG MCP Toolkit with dual-mode architecture: conversational research exploration and formal literature review with citation management.
 
 ## 📋 Table of Contents
 
 1. [Core Components](#core-components)
-2. [Template System](#template-system)
-3. [MCP Server API](#mcp-server-api)
-4. [CLI Interface](#cli-interface)
-5. [Configuration](#configuration)
-6. [Python API](#python-api)
+2. [Graphiti Engine](#graphiti-engine)
+3. [Citation Management](#citation-management)
+4. [Template System](#template-system)
+5. [MCP Server API](#mcp-server-api)
+6. [CLI Interface](#cli-interface)
+7. [Configuration](#configuration)
+8. [Python API](#python-api)
 
 ## 🔧 Core Components
 
@@ -118,6 +120,136 @@ def create_ollama_engine(llm_model: str = "llama3.1:8b",
     """Create Ollama engine with specified models."""
 ```
 
+## 🧠 Graphiti Engine
+
+### GraphitiKnowledgeGraph
+
+Real-time knowledge graph engine using Graphiti and Neo4j for persistent, scalable knowledge storage.
+
+```python
+from graphrag_mcp.core.graphiti_engine import GraphitiKnowledgeGraph, create_graphiti_knowledge_graph
+
+class GraphitiKnowledgeGraph:
+    def __init__(self, 
+                 neo4j_uri: str = "bolt://localhost:7687",
+                 neo4j_user: str = "neo4j", 
+                 neo4j_password: str = "password",
+                 ollama_base_url: str = "http://localhost:11434/v1",
+                 llm_model: str = "llama3.1:8b",
+                 embedding_model: str = "nomic-embed-text"):
+        """Initialize Graphiti knowledge graph engine."""
+        
+    async def initialize(self) -> bool:
+        """Initialize Graphiti connection and components."""
+        
+    async def add_document(self, 
+                          document_content: str,
+                          document_id: str,
+                          metadata: Dict[str, Any] = None,
+                          source_description: str = "Academic paper") -> bool:
+        """Add a document to the knowledge graph."""
+        
+    async def search_knowledge_graph(self, 
+                                   query: str,
+                                   max_results: int = 10) -> List[Dict[str, Any]]:
+        """Search the knowledge graph for relevant content."""
+        
+    async def get_entity_relationships(self, entity_name: str) -> List[Dict[str, Any]]:
+        """Get relationships for a specific entity."""
+        
+    async def get_document_summary(self, document_id: str) -> Dict[str, Any]:
+        """Get summary information for a processed document."""
+        
+    async def get_knowledge_graph_stats(self) -> Dict[str, Any]:
+        """Get statistics about the knowledge graph."""
+        
+    async def close(self):
+        """Close Graphiti connection."""
+
+# Factory function
+async def create_graphiti_knowledge_graph(**kwargs) -> GraphitiKnowledgeGraph:
+    """Create and initialize a Graphiti knowledge graph."""
+```
+
+## 📖 Citation Management
+
+### CitationTracker
+
+Advanced citation management system supporting multiple academic styles with precise location tracking.
+
+```python
+from graphrag_mcp.core.citation_manager import CitationTracker, CitationStyle
+
+class CitationTracker:
+    def __init__(self):
+        """Initialize citation tracking system."""
+        
+    def track_citation_usage(self, 
+                           citation_key: str, 
+                           context: str = None) -> bool:
+        """Track usage of a citation in research."""
+        
+    def generate_citation(self, 
+                         paper_metadata: Dict[str, Any], 
+                         style: CitationStyle = CitationStyle.APA) -> str:
+        """Generate formatted citation in specified style."""
+        
+    def generate_bibliography(self, 
+                            style: CitationStyle = CitationStyle.APA,
+                            used_only: bool = True,
+                            sort_by: str = "author") -> List[str]:
+        """Generate formatted bibliography."""
+        
+    def get_citation_statistics(self) -> Dict[str, Any]:
+        """Get citation usage statistics."""
+        
+    def validate_citations(self) -> Dict[str, List[str]]:
+        """Validate all tracked citations."""
+
+# Supported citation styles
+class CitationStyle(Enum):
+    APA = "APA"
+    IEEE = "IEEE" 
+    NATURE = "Nature"
+    MLA = "MLA"
+```
+
+### Enhanced Query Engine
+
+Intelligent query processing with citation-aware responses.
+
+```python
+from graphrag_mcp.core.query_engine import EnhancedQueryEngine, QueryIntent
+
+class EnhancedQueryEngine:
+    def __init__(self, 
+                 knowledge_interface,
+                 citation_manager: CitationTracker,
+                 ollama_engine: OllamaEngine):
+        """Initialize enhanced query engine."""
+        
+    async def process_query(self, 
+                           query: str, 
+                           include_citations: bool = True,
+                           max_results: int = 10) -> Dict[str, Any]:
+        """Process query with intelligent routing and citation support."""
+        
+    def classify_query_intent(self, query: str) -> QueryIntent:
+        """Classify query intent for appropriate processing."""
+        
+    async def search_with_citations(self, 
+                                   query: str,
+                                   evidence_threshold: float = 0.8) -> Dict[str, Any]:
+        """Search with automatic citation generation."""
+
+class QueryIntent(Enum):
+    FACTUAL_LOOKUP = "factual_lookup"
+    COMPARISON = "comparison"
+    SYNTHESIS = "synthesis"
+    GAP_ANALYSIS = "gap_analysis"
+    CITATION_REQUEST = "citation_request"
+```
+
 ## 🎨 Template System
 
 ### BaseTemplate
@@ -200,30 +332,62 @@ class AcademicTemplate(BaseTemplate):
 
 ## 🌐 MCP Server API
 
-### UniversalMCPServer
+### Dual-Mode Architecture
 
-Universal MCP server for all domains with template switching capabilities.
+The system provides two specialized MCP servers for different use cases:
+
+#### GraphitiMCPServer
+
+Production MCP server using persistent Graphiti/Neo4j knowledge graphs.
 
 ```python
-from graphrag_mcp.mcp import UniversalMCPServer, create_universal_server
+from graphrag_mcp.mcp.graphiti_server import GraphitiMCPServer, create_graphiti_mcp_server
+
+class GraphitiMCPServer:
+    def __init__(self, 
+                 name: str = "GraphRAG Graphiti Assistant",
+                 instructions: str = "Real-time knowledge graph assistant",
+                 host: str = "localhost",
+                 port: int = 8080,
+                 neo4j_uri: str = "bolt://localhost:7687",
+                 neo4j_user: str = "neo4j",
+                 neo4j_password: str = "password"):
+        """Initialize Graphiti MCP server."""
+        
+    async def initialize_knowledge_graph(self) -> bool:
+        """Initialize the Graphiti knowledge graph."""
+        
+    async def run(self):
+        """Run the Graphiti MCP server."""
+        
+    async def shutdown(self):
+        """Shutdown the server and close connections."""
+
+# Factory function
+def create_graphiti_mcp_server(**kwargs) -> GraphitiMCPServer:
+    """Create a new Graphiti MCP server instance."""
+```
+
+#### UniversalMCPServer
+
+Development/testing MCP server with in-memory knowledge graphs.
+
+```python
+from graphrag_mcp.mcp.server_generator import UniversalMCPServer, create_universal_server
 
 class UniversalMCPServer:
     def __init__(self, 
                  name: str = "GraphRAG Universal Assistant",
-                 template_name: str = "academic"):
-        """Initialize universal MCP server with template."""
+                 instructions: str = "Universal GraphRAG assistant",
+                 host: str = "localhost",
+                 port: int = 8080):
+        """Initialize universal MCP server."""
         
     async def run_server(self, 
                         transport: str = "stdio",
                         host: str = "localhost", 
                         port: int = 8080):
         """Run MCP server with specified transport."""
-        
-    def switch_template(self, template_name: str):
-        """Switch to different domain template."""
-        
-    def get_server_status(self) -> Dict[str, Any]:
-        """Get comprehensive server status."""
 
 # Factory functions
 def create_universal_server(template_name: str = "academic") -> UniversalMCPServer:
@@ -234,108 +398,153 @@ async def run_universal_server_cli(template_name: str = "academic",
     """Run universal MCP server from CLI."""
 ```
 
-### Core MCP Tools
+### Dual-Mode MCP Tools
 
-#### list_templates
+The system provides two distinct sets of tools for different research approaches:
+
+#### Chat Tools - Conversational Research Exploration
+
+Natural, exploratory tools for research discovery and understanding.
+
+##### ask_knowledge_graph
 ```python
-async def list_templates(ctx: Context) -> Dict[str, Any]:
-    """List all available domain templates."""
+async def ask_knowledge_graph(question: str, depth: str = "quick") -> Dict[str, Any]:
+    """Ask natural questions about the knowledge graph and get conversational answers."""
     return {
-        "available_templates": {...},
-        "current_template": "academic",
-        "total_templates": 1
+        "question": question,
+        "answer": "Comprehensive natural language response",
+        "depth": depth,
+        "sources": [...],
+        "related_concepts": [...]
     }
 ```
 
-#### switch_template
+##### explore_topic
 ```python
-async def switch_template(template_name: str, ctx: Context) -> Dict[str, Any]:
-    """Switch to different domain template."""
+async def explore_topic(topic: str, scope: str = "overview") -> Dict[str, Any]:
+    """Explore a research topic to understand its key aspects and relationships."""
     return {
-        "success": True,
-        "message": f"Switched to {template_name}",
-        "current_template": template_name
+        "topic": topic,
+        "overview": "Key aspects and context",
+        "main_concepts": [...],
+        "relationships": [...],
+        "scope": scope
     }
 ```
 
-#### server_status
+##### find_connections
 ```python
-async def server_status(ctx: Context) -> Dict[str, Any]:
-    """Get comprehensive server status."""
+async def find_connections(concept_a: str, concept_b: str, 
+                          connection_types: List[str] = None) -> Dict[str, Any]:
+    """Discover how different concepts, methods, or ideas are connected."""
     return {
-        "server_name": "GraphRAG Universal Assistant",
-        "current_template": "academic",
-        "loaded_documents": 10,
-        "ollama_status": {...}
+        "concept_a": concept_a,
+        "concept_b": concept_b,
+        "connections": [...],
+        "connection_strength": "strong|medium|weak",
+        "evidence": [...]
     }
 ```
 
-#### load_document_collection
+##### what_do_we_know_about
 ```python
-async def load_document_collection(collection_path: str, 
-                                  collection_name: str, 
-                                  ctx: Context) -> Dict[str, Any]:
-    """Load and process document collection."""
+async def what_do_we_know_about(topic: str, include_gaps: bool = True) -> Dict[str, Any]:
+    """Get a comprehensive overview of what the research says about a specific topic."""
     return {
-        "success": True,
-        "collection_name": collection_name,
-        "documents_processed": 10,
-        "entities_extracted": 150
+        "topic": topic,
+        "knowledge_summary": "Current state of research",
+        "key_findings": [...],
+        "gaps": [...] if include_gaps else None,
+        "confidence_level": "high|medium|low"
     }
 ```
 
-#### search_documents
+#### Literature Review Tools - Formal Academic Writing
+
+Citation-aware tools for systematic literature review and formal academic writing.
+
+##### gather_sources_for_topic
 ```python
-async def search_documents(query: str, 
-                          collection_name: Optional[str] = None,
-                          ctx: Context = None) -> Dict[str, Any]:
-    """Search across loaded documents."""
+async def gather_sources_for_topic(topic: str, scope: str = "comprehensive",
+                                  sections: List[str] = None) -> Dict[str, Any]:
+    """Gather and organize sources for a specific literature review topic."""
     return {
-        "success": True,
-        "query": query,
-        "results": [...],
-        "total_matches": 5
+        "topic": topic,
+        "scope": scope,
+        "sources": [...],
+        "sections": sections or ["introduction", "methods", "findings"],
+        "citation_count": 15,
+        "organization_strategy": "thematic|chronological|methodological"
     }
 ```
 
-### Academic MCP Tools
-
-#### query_papers
+##### get_facts_with_citations
 ```python
-async def query_papers(query: str, 
-                      entity_filter: str = None, 
-                      limit: int = 10) -> Dict[str, Any]:
-    """Search and query papers in corpus."""
+async def get_facts_with_citations(topic: str, section: str = None,
+                                  citation_style: str = "APA") -> Dict[str, Any]:
+    """Get factual statements about a topic with proper citations for literature review writing."""
     return {
-        "query": query,
-        "results": [...],
-        "total_matches": 15
+        "topic": topic,
+        "section": section,
+        "facts": [
+            {
+                "statement": "Factual claim with evidence",
+                "citations": ["Author (2023)", "Smith et al. (2024)"],
+                "evidence_strength": "strong|medium|weak",
+                "page_references": ["p. 123", "pp. 45-47"]
+            }
+        ],
+        "citation_style": citation_style
     }
 ```
 
-#### find_citations
+##### verify_claim_with_sources
 ```python
-async def find_citations(claim: str, 
-                        context: str = None) -> Dict[str, Any]:
-    """Find citations for claims."""
+async def verify_claim_with_sources(claim: str, evidence_strength: str = "strong") -> Dict[str, Any]:
+    """Verify a claim and provide supporting evidence with citations."""
     return {
         "claim": claim,
-        "supporting_documents": [...],
-        "evidence_count": 5
+        "verification_result": "supported|partially_supported|not_supported",
+        "evidence_strength": evidence_strength,
+        "supporting_sources": [...],
+        "contradicting_sources": [...],
+        "confidence_score": 0.85
     }
 ```
 
-#### research_gaps
+##### track_citations_used
 ```python
-async def research_gaps(domain: str, 
-                       depth: str = "surface") -> Dict[str, Any]:
-    """Identify research gaps."""
+async def track_citations_used(citation_keys: List[str], context: str = None) -> Dict[str, Any]:
+    """Track which citations you've used in your writing to maintain proper attribution."""
     return {
-        "domain": domain,
-        "identified_gaps": [...],
+        "citation_keys": citation_keys,
+        "context": context,
+        "usage_count": {...},
+        "citation_health": "appropriate|overused|underutilized",
         "recommendations": [...]
     }
 ```
+
+##### generate_bibliography
+```python
+async def generate_bibliography(style: str = "APA", used_only: bool = True,
+                               sort_by: str = "author") -> Dict[str, Any]:
+    """Generate a formatted bibliography of all used citations."""
+    return {
+        "bibliography": [...],
+        "style": style,
+        "total_citations": 25,
+        "citation_statistics": {...}
+    }
+```
+
+### Legacy/Core Tools
+
+Existing tools maintained for backwards compatibility:
+
+##### query_papers, research_gaps, methodology_overview, author_analysis, concept_evolution
+
+These tools continue to work as before but are supplemented by the new dual-mode tools.
 
 ## 💻 CLI Interface
 
@@ -359,12 +568,24 @@ def add_documents(project: str, paths: List[str]):
     """Add documents to project."""
     
 @app.command()
-def process(project: str, force: bool = False):
-    """Process documents into knowledge graphs."""
+def process(project: str, force: bool = False, graphiti_only: bool = False):
+    """Process documents into persistent Graphiti knowledge graphs."""
     
 @app.command()
-def serve(project: str, port: int = 8080):
-    """Start MCP server for project."""
+def serve(project: str, port: int = 8080, transport: str = "http"):
+    """Start Graphiti MCP server for project."""
+    
+@app.command()
+def serve_universal(template: str = "academic", transport: str = "http"):
+    """Start universal MCP server for testing."""
+    
+@app.command()
+def serve_graphiti(template: str = "academic", neo4j_uri: str = "bolt://localhost:7687"):
+    """Start Graphiti MCP server with real-time knowledge graphs."""
+    
+@app.command()
+def templates(list_templates: bool = True, info: str = None):
+    """Manage domain templates."""
     
 @app.command()
 def status(project: Optional[str] = None):
@@ -394,6 +615,11 @@ OLLAMA_HOST=localhost:11434
 OLLAMA_LLM_MODEL=llama3.1:8b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
+# Neo4j/Graphiti configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+
 # MCP server settings
 GRAPHRAG_MCP_PORT=8080
 GRAPHRAG_MCP_HOST=localhost
@@ -403,6 +629,7 @@ GRAPHRAG_MCP_CONFIG_DIR=~/.graphrag-mcp
 GRAPHRAG_MCP_MAX_ENTITIES=100
 GRAPHRAG_MCP_CHUNK_SIZE=1000
 GRAPHRAG_MCP_OVERLAP=200
+GRAPHRAG_MCP_CITATION_STYLES=APA,IEEE,Nature,MLA
 ```
 
 ### Project Configuration

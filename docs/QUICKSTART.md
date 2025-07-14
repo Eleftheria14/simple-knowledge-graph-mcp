@@ -126,28 +126,46 @@ python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport
 
 3. **Restart Claude Desktop**
 
-## 🎉 Step 4: Start Researching!
+## 🎉 Step 4: Start Dual-Mode Research!
 
 ### Open Claude Desktop
 
 You should see a 🔌 icon indicating your MCP server is connected.
 
-### Try These Commands
+### Conversational Research Mode
 
 ```
-Load documents from examples directory
-```
-
-```
-Search for "chemical synthesis" in the papers
+Ask knowledge graph: "What are the main research themes in my documents?"
 ```
 
 ```
-Find citations for "drug discovery methods"
+Explore topic: "machine learning applications"
 ```
 
 ```
-Show current server status
+Find connections between "neural networks" and "optimization"
+```
+
+```
+What do we know about "drug discovery"?
+```
+
+### Literature Review Mode
+
+```
+Gather sources for topic: "transformer architectures"
+```
+
+```
+Get facts with citations about "attention mechanisms" in APA style
+```
+
+```
+Verify claim with sources: "BERT outperforms traditional NLP models"
+```
+
+```
+Generate bibliography in IEEE style
 ```
 
 ## 🔧 Quick Troubleshooting

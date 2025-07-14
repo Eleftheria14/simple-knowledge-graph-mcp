@@ -1,10 +1,11 @@
 # GraphRAG MCP Architecture Flow
 
-## System Overview
+## System Overview - Dual-Mode Architecture
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                              GraphRAG MCP Toolkit Architecture                         │
-│                          Research Foundation → Production Platform                     │
+│               Dual-Mode: Conversational Research + Formal Literature Review            │
+│                    Graphiti-Powered Persistent Knowledge Graphs                       │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -18,43 +19,57 @@
 └─────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### 2. Dual Processing Pathways
+### 2. Dual-Mode Processing Architecture
 
-#### LEGACY: NetworkX Analysis Flow (Deprecated - Use Graphiti)
+#### Phase 1: Document Processing → Graphiti Knowledge Graph
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Content Chunks  │───▶│ SimplePaperRAG  │───▶│ UnifiedPaperChat│───▶│ User Interface  │
-│                 │    │ • Embeddings    │    │ • Query Router  │    │ • Jupyter       │
-│                 │    │ • Vector Search │    │ • Mode Select   │    │ • CLI           │
-│                 │    │ • Q&A System    │    │ • Response Gen  │    │ • MCP Server    │
+│ Content Chunks  │───▶│ Enhanced        │───▶│ Graphiti        │───▶│ Persistent      │
+│                 │    │ Analyzer        │    │ Engine          │    │ Knowledge Graph │
+│                 │    │ • 20+ Entities  │    │ • AI Extraction │    │ • Neo4j Storage │
+│                 │    │ • Citation Track│    │ • Real-time     │    │ • Project NS    │
+│                 │    │ • Multi-pass    │    │ • Relationships │    │ • Async Ops     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 ▲                       ▲
                                 │                       │
                        ┌─────────────────┐    ┌─────────────────┐
-                       │SimpleKnowledgeG │    │LangChainGraphRAG│
-                       │ • 8 Categories  │    │ • Vector+Graph  │
-                       │ • NetworkX (dep)│    │ • ChromaDB Meta │
-                       │ • Relationships │    │ • Cross-Paper   │
+                       │ Citation        │    │ Ollama          │
+                       │ Manager         │    │ Integration     │
+                       │ • 4 Styles      │    │ • llama3.1:8b   │
+                       │ • Usage Track   │    │ • nomic-embed   │
+                       │ • Bibliography  │    │ • Local Privacy │
                        └─────────────────┘    └─────────────────┘
 ```
 
-#### NEW: Graphiti Real-time Analysis Flow
+#### Phase 2: MCP Server → Dual-Mode Research Interface
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Content Chunks  │───▶│GraphitiKnowledge│───▶│ GraphitiMCP     │───▶│ Real-time UI    │
-│                 │    │ Graph Engine    │    │ Server          │    │ • Jupyter       │
-│                 │    │ • AI Extraction │    │ • Template Sys  │    │ • CLI           │
-│                 │    │ • Neo4j Backend │    │ • Real-time     │    │ • MCP Tools     │
-│                 │    │ • Ollama LLM    │    │ • Hybrid Search │    │ • Visualization │
+│ Neo4j Knowledge │───▶│ GraphitiMCP     │───▶│ Dual-Mode       │───▶│ Research        │
+│ Graph           │    │ Server          │    │ Tools           │    │ Interfaces      │
+│ • Persistent    │    │ • FastMCP       │    │ • Chat Tools    │    │ • Claude Desktop│
+│ • Project-aware │    │ • Real-time     │    │ • Literature    │    │ • Jupyter       │
+│ • Scalable      │    │ • Template Sys  │    │ • Citation Mgmt │    │ • CLI Tools     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 ▲                       ▲
                                 │                       │
                        ┌─────────────────┐    ┌─────────────────┐
-                       │ Neo4j Database  │    │ yFiles Visualiz │
-                       │ • Persistent    │    │ • Professional  │
-                       │ • Real-time     │    │ • Interactive   │
-                       │ • Scalable      │    │ • Export Ready  │
+                       │ Chat Tools      │    │ Literature Tools│
+                       │ • ask_knowledge │    │ • gather_sources│
+                       │ • explore_topic │    │ • get_facts_cite│
+                       │ • find_connect  │    │ • verify_claims │
+                       │ • what_know     │    │ • track_citations│
                        └─────────────────┘    └─────────────────┘
+```
+
+#### Legacy Support (Backwards Compatibility)
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ UniversalMCP    │───▶│ In-Memory       │───▶│ Development     │───▶│ Testing         │
+│ Server          │    │ Processing      │    │ Interface       │    │ Environment     │
+│ • serve-universal│    │ • ChromaDB      │    │ • Quick Setup   │    │ • No Neo4j      │
+│ • Template Sys  │    │ • JSON Storage  │    │ • No Persistence│    │ • Rapid Proto   │
+│ • FastMCP       │    │ • NetworkX      │    │ • Memory Only   │    │ • Legacy Tools  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ## Component Interaction Matrix
@@ -206,14 +221,14 @@
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                         │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
-│  │ ChromaDB        │  │ Neo4j Database  │  │ File System     │  │ Memory Cache    │   │
-│  │ Vector Store    │  │ Graph Store     │  │ Project Store   │  │ Runtime Store   │   │
-│  │ (Legacy)        │  │ (NEW PRIMARY)   │  │                 │  │                 │   │
-│  │ • Embeddings    │  │ • Nodes/Edges   │  │ • ~/.graphrag-  │  │ • Chat History  │   │
-│  │ • Metadata      │  │ • Real-time     │  │   mcp/projects/ │  │ • Loaded Docs   │   │
-│  │ • Collections   │  │ • Persistent    │  │ • Documents/    │  │ • Entity Cache  │   │
-│  │ • Similarity    │  │ • Scalable      │  │ • Processed/    │  │ • Embeddings    │   │
-│  │ • Persistence   │  │ • Visualization │  │ • Config.json   │  │ • Graph Objects │   │
+│  │ Neo4j/Graphiti  │  │ Citation        │  │ File System     │  │ MCP Server      │   │
+│  │ Knowledge Graph │  │ Manager         │  │ Project Store   │  │ Runtime State   │   │
+│  │ (PRIMARY)       │  │ (NEW)           │  │                 │  │                 │   │
+│  │ • Nodes/Edges   │  │ • 4 Styles      │  │ • ~/.graphrag-  │  │ • Chat Tools    │   │
+│  │ • Real-time     │  │ • Usage Track   │  │   mcp/projects/ │  │ • Literature    │   │
+│  │ • Persistent    │  │ • Bibliography  │  │ • Documents/    │  │ • Query Engine  │   │
+│  │ • Project NS    │  │ • Validation    │  │ • Processed/    │  │ • Session State │   │
+│  │ • AI-optimized  │  │ • Location Map  │  │ • Config.json   │  │ • Tool Registry │   │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
 │                                                                                         │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
@@ -252,52 +267,75 @@
 
 ## Complete System Flow
 
-### 7. End-to-End Processing Pipeline
+### 7. Complete Dual-Mode System Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                           COMPLETE SYSTEM FLOW                                         │
+│                        DUAL-MODE GRAPHRAG MCP SYSTEM FLOW                             │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
-INPUT STAGE
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  PDF Files  │───▶│ User Query  │───▶│ Interface   │
-│             │    │             │    │ Selection   │
-└─────────────┘    └─────────────┘    └─────────────┘
-                                              │
-                                              ▼
-PROCESSING STAGE
+PHASE 1: KNOWLEDGE GRAPH CREATION
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  PDF Files  │───▶│ Enhanced    │───▶│ Graphiti    │───▶│ Neo4j       │
+│             │    │ Analyzer    │    │ Engine      │    │ Database    │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+       │                   │                   │                │
+       ▼                   ▼                   ▼                ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ CLI Command │    │ Citation    │    │ Real-time   │    │ Persistent  │
+│ process     │    │ Tracking    │    │ Knowledge   │    │ Project     │
+│ my-project  │    │ 4 Styles    │    │ Graph       │    │ Storage     │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+
+PHASE 2: MCP SERVER DEPLOYMENT
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Neo4j Graph │───▶│ GraphitiMCP │───▶│ Dual-Mode   │───▶│ Research    │
+│ (Existing)  │    │ Server      │    │ Interface   │    │ Assistant   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+       │                   │                   │                │
+       ▼                   ▼                   ▼                ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ CLI Command │    │ FastMCP     │    │ Chat +      │    │ Claude      │
+│ serve       │    │ Protocol    │    │ Literature  │    │ Desktop     │
+│ my-project  │    │ Server      │    │ Tools       │    │ Integration │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+
+DUAL-MODE RESEARCH INTERFACE
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│ INTERACTIVE PATH                          CORPUS PATH                                   │
-│ ┌─────────────┐                          ┌─────────────────┐                           │
-│ │ Quick       │                          │ Enhanced        │                           │
-│ │ Analysis    │                          │ Analysis        │                           │
-│ │             │                          │                 │                           │
-│ │ SimplePaper │                          │ EnhancedPaper   │                           │
-│ │ RAG         │                          │ Analyzer        │                           │
-│ │     +       │                          │        +        │                           │
-│ │ SimpleKnowl │                          │ Citation        │                           │
-│ │ edgeGraph   │                          │ Tracker         │                           │
-│ │     ▼       │                          │        ▼        │                           │
-│ │ Unified     │                          │ Corpus          │                           │
-│ │ PaperChat   │                          │ Document        │                           │
-│ └─────────────┘                          └─────────────────┘                           │
+│ CONVERSATIONAL MODE                       LITERATURE REVIEW MODE                       │
+│ ┌─────────────────────────────────────┐  ┌─────────────────────────────────────┐      │
+│ │ Chat Tools                          │  │ Literature Tools                    │      │
+│ │ • ask_knowledge_graph              │  │ • gather_sources_for_topic         │      │
+│ │ • explore_topic                    │  │ • get_facts_with_citations         │      │
+│ │ • find_connections                 │  │ • verify_claim_with_sources        │      │
+│ │ • what_do_we_know_about           │  │ • track_citations_used             │      │
+│ │                                    │  │ • generate_bibliography            │      │
+│ │ Focus: Discovery & Understanding   │  │ Focus: Formal Writing & Citations  │      │
+│ └─────────────────────────────────────┘  └─────────────────────────────────────┘      │
+│                                     │                        │                        │
+│                                     ▼                        ▼                        │
+│                           ┌─────────────────────────────────────┐                     │
+│                           │ Shared Graphiti Knowledge Graph    │                     │
+│                           │ • Project-namespaced storage       │                     │
+│                           │ • Real-time relationship discovery │                     │
+│                           │ • Citation-aware responses         │                     │
+│                           │ • Persistent across sessions       │                     │
+│                           └─────────────────────────────────────┘                     │
 │                                                                                         │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
-                                              │
-                                              ▼
-OUTPUT STAGE
+
+OUTPUT CAPABILITIES
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
 │ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                    │
-│ │ Jupyter     │  │ CLI         │  │ MCP Server  │  │ Export      │                    │
-│ │ Interface   │  │ Interface   │  │ Integration │  │ Formats     │                    │
+│ │ Research    │  │ Citation    │  │ Knowledge   │  │ Export      │                    │
+│ │ Insights    │  │ Management  │  │ Discovery   │  │ Formats     │                    │
 │ │             │  │             │  │             │  │             │                    │
-│ │ • Chat      │  │ • Commands  │  │ • Claude    │  │ • GraphML   │                    │
-│ │ • Entities  │  │ • Projects  │  │ • STDIO     │  │ • JSON      │                    │
-│ │ • Graphs    │  │ • Status    │  │ • Templates │  │ • Cytoscape │                    │
-│ │ • Viz       │  │ • Health    │  │ • Universal │  │ • Citations │                    │
+│ │ • Gap ID    │  │ • APA Style │  │ • Entity    │  │ • GraphML   │                    │
+│ │ • Synthesis │  │ • IEEE      │  │ • Relations │  │ • JSON      │                    │
+│ │ • Trends    │  │ • Nature    │  │ • Concepts  │  │ • Citations │                    │
+│ │ • Evolution │  │ • MLA       │  │ • Networks  │  │ • Reports   │                    │
 │ └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                    │
 │                                                                                         │
 └─────────────────────────────────────────────────────────────────────────────────────────┘

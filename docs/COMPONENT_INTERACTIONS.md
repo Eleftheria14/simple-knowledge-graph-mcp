@@ -1,8 +1,8 @@
 # GraphRAG MCP Component Interactions
 
-## Component Communication Patterns
+## Dual-Mode Architecture Component Interactions
 
-### 1. Inter-Component Message Flow
+### 1. Enhanced Inter-Component Message Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
@@ -10,24 +10,25 @@
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
                     ┌─────────────────┐
-                    │ UnifiedPaperChat│
-                    │   (Orchestrator) │
+                    │ GraphitiMCP     │
+                    │ Server          │
+                    │ (Orchestrator)  │
                     └─────────┬───────┘
                               │
             ┌─────────────────┼─────────────────┐
             │                 │                 │
             ▼                 ▼                 ▼
     ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-    │SimplePaperRAG│   │SimpleKnowl  │   │LangChain    │
-    │    (RAG)     │   │edgeGraph    │   │GraphRAG     │
-    │              │   │   (Graph)   │   │  (Hybrid)   │
+    │ Chat Tools  │   │Literature   │   │Citation     │
+    │ Engine      │   │Tools Engine │   │Manager      │
+    │             │   │             │   │             │
     └─────────────┘   └─────────────┘   └─────────────┘
             │                 │                 │
             ▼                 ▼                 ▼
     ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-    │   ChromaDB   │   │  Graphiti   │   │  Enhanced   │
-    │   Vector     │   │   Graph     │   │  Analyzer   │
-    │   Store      │   │   Store     │   │             │
+    │ Graphiti    │   │ Enhanced    │   │ Neo4j       │
+    │ Knowledge   │   │ Query       │   │ Database    │
+    │ Graph       │   │ Engine      │   │ Storage     │
     └─────────────┘   └─────────────┘   └─────────────┘
 ```
 
