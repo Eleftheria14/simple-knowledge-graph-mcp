@@ -9,11 +9,13 @@ context-aware response generation.
 import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+from ..utils.error_handling import ProcessingError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class QueryContext:
 
 
 class QueryResult(BaseModel):
-    """Structured query result"""
+    """Structured query result with comprehensive error handling"""
     query: str
     query_type: QueryType
     intent: QueryIntent
@@ -77,11 +79,25 @@ class QueryResult(BaseModel):
     processing_time: float = 0.0
     confidence: float = 0.0
     suggestions: list[str] = Field(default_factory=list)
+    
+    # Error handling and recovery
+    success: bool = True
+    error_message: Optional[str] = None
+    error_type: Optional[str] = None
+    recovery_attempted: bool = False
+    recovery_strategies: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    
+    # Performance metrics
+    search_time: float = 0.0
+    analysis_time: float = 0.0
+    response_generation_time: float = 0.0
+    retry_count: int = 0
 
 
 class EnhancedQueryEngine:
     """
-    Advanced query processing engine for GraphRAG MCP toolkit.
+    Advanced query processing engine for GraphRAG MCP toolkit with comprehensive error handling.
     
     Provides:
     - Natural language query understanding
@@ -89,16 +105,41 @@ class EnhancedQueryEngine:
     - Multi-modal search (semantic + graph traversal)
     - Context-aware response generation
     - Citation-aware content generation
+    - Robust error handling and recovery
     """
 
     def __init__(self,
                  knowledge_interface=None,
                  citation_manager=None,
-                 ollama_engine=None):
-        """Initialize query engine with core components"""
+                 ollama_engine=None,
+                 max_retries: int = 3,
+                 timeout_seconds: int = 30):
+        """Initialize query engine with core components and error handling"""
         self.knowledge_interface = knowledge_interface
         self.citation_manager = citation_manager
         self.ollama_engine = ollama_engine
+        
+        # Configuration
+        self.max_retries = max_retries
+        self.timeout_seconds = timeout_seconds
+        
+        # Error tracking
+        self.error_history: list[dict] = []
+        self.recovery_strategies = [
+            "fallback_search",
+            "simplified_analysis",
+            "cached_response",
+            "minimal_response"
+        ]
+        
+        # Performance monitoring
+        self.query_stats = {
+            "total_queries": 0,
+            "successful_queries": 0,
+            "failed_queries": 0,
+            "recovery_attempts": 0,
+            "average_response_time": 0.0
+        }
 
         # Query patterns for intent classification
         self.intent_patterns = self._initialize_intent_patterns()
@@ -108,7 +149,7 @@ class EnhancedQueryEngine:
                           context: dict[str, Any] | None = None,
                           response_type: str = "conversational") -> QueryResult:
         """
-        Process a natural language query and return structured results.
+        Process a natural language query with comprehensive error handling and recovery.
         
         Args:
             query: Natural language query
@@ -118,23 +159,175 @@ class EnhancedQueryEngine:
         Returns:
             Structured query result with formatted responses
         """
-        start_time = asyncio.get_event_loop().time()
-
+        start_time = time.time()
+        self.query_stats["total_queries"] += 1
+        
+        # Input validation
+        if not query or not isinstance(query, str):
+            return self._create_error_result(
+                query or "<empty>",
+                "Invalid query: must be a non-empty string",
+                "ValidationError",
+                start_time
+            )
+        
+        query = query.strip()
+        if len(query) > 10000:  # Reasonable limit
+            return self._create_error_result(
+                query[:50] + "...",
+                "Query too long: maximum 10,000 characters",
+                "ValidationError",
+                start_time
+            )
+        
+        # Validate response type
+        valid_response_types = ["conversational", "literature", "both"]
+        if response_type not in valid_response_types:
+            return self._create_error_result(
+                query,
+                f"Invalid response_type: {response_type}. Must be one of {valid_response_types}",
+                "ValidationError",
+                start_time
+            )
+        
+        # Attempt processing with retry logic
+        for attempt in range(self.max_retries + 1):
+            try:
+                result = await self._process_query_with_timeout(
+                    query, context, response_type, start_time, attempt
+                )
+                
+                if result.success:
+                    self.query_stats["successful_queries"] += 1
+                    self._update_performance_stats(result.processing_time)
+                    return result
+                else:
+                    # Try recovery strategies
+                    if attempt < self.max_retries:
+                        logger.warning(f"Query attempt {attempt + 1} failed, trying recovery...")
+                        recovery_result = await self._attempt_recovery(
+                            query, context, response_type, result.error_message, attempt
+                        )
+                        if recovery_result.success:
+                            self.query_stats["successful_queries"] += 1
+                            self.query_stats["recovery_attempts"] += 1
+                            self._update_performance_stats(recovery_result.processing_time)
+                            return recovery_result
+                    else:
+                        # Final failure
+                        self.query_stats["failed_queries"] += 1
+                        self._log_error(query, result.error_message, result.error_type)
+                        return result
+                        
+            except asyncio.TimeoutError:
+                if attempt < self.max_retries:
+                    logger.warning(f"Query timeout on attempt {attempt + 1}, retrying...")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.query_stats["failed_queries"] += 1
+                    return self._create_error_result(
+                        query,
+                        f"Query processing timed out after {self.timeout_seconds} seconds",
+                        "TimeoutError",
+                        start_time,
+                        retry_count=attempt + 1
+                    )
+            except Exception as e:
+                if attempt < self.max_retries:
+                    logger.warning(f"Unexpected error on attempt {attempt + 1}: {e}")
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    self.query_stats["failed_queries"] += 1
+                    return self._create_error_result(
+                        query,
+                        f"Unexpected error: {str(e)}",
+                        type(e).__name__,
+                        start_time,
+                        retry_count=attempt + 1
+                    )
+        
+        # Should not reach here, but just in case
+        self.query_stats["failed_queries"] += 1
+        return self._create_error_result(
+            query,
+            "Maximum retry attempts exceeded",
+            "RetryError",
+            start_time
+        )
+    
+    async def _process_query_with_timeout(self,
+                                        query: str,
+                                        context: dict[str, Any] | None,
+                                        response_type: str,
+                                        start_time: float,
+                                        attempt: int) -> QueryResult:
+        """Process query with timeout protection"""
         try:
-            # Step 1: Analyze query
+            # Wrap the actual processing in a timeout
+            return await asyncio.wait_for(
+                self._process_query_internal(query, context, response_type, start_time, attempt),
+                timeout=self.timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            raise
+        except Exception as e:
+            # Convert to structured error result
+            return self._create_error_result(
+                query,
+                str(e),
+                type(e).__name__,
+                start_time,
+                retry_count=attempt + 1
+            )
+    
+    async def _process_query_internal(self,
+                                    query: str,
+                                    context: dict[str, Any] | None,
+                                    response_type: str,
+                                    start_time: float,
+                                    attempt: int) -> QueryResult:
+        """Internal query processing with detailed timing"""
+        # Step 1: Analyze query
+        analysis_start = time.time()
+        try:
             query_context = await self._analyze_query(query, context)
+        except Exception as e:
+            return self._create_error_result(
+                query,
+                f"Query analysis failed: {str(e)}",
+                "AnalysisError",
+                start_time,
+                retry_count=attempt + 1
+            )
+        analysis_time = time.time() - analysis_start
 
-            # Step 2: Execute search based on intent
+        # Step 2: Execute search based on intent
+        search_start = time.time()
+        try:
             search_results = await self._execute_search(query, query_context)
+        except Exception as e:
+            return self._create_error_result(
+                query,
+                f"Search execution failed: {str(e)}",
+                "SearchError",
+                start_time,
+                retry_count=attempt + 1
+            )
+        search_time = time.time() - search_start
 
-            # Step 3: Generate responses
+        # Step 3: Generate responses
+        response_start = time.time()
+        try:
             result = QueryResult(
                 query=query,
                 query_type=query_context.query_type,
                 intent=query_context.intent,
                 primary_results=search_results.get("primary", []),
                 related_results=search_results.get("related", []),
-                total_documents_searched=search_results.get("total_searched", 0)
+                total_documents_searched=search_results.get("total_searched", 0),
+                analysis_time=analysis_time,
+                search_time=search_time,
+                retry_count=attempt
             )
 
             # Generate appropriate response format(s)
@@ -150,38 +343,136 @@ class EnhancedQueryEngine:
 
             # Extract citations and track usage
             if self.citation_manager:
-                citations = self._extract_citations_from_results(search_results)
-                result.citations_used = citations
+                try:
+                    citations = self._extract_citations_from_results(search_results)
+                    result.citations_used = citations
 
-                # Track citation usage
-                for citation_key in citations:
-                    self.citation_manager.track_citation(
-                        citation_key,
-                        context_text=query,
-                        section="query_response",
-                        confidence=query_context.confidence
-                    )
+                    # Track citation usage
+                    for citation_key in citations:
+                        self.citation_manager.track_citation(
+                            citation_key,
+                            context_text=query,
+                            section="query_response",
+                            confidence=query_context.confidence
+                        )
+                except Exception as e:
+                    result.warnings.append(f"Citation tracking failed: {str(e)}")
 
             # Calculate processing time and confidence
-            result.processing_time = asyncio.get_event_loop().time() - start_time
+            result.response_generation_time = time.time() - response_start
+            result.processing_time = time.time() - start_time
             result.confidence = self._calculate_result_confidence(search_results, query_context)
 
             # Generate suggestions for follow-up queries
-            result.suggestions = await self._generate_suggestions(query, query_context, search_results)
+            try:
+                result.suggestions = await self._generate_suggestions(query, query_context, search_results)
+            except Exception as e:
+                result.warnings.append(f"Suggestion generation failed: {str(e)}")
+                result.suggestions = []
 
             return result
-
+            
         except Exception as e:
-            logger.error(f"Query processing failed: {e}")
-            # Return error result
-            return QueryResult(
-                query=query,
-                query_type=QueryType.CONVERSATIONAL,
-                intent=QueryIntent.EXPLORE_TOPIC,
-                conversational_response=f"I encountered an error processing your query: {str(e)}",
-                processing_time=asyncio.get_event_loop().time() - start_time,
-                confidence=0.0
+            return self._create_error_result(
+                query,
+                f"Response generation failed: {str(e)}",
+                "ResponseError",
+                start_time,
+                retry_count=attempt + 1
             )
+    
+    async def _attempt_recovery(self,
+                              query: str,
+                              context: dict[str, Any] | None,
+                              response_type: str,
+                              error_message: str,
+                              attempt: int) -> QueryResult:
+        """Attempt recovery using various strategies"""
+        start_time = time.time()
+        
+        # Try different recovery strategies in order
+        for strategy in self.recovery_strategies:
+            try:
+                if strategy == "fallback_search":
+                    result = await self._fallback_search_recovery(query, context, response_type)
+                elif strategy == "simplified_analysis":
+                    result = await self._simplified_analysis_recovery(query, context, response_type)
+                elif strategy == "cached_response":
+                    result = await self._cached_response_recovery(query, context, response_type)
+                elif strategy == "minimal_response":
+                    result = await self._minimal_response_recovery(query, context, response_type)
+                else:
+                    continue
+                
+                if result.success:
+                    result.recovery_attempted = True
+                    result.recovery_strategies = [strategy]
+                    result.processing_time = time.time() - start_time
+                    return result
+                    
+            except Exception as e:
+                logger.warning(f"Recovery strategy {strategy} failed: {e}")
+                continue
+        
+        # All recovery strategies failed
+        return self._create_error_result(
+            query,
+            f"All recovery strategies failed. Original error: {error_message}",
+            "RecoveryError",
+            start_time,
+            retry_count=attempt + 1
+        )
+    
+    def _create_error_result(self,
+                           query: str,
+                           error_message: str,
+                           error_type: str,
+                           start_time: float,
+                           retry_count: int = 0) -> QueryResult:
+        """Create standardized error result"""
+        return QueryResult(
+            query=query,
+            query_type=QueryType.CONVERSATIONAL,
+            intent=QueryIntent.EXPLORE_TOPIC,
+            success=False,
+            error_message=error_message,
+            error_type=error_type,
+            conversational_response=f"I'm sorry, I encountered an error processing your query: {error_message}",
+            processing_time=time.time() - start_time,
+            confidence=0.0,
+            retry_count=retry_count,
+            suggestions=[
+                "Try rephrasing your question",
+                "Ask about a more specific topic",
+                "Check if the system is working properly"
+            ]
+        )
+    
+    def _log_error(self, query: str, error_message: str, error_type: str):
+        """Log error to history for analysis"""
+        error_entry = {
+            "timestamp": time.time(),
+            "query": query[:200],  # Truncate for storage
+            "error_message": error_message,
+            "error_type": error_type
+        }
+        
+        self.error_history.append(error_entry)
+        
+        # Keep only last 100 errors
+        if len(self.error_history) > 100:
+            self.error_history = self.error_history[-100:]
+    
+    def _update_performance_stats(self, processing_time: float):
+        """Update performance statistics"""
+        if self.query_stats["successful_queries"] > 0:
+            current_avg = self.query_stats["average_response_time"]
+            n = self.query_stats["successful_queries"]
+            self.query_stats["average_response_time"] = (
+                (current_avg * (n - 1) + processing_time) / n
+            )
+        else:
+            self.query_stats["average_response_time"] = processing_time
 
     async def process_literature_query(self,
                                      topic: str,

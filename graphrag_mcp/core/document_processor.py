@@ -8,8 +8,11 @@ Extracted and refactored from SimplePaperRAG to support multiple domains.
 import json
 import logging
 import re
+import time
+import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+from contextlib import contextmanager
 
 # ML imports
 import numpy as np
@@ -22,7 +25,10 @@ from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Configuration
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+
+# Import our error handling
+from ..utils.error_handling import ProcessingError, ValidationError
 
 try:
     from sklearn.metrics.pairwise import cosine_similarity
@@ -45,6 +51,36 @@ class ProcessingConfig(BaseModel):
     temperature: float = Field(default=0.1, description="LLM temperature")
     max_context: int = Field(default=32768, description="Maximum context length")
     max_predict: int = Field(default=2048, description="Maximum prediction length")
+    
+    # Enhanced validation and timeout settings
+    max_file_size_mb: int = Field(default=50, description="Maximum file size in MB")
+    entity_extraction_timeout: int = Field(default=60, description="Timeout for entity extraction in seconds")
+    max_retry_attempts: int = Field(default=3, description="Maximum retry attempts for failed operations")
+    validation_enabled: bool = Field(default=True, description="Enable comprehensive validation")
+    
+    @validator('chunk_size')
+    def validate_chunk_size(cls, v):
+        if v < 100 or v > 4000:
+            raise ValueError('chunk_size must be between 100 and 4000')
+        return v
+    
+    @validator('chunk_overlap')
+    def validate_chunk_overlap(cls, v, values):
+        if 'chunk_size' in values and v >= values['chunk_size']:
+            raise ValueError('chunk_overlap must be less than chunk_size')
+        return v
+    
+    @validator('temperature')
+    def validate_temperature(cls, v):
+        if v < 0.0 or v > 1.0:
+            raise ValueError('temperature must be between 0.0 and 1.0')
+        return v
+    
+    @validator('max_file_size_mb')
+    def validate_max_file_size(cls, v):
+        if v < 1 or v > 500:
+            raise ValueError('max_file_size_mb must be between 1 and 500')
+        return v
 
 
 class DocumentData(BaseModel):
@@ -68,17 +104,26 @@ class DocumentProcessor:
     """
 
     def __init__(self, config: ProcessingConfig | None = None):
-        """Initialize the document processor"""
+        """Initialize the document processor with comprehensive validation"""
         self.config = config or ProcessingConfig()
+        
+        # Validate configuration
+        self._validate_configuration()
 
-        # Initialize LLM components
-        self.embeddings = OllamaEmbeddings(model=self.config.embedding_model)
-        self.llm = ChatOllama(
-            model=self.config.llm_model,
-            temperature=self.config.temperature,
-            num_ctx=self.config.max_context,
-            num_predict=self.config.max_predict
-        )
+        # Initialize LLM components with error handling
+        try:
+            self.embeddings = OllamaEmbeddings(model=self.config.embedding_model)
+            self.llm = ChatOllama(
+                model=self.config.llm_model,
+                temperature=self.config.temperature,
+                num_ctx=self.config.max_context,
+                num_predict=self.config.max_predict
+            )
+        except Exception as e:
+            raise ProcessingError(
+                f"Failed to initialize LLM components: {str(e)}",
+                {"embedding_model": self.config.embedding_model, "llm_model": self.config.llm_model}
+            )
 
         # Text splitter for chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -92,57 +137,225 @@ class DocumentProcessor:
 
         # Chat history
         self.chat_history: list[dict[str, Any]] = []
+        
+        # Processing state
+        self._processing_active = False
+        self._last_error: Optional[str] = None
 
         logger.info(f"🤖 DocumentProcessor initialized with {self.config.llm_model}")
+    
+    def _validate_configuration(self):
+        """Validate the processor configuration"""
+        if not self.config.embedding_model or not self.config.llm_model:
+            raise ValidationError(
+                "Both embedding_model and llm_model must be specified",
+                {"embedding_model": self.config.embedding_model, "llm_model": self.config.llm_model}
+            )
+        
+        # Validate model format (should contain colon for Ollama models)
+        if ":" not in self.config.llm_model:
+            logger.warning(f"LLM model '{self.config.llm_model}' may not be in correct Ollama format (model:tag)")
+    
+    @contextmanager
+    def _processing_context(self, operation_name: str):
+        """Context manager for processing operations with proper cleanup"""
+        if self._processing_active:
+            raise ProcessingError(
+                f"Cannot start {operation_name}: another operation is in progress",
+                {"current_operation": operation_name}
+            )
+        
+        self._processing_active = True
+        self._last_error = None
+        start_time = time.time()
+        
+        try:
+            logger.info(f"🔄 Starting {operation_name}")
+            yield
+            processing_time = time.time() - start_time
+            logger.info(f"✅ Completed {operation_name} in {processing_time:.2f}s")
+        except Exception as e:
+            processing_time = time.time() - start_time
+            self._last_error = str(e)
+            logger.error(f"❌ Failed {operation_name} after {processing_time:.2f}s: {e}")
+            raise
+        finally:
+            self._processing_active = False
+    
+    def _validate_file_input(self, file_path: str) -> Path:
+        """Validate file input with comprehensive checks"""
+        if not file_path:
+            raise ValidationError("File path cannot be empty", {"file_path": file_path})
+        
+        path = Path(file_path)
+        
+        # Check file existence
+        if not path.exists():
+            raise ValidationError(f"File does not exist: {file_path}", {"file_path": file_path})
+        
+        # Check if it's a file (not directory)
+        if not path.is_file():
+            raise ValidationError(f"Path is not a file: {file_path}", {"file_path": file_path})
+        
+        # Check file extension
+        if path.suffix.lower() != '.pdf':
+            raise ValidationError(
+                f"Only PDF files are supported, got: {path.suffix}",
+                {"file_path": file_path, "file_extension": path.suffix}
+            )
+        
+        # Check file size
+        file_size_mb = path.stat().st_size / (1024 * 1024)
+        if file_size_mb > self.config.max_file_size_mb:
+            raise ValidationError(
+                f"File too large: {file_size_mb:.1f}MB exceeds limit of {self.config.max_file_size_mb}MB",
+                {"file_path": file_path, "file_size_mb": file_size_mb, "max_size_mb": self.config.max_file_size_mb}
+            )
+        
+        # Check file permissions
+        if not path.stat().st_mode & 0o444:  # Check read permission
+            raise ValidationError(
+                f"File is not readable: {file_path}",
+                {"file_path": file_path}
+            )
+        
+        return path
+
+    def _generate_embeddings_with_retry(self, chunks: list[str], pdf_path: str) -> np.ndarray:
+        """Generate embeddings with retry logic and error handling"""
+        for attempt in range(self.config.max_retry_attempts):
+            try:
+                logger.info(f"🧠 Creating embeddings (attempt {attempt + 1}/{self.config.max_retry_attempts})...")
+                chunk_embeddings = self.embeddings.embed_documents(chunks)
+                
+                if not chunk_embeddings:
+                    raise ProcessingError(
+                        f"No embeddings generated for chunks: {pdf_path}",
+                        {"pdf_path": pdf_path, "chunk_count": len(chunks)}
+                    )
+                
+                embeddings_array = np.array(chunk_embeddings)
+                
+                # Validate embeddings dimensions
+                if embeddings_array.shape[0] != len(chunks):
+                    raise ProcessingError(
+                        f"Embeddings count mismatch: {embeddings_array.shape[0]} vs {len(chunks)} chunks",
+                        {"pdf_path": pdf_path, "embeddings_shape": embeddings_array.shape}
+                    )
+                
+                return embeddings_array
+                
+            except Exception as e:
+                if attempt == self.config.max_retry_attempts - 1:
+                    # Last attempt failed
+                    raise ProcessingError(
+                        f"Failed to generate embeddings after {self.config.max_retry_attempts} attempts: {str(e)}",
+                        {"pdf_path": pdf_path, "chunk_count": len(chunks), "final_error": str(e)}
+                    )
+                
+                logger.warning(f"Embedding generation attempt {attempt + 1} failed: {e}")
+                time.sleep(2 ** attempt)  # Exponential backoff
 
     def load_document(self, pdf_path: str) -> DocumentData:
         """
-        Load and process a document
+        Load and process a document with comprehensive validation and error handling
         
         Args:
             pdf_path: Path to PDF file
             
         Returns:
             Structured document data
+            
+        Raises:
+            ValidationError: If file validation fails
+            ProcessingError: If document processing fails
         """
-        logger.info(f"📄 Loading document: {pdf_path}")
+        # Validate input file
+        path = self._validate_file_input(pdf_path)
+        
+        with self._processing_context("document_loading"):
+            try:
+                # Load PDF with error handling
+                loader = PyPDFLoader(str(path))
+                documents = loader.load()
+                
+                if not documents:
+                    raise ProcessingError(
+                        f"No content extracted from PDF: {pdf_path}",
+                        {"pdf_path": pdf_path}
+                    )
+                
+                # Extract text content
+                full_text = "\\n".join([doc.page_content for doc in documents])
+                
+                # Validate extracted content
+                if not full_text.strip():
+                    raise ProcessingError(
+                        f"PDF contains no readable text: {pdf_path}",
+                        {"pdf_path": pdf_path}
+                    )
+                
+                # Check content length
+                if len(full_text) < 100:
+                    logger.warning(f"Document is very short ({len(full_text)} characters): {pdf_path}")
+                elif len(full_text) > 500000:  # 500KB of text
+                    logger.warning(f"Document is very long ({len(full_text)} characters): {pdf_path}")
+                
+                # Extract metadata with error handling
+                try:
+                    title = self._extract_title(full_text)
+                    citation = self._extract_citation(full_text, path.name)
+                except Exception as e:
+                    logger.warning(f"Failed to extract metadata: {e}")
+                    title = path.stem  # Fallback to filename
+                    citation = f"Unknown. {path.name}"
+                
+                # Create chunks with validation
+                try:
+                    chunks = self.text_splitter.split_text(full_text)
+                    if not chunks:
+                        raise ProcessingError(
+                            f"Text splitting produced no chunks: {pdf_path}",
+                            {"pdf_path": pdf_path, "text_length": len(full_text)}
+                        )
+                except Exception as e:
+                    raise ProcessingError(
+                        f"Text splitting failed: {str(e)}",
+                        {"pdf_path": pdf_path, "text_length": len(full_text)}
+                    )
+                
+                # Generate embeddings with retry logic
+                embeddings_array = self._generate_embeddings_with_retry(chunks, pdf_path)
+                
+                # Create document data
+                self.document_data = DocumentData(
+                    title=title,
+                    content=full_text,
+                    chunks=chunks,
+                    embeddings=embeddings_array,
+                    entities={},
+                    relationships=[],
+                    citation=citation,
+                    metadata={
+                        "pdf_path": str(path),
+                        "file_size_mb": path.stat().st_size / (1024 * 1024),
+                        "processing_time": time.time(),
+                        "chunk_count": len(chunks),
+                        "character_count": len(full_text),
+                        "processing_config": self.config.model_dump()
+                    }
+                )
 
-        # Load PDF
-        loader = PyPDFLoader(pdf_path)
-        documents = loader.load()
-        full_text = "\\n".join([doc.page_content for doc in documents])
-
-        # Extract basic metadata
-        title = self._extract_title(full_text)
-        citation = self._extract_citation(full_text, Path(pdf_path).name)
-
-        # Create chunks
-        chunks = self.text_splitter.split_text(full_text)
-
-        # Generate embeddings
-        logger.info("🧠 Creating embeddings...")
-        chunk_embeddings = self.embeddings.embed_documents(chunks)
-        embeddings_array = np.array(chunk_embeddings)
-
-        # Create document data
-        self.document_data = DocumentData(
-            title=title,
-            content=full_text,
-            chunks=chunks,
-            embeddings=embeddings_array,
-            entities={},
-            relationships=[],
-            citation=citation,
-            metadata={
-                "pdf_path": pdf_path,
-                "chunk_count": len(chunks),
-                "character_count": len(full_text),
-                "processing_config": self.config.model_dump()
-            }
-        )
-
-        logger.info(f"✅ Document loaded: {len(chunks)} chunks, {len(full_text):,} characters")
-        return self.document_data
+                logger.info(f"✅ Document loaded: {len(chunks)} chunks, {len(full_text):,} characters")
+                return self.document_data
+                
+            except (ValidationError, ProcessingError):
+                raise
+            except Exception as e:
+                raise ProcessingError(
+                    f"Unexpected error loading document: {str(e)}",
+                    {"pdf_path": pdf_path, "error_type": type(e).__name__}
+                )
 
     def extract_entities(self, domain_guidance: dict[str, str] | None = None) -> dict[str, list[str]]:
         """

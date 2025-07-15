@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "graphrag-research": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "graphrag_mcp.cli.main",
+        "serve-universal",
+        "--template",
+        "academic",
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/Users/aimiegarces/Agents",
+      "env": {
+        "PYTHONPATH": "/Users/aimiegarces/Agents"
+      }
+    }
+  }
+}

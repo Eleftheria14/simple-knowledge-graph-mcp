@@ -18,6 +18,7 @@ sys.path.insert(0, str(project_root))
 # Import from the new package structure
 from graphrag_mcp.api import GraphRAGProcessor
 from graphrag_mcp.ui import DocumentStatus
+from graphrag_mcp.utils.prerequisites import check_prerequisites
 
 print("✅ GraphRAG MCP components imported from new package structure")
 

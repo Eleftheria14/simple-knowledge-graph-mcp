@@ -7,9 +7,12 @@ This module provides the main user-facing API for the GraphRAG MCP toolkit.
 import asyncio
 import sys
 import time
+import resource
+import gc
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+from contextlib import asynccontextmanager
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent.parent
@@ -24,9 +27,9 @@ from ..ui.status import (
     ProcessingResults,
     ValidationResult,
 )
-from ..utils.error_handling import ConfigurationError, ProcessingError
+from ..utils.error_handling import ConfigurationError, ProcessingError, ValidationError
 from ..utils.file_discovery import discover_documents
-from ..utils.prerequisites import check_prerequisites
+from ..utils.prerequisites import check_prerequisites, validate_environment
 
 # Optional Graphiti import
 try:
@@ -49,28 +52,47 @@ class GraphRAGProcessor:
 
     def __init__(self, project_name: str, template: str = "academic"):
         """
-        Initialize GraphRAG processor
+        Initialize GraphRAG processor with enhanced resource management
         
         Args:
             project_name: Name of the project
             template: Template to use (default: academic)
         """
-        self.project_name = project_name
+        # Validate inputs
+        if not project_name or not project_name.strip():
+            raise ValidationError("Project name cannot be empty", {"project_name": project_name})
+        
+        self.project_name = project_name.strip()
         self.template = template
         self.max_concurrent = 3
         self.retry_attempts = 3
+        
+        # Resource management
+        self._active_tasks = set()
+        self._resource_cleanup_handlers = []
+        self._processing_stats = {
+            "documents_processed": 0,
+            "documents_failed": 0,
+            "total_processing_time": 0,
+            "memory_usage": []
+        }
+        self._shutdown_requested = False
 
-        # Initialize components
-        self.doc_processor = DocumentProcessor()
-        self.analyzer = AdvancedAnalyzer()
-        self.citation_tracker = CitationTracker()
+        # Initialize components with error handling
+        try:
+            self.doc_processor = DocumentProcessor()
+            self.analyzer = AdvancedAnalyzer()
+            self.citation_tracker = CitationTracker()
+        except Exception as e:
+            raise ConfigurationError(f"Failed to initialize core components: {str(e)}")
 
-        # Optional Graphiti engine
+        # Optional Graphiti engine with better error handling
         self.graphiti_engine = None
         if GRAPHITI_AVAILABLE:
             try:
                 self.graphiti_engine = GraphitiKnowledgeGraph()
                 print("🕸️  Knowledge graph persistence: ENABLED (will store in Neo4j)")
+                self._register_cleanup_handler(self._cleanup_graphiti)
             except Exception as e:
                 print(f"⚠️  Graphiti initialization failed: {e}")
                 print("⚠️  Knowledge graph persistence: DISABLED")
@@ -78,10 +100,78 @@ class GraphRAGProcessor:
             print("⚠️  Knowledge graph persistence: DISABLED (Graphiti not available)")
 
         print("✅ GraphRAG processor initialized")
+        
+        # Register cleanup handler for processor
+        self._register_cleanup_handler(self._cleanup_processor)
+    
+    def _register_cleanup_handler(self, handler):
+        """Register a cleanup handler to be called during shutdown"""
+        self._resource_cleanup_handlers.append(handler)
+    
+    def _cleanup_processor(self):
+        """Cleanup processor resources"""
+        try:
+            if hasattr(self, 'doc_processor'):
+                # Clear document data to free memory
+                self.doc_processor.document_data = None
+                self.doc_processor.chat_history = []
+            
+            # Force garbage collection
+            gc.collect()
+        except Exception as e:
+            print(f"⚠️  Error during processor cleanup: {e}")
+    
+    def _cleanup_graphiti(self):
+        """Cleanup Graphiti engine resources"""
+        try:
+            if self.graphiti_engine:
+                # Close any open connections
+                # This would need to be implemented based on Graphiti's API
+                pass
+        except Exception as e:
+            print(f"⚠️  Error during Graphiti cleanup: {e}")
+    
+    def _monitor_resource_usage(self):
+        """Monitor current resource usage"""
+        try:
+            # Get memory usage
+            memory_info = resource.getrusage(resource.RUSAGE_SELF)
+            memory_mb = memory_info.ru_maxrss / 1024 if sys.platform == 'darwin' else memory_info.ru_maxrss / 1024
+            
+            self._processing_stats["memory_usage"].append(memory_mb)
+            
+            # Keep only last 100 measurements
+            if len(self._processing_stats["memory_usage"]) > 100:
+                self._processing_stats["memory_usage"] = self._processing_stats["memory_usage"][-100:]
+            
+            return memory_mb
+        except Exception:
+            return 0
+    
+    @asynccontextmanager
+    async def _processing_context(self, operation_name: str):
+        """Context manager for processing operations with resource monitoring"""
+        start_time = time.time()
+        start_memory = self._monitor_resource_usage()
+        
+        try:
+            print(f"🔄 Starting {operation_name}")
+            yield
+        finally:
+            end_time = time.time()
+            end_memory = self._monitor_resource_usage()
+            processing_time = end_time - start_time
+            
+            print(f"⏱️  {operation_name} completed in {processing_time:.2f}s")
+            if end_memory > start_memory:
+                print(f"🧠 Memory usage: {end_memory - start_memory:.1f}MB increase")
+            
+            # Force garbage collection after processing
+            gc.collect()
 
     def validate_environment(self, verbose: bool = True) -> ValidationResult:
         """
-        Validate system environment and prerequisites
+        Validate system environment and prerequisites with enhanced error handling
         
         Args:
             verbose: Whether to print detailed status
@@ -90,12 +180,12 @@ class GraphRAGProcessor:
             ValidationResult with status and issues
         """
         try:
-            return check_prerequisites(verbose=verbose)
+            return validate_environment(verbose=verbose)
         except Exception as e:
             return ValidationResult(
                 status="failed",
                 issues=[f"Validation error: {str(e)}"],
-                details={"error": str(e)}
+                details={"error": str(e), "error_type": type(e).__name__}
             )
 
     def discover_documents(self, folder_path: str, recursive: bool = True) -> list[DocumentInfo]:
@@ -116,14 +206,22 @@ class GraphRAGProcessor:
 
     async def process_documents(self, documents: list[DocumentInfo]) -> ProcessingResults:
         """
-        Process documents into knowledge graph
+        Process documents into knowledge graph with enhanced resource management
         
         Args:
             documents: List of documents to process
             
         Returns:
             ProcessingResults with statistics
+            
+        Raises:
+            ValidationError: If input validation fails
+            ProcessingError: If processing fails
         """
+        # Validate input
+        if not isinstance(documents, list):
+            raise ValidationError("Documents must be a list", {"documents_type": type(documents).__name__})
+        
         if not documents:
             return ProcessingResults(
                 success=0,
@@ -131,48 +229,123 @@ class GraphRAGProcessor:
                 total_time=0,
                 documents=[]
             )
+        
+        # Check if shutdown was requested
+        if self._shutdown_requested:
+            raise ProcessingError("Processing shutdown requested", {"operation": "process_documents"})
 
-        print(f"🚀 Processing {len(documents)} documents...")
+        async with self._processing_context("document_batch_processing"):
+            print(f"🚀 Processing {len(documents)} documents...")
 
-        # Convert DocumentInfo to DocumentStatus
-        doc_statuses = [doc.to_document_status() for doc in documents]
+            # Convert DocumentInfo to DocumentStatus with validation
+            doc_statuses = []
+            for doc in documents:
+                try:
+                    doc_status = doc.to_document_status()
+                    # Validate document exists and is accessible
+                    if not doc_status.path.exists():
+                        doc_status.status = "failed"
+                        doc_status.error_message = f"Document not found: {doc_status.path}"
+                    doc_statuses.append(doc_status)
+                except Exception as e:
+                    # Create a failed document status
+                    doc_statuses.append(DocumentStatus(
+                        name=str(doc) if hasattr(doc, 'name') else "Unknown",
+                        path=Path("unknown"),
+                        status="failed",
+                        error_message=f"Failed to create document status: {str(e)}"
+                    ))
 
-        # Process with progress tracking
-        try:
-            # Import here to avoid circular imports
-            from ..ui.progress import ProgressTracker
+            # Process with progress tracking and resource management
+            try:
+                # Import here to avoid circular imports
+                from ..ui.progress import ProgressTracker
 
-            progress = ProgressTracker(len(documents))
+                progress = ProgressTracker(len(documents))
 
-            # Concurrent processing
-            semaphore = asyncio.Semaphore(self.max_concurrent)
+                # Concurrent processing with resource limits
+                semaphore = asyncio.Semaphore(self.max_concurrent)
 
-            async def process_with_semaphore(doc_status):
-                async with semaphore:
-                    success = await self._process_single_document(doc_status)
-                    progress.update(1)
-                    return success
+                async def process_with_semaphore(doc_status):
+                    if self._shutdown_requested:
+                        doc_status.status = "failed"
+                        doc_status.error_message = "Processing cancelled"
+                        return False
+                    
+                    async with semaphore:
+                        try:
+                            # Monitor memory before processing
+                            memory_before = self._monitor_resource_usage()
+                            
+                            # Add to active tasks
+                            task_id = f"doc_{doc_status.name}"
+                            self._active_tasks.add(task_id)
+                            
+                            success = await self._process_single_document(doc_status)
+                            
+                            # Monitor memory after processing
+                            memory_after = self._monitor_resource_usage()
+                            
+                            # Update stats
+                            if success:
+                                self._processing_stats["documents_processed"] += 1
+                            else:
+                                self._processing_stats["documents_failed"] += 1
+                            
+                            # Force garbage collection if memory usage is high
+                            if memory_after > memory_before + 100:  # 100MB threshold
+                                gc.collect()
+                            
+                            return success
+                        except Exception as e:
+                            doc_status.status = "failed"
+                            doc_status.error_message = f"Processing error: {str(e)}"
+                            self._processing_stats["documents_failed"] += 1
+                            return False
+                        finally:
+                            # Remove from active tasks
+                            self._active_tasks.discard(task_id)
+                            progress.update(1)
 
-            # Process all documents
-            start_time = time.time()
-            tasks = [process_with_semaphore(doc) for doc in doc_statuses]
-            await asyncio.gather(*tasks, return_exceptions=True)
+                # Process all documents
+                start_time = time.time()
+                tasks = [process_with_semaphore(doc) for doc in doc_statuses]
+                
+                # Use asyncio.gather with proper exception handling
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Process results and handle exceptions
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        doc_statuses[i].status = "failed"
+                        doc_statuses[i].error_message = f"Task failed: {str(result)}"
 
-            total_time = time.time() - start_time
-            successful = sum(1 for doc in doc_statuses if doc.status == "completed")
-            failed = sum(1 for doc in doc_statuses if doc.status == "failed")
+                total_time = time.time() - start_time
+                successful = sum(1 for doc in doc_statuses if doc.status == "completed")
+                failed = sum(1 for doc in doc_statuses if doc.status == "failed")
 
-            print(f"📊 Complete: {successful} success, {failed} failed ({total_time/60:.1f} min)")
+                # Update overall stats
+                self._processing_stats["total_processing_time"] += total_time
 
-            return ProcessingResults(
-                success=successful,
-                failed=failed,
-                total_time=total_time,
-                documents=doc_statuses
-            )
+                print(f"📊 Complete: {successful} success, {failed} failed ({total_time/60:.1f} min)")
+                
+                # Show memory usage if significant
+                current_memory = self._monitor_resource_usage()
+                if current_memory > 500:  # 500MB threshold
+                    print(f"🧠 Memory usage: {current_memory:.1f}MB")
 
-        except Exception as e:
-            raise ProcessingError(f"Batch processing failed: {str(e)}")
+                return ProcessingResults(
+                    success=successful,
+                    failed=failed,
+                    total_time=total_time,
+                    documents=doc_statuses
+                )
+
+            except Exception as e:
+                # Cleanup active tasks on error
+                for task_id in list(self._active_tasks):
+                    self._active_tasks.discard(task_id)
+                raise ProcessingError(f"Batch processing failed: {str(e)}", {"error_type": type(e).__name__})
 
     async def _process_single_document(self, doc_status: DocumentStatus) -> bool:
         """Process a single document with detailed tracking"""
@@ -354,6 +527,63 @@ class GraphRAGProcessor:
         except Exception as e:
             print(f"❌ Error creating visualization: {e}")
             return None
+    
+    def request_shutdown(self):
+        """Request graceful shutdown of all processing"""
+        print("🛑 Shutdown requested...")
+        self._shutdown_requested = True
+        
+        # Wait for active tasks to complete
+        if self._active_tasks:
+            print(f"⏳ Waiting for {len(self._active_tasks)} active tasks to complete...")
+            # In a real implementation, you might want to set a timeout here
+    
+    def force_shutdown(self):
+        """Force immediate shutdown with cleanup"""
+        print("🚨 Force shutdown initiated...")
+        self._shutdown_requested = True
+        
+        # Clear active tasks
+        self._active_tasks.clear()
+        
+        # Run cleanup handlers
+        for handler in self._resource_cleanup_handlers:
+            try:
+                handler()
+            except Exception as e:
+                print(f"⚠️ Error during cleanup: {e}")
+        
+        print("✅ Shutdown complete")
+    
+    def get_processing_stats(self) -> dict[str, Any]:
+        """Get comprehensive processing statistics"""
+        stats = self._processing_stats.copy()
+        stats.update({
+            "active_tasks": len(self._active_tasks),
+            "active_task_names": list(self._active_tasks),
+            "shutdown_requested": self._shutdown_requested,
+            "current_memory_mb": self._monitor_resource_usage(),
+            "average_memory_mb": sum(self._processing_stats["memory_usage"]) / len(self._processing_stats["memory_usage"]) if self._processing_stats["memory_usage"] else 0
+        })
+        return stats
+    
+    def clear_processing_stats(self):
+        """Clear processing statistics"""
+        self._processing_stats = {
+            "documents_processed": 0,
+            "documents_failed": 0,
+            "total_processing_time": 0,
+            "memory_usage": []
+        }
+    
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup"""
+        self.force_shutdown()
+        return False  # Don't suppress exceptions
 
     def export_knowledge_graph(self, format: str = "json") -> str:
         """

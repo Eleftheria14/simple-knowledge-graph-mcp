@@ -4,13 +4,13 @@ GraphRAG MCP Error Handling
 This module provides custom exceptions and error handling utilities.
 """
 
-from typing import Any
+from typing import Any, Optional, Dict, Union
 
 
 class GraphRAGError(Exception):
     """Base exception for GraphRAG MCP toolkit"""
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.details = details or {}
 
