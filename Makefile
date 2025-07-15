@@ -26,10 +26,12 @@ help:
 
 # Installation commands
 install:
-	uv pip install -e .
+	@echo "Activating graphrag-env and installing..."
+	@bash -c "source graphrag-env/bin/activate && pip install -e ."
 
 install-dev:
-	uv pip install -e ".[dev,test,docs]"
+	@echo "Activating graphrag-env and installing dev dependencies..."
+	@bash -c "source graphrag-env/bin/activate && pip install -e '.[dev,test,docs]'"
 
 # Setup commands
 setup-ollama:
@@ -52,48 +54,53 @@ tutorial:
 
 # Cleaning commands
 clean:
+	@echo "Cleaning build artifacts and cache files..."
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info/
 	rm -rf .pytest_cache/
 	rm -rf .mypy_cache/
 	rm -rf .ruff_cache/
+	rm -rf .venv/
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
+	@echo "✅ Cleanup complete"
 
 # Testing commands
 test:
-	uv run pytest tests/ -v --cov=graphrag_mcp --cov-report=term-missing --cov-report=html
+	@echo "Activating graphrag-env and running tests..."
+	@bash -c "source graphrag-env/bin/activate && python -m pytest tests/ -v --cov=graphrag_mcp --cov-report=term-missing --cov-report=html"
 
 test-quick:
-	uv run pytest tests/ -v --tb=short
+	@echo "Activating graphrag-env and running quick tests..."
+	@bash -c "source graphrag-env/bin/activate && python -m pytest tests/ -v --tb=short"
 
 # Code quality commands
 lint:
-	uv run ruff check .
-	uv run black --check .
-	uv run mypy graphrag_mcp
+	@echo "Activating graphrag-env and running linters..."
+	@bash -c "source graphrag-env/bin/activate && ruff check . && black --check . && mypy graphrag_mcp"
 
 format:
-	uv run ruff check . --fix
-	uv run black .
-	uv run isort .
+	@echo "Activating graphrag-env and formatting code..."
+	@bash -c "source graphrag-env/bin/activate && ruff check . --fix && black . && isort ."
 
 check-format:
-	uv run black --check .
-	uv run isort --check-only .
+	@echo "Activating graphrag-env and checking format..."
+	@bash -c "source graphrag-env/bin/activate && black --check . && isort --check-only ."
 
 type-check:
-	uv run mypy graphrag_mcp
+	@echo "Activating graphrag-env and running type check..."
+	@bash -c "source graphrag-env/bin/activate && mypy graphrag_mcp"
 
 security:
-	uv run bandit -r graphrag_mcp
-	uv run safety check
+	@echo "Activating graphrag-env and running security checks..."
+	@bash -c "source graphrag-env/bin/activate && bandit -r graphrag_mcp && safety check"
 
 # Pre-commit commands
 pre-commit:
-	uv run pre-commit run --all-files
+	@echo "Activating graphrag-env and running pre-commit..."
+	@bash -c "source graphrag-env/bin/activate && pre-commit run --all-files"
 
 pre-commit-install:
 	uv run pre-commit install

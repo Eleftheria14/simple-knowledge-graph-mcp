@@ -301,6 +301,31 @@ except Exception as e:
 print_info "Starting Jupyter notebook with GraphRAG MCP kernel..."
 print_info "Kernel should automatically be 'GraphRAG MCP'"
 
+echo ""
+echo "🚀 Launching Jupyter Notebook..."
+echo "================================"
+echo "📝 Instructions:"
+echo "   1. Select 'GraphRAG MCP' kernel when prompted"
+echo "   2. Check 'Always start the preferred kernel'"
+echo "   3. Click 'Select' to continue"
+echo "   4. Use Ctrl+C here to stop the server when done"
+echo ""
+
 # Launch Jupyter notebook (kernel is set in notebook metadata)
 export JUPYTER_RUNTIME_DIR="$HOME/.local/share/jupyter/runtime"
-jupyter notebook Simple_Document_Processing.ipynb
+
+# Keep the script running and handle graceful shutdown
+trap 'echo ""; echo "🛑 Shutting down Jupyter server..."; echo "✅ GraphRAG MCP Tutorial session ended."; exit 0' INT
+
+# Launch Jupyter and keep script running
+jupyter notebook Simple_Document_Processing.ipynb &
+JUPYTER_PID=$!
+
+# Wait for Jupyter to fully start
+sleep 3
+
+print_status "Jupyter server is running (PID: $JUPYTER_PID)"
+print_info "Press Ctrl+C to stop the server and exit"
+
+# Keep script running until interrupted
+wait $JUPYTER_PID

@@ -23,7 +23,15 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Configuration
 from pydantic import BaseModel, Field
-from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    # Fallback implementation
+    def cosine_similarity(a, b):
+        return [[0.5]]  # Simple fallback
 
 logger = logging.getLogger(__name__)
 

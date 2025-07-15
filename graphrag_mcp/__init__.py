@@ -20,8 +20,13 @@ __version__ = "0.1.0"
 __author__ = "Aimie Garces"
 
 # Core components for backwards compatibility with existing src/
-# CLI interface
-from .cli.main import app as cli_app
+# CLI interface (optional - requires typer)
+try:
+    from .cli.main import app as cli_app
+    CLI_AVAILABLE = True
+except ImportError:
+    cli_app = None
+    CLI_AVAILABLE = False
 from .core.analyzer import AdvancedAnalyzer
 from .core.chat_engine import ChatEngine
 from .core.document_processor import DocumentProcessor
