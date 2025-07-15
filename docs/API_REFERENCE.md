@@ -1,15 +1,18 @@
 # GraphRAG MCP Toolkit API Reference
 
-This document provides comprehensive API documentation for the GraphRAG MCP Toolkit - a production-ready dual-mode GraphRAG MCP system that enables Claude to both **chat conversationally** about research content AND **write literature reviews with automatic citations**.
+This document provides comprehensive API documentation for the **production-ready** GraphRAG MCP Toolkit - a dual-mode GraphRAG MCP system that enables Claude to both **chat conversationally** about research content AND **write literature reviews with automatic citations**.
 
 ## 🚀 Key Features
 
 - **Dual-Mode Architecture**: Conversational research exploration + formal literature review tools
 - **Integrated Citation Management**: Automatic citation tracking with 4 academic styles (APA, IEEE, Nature, MLA)
-- **Enhanced Query Processing**: NLP-based intent classification and entity extraction
+- **Enhanced Query Processing**: NLP-based intent classification and entity extraction with error recovery
 - **Template-Based Architecture**: Universal system supports any professional domain
 - **Local Privacy-First**: All processing via Ollama, no external API dependencies
-- **Production MCP Integration**: Seamless connection to Claude Desktop and other AI assistants
+- **Production MCP Integration**: Seamless connection to Claude Desktop with comprehensive validation
+- **Enterprise-Grade Error Handling**: Comprehensive recovery mechanisms and data integrity validation
+- **Resource Management**: Cleanup, monitoring, and performance optimization
+- **Comprehensive Testing**: Integration validation and health monitoring
 
 ## 📋 Table of Contents
 
@@ -19,34 +22,60 @@ This document provides comprehensive API documentation for the GraphRAG MCP Tool
 4. [Template System](#template-system)
 5. [MCP Server API](#mcp-server-api)
 6. [CLI Interface](#cli-interface)
-7. [Configuration](#configuration)
-8. [Python API](#python-api)
+7. [Validation & Testing](#validation--testing)
+8. [Error Handling](#error-handling)
+9. [Configuration](#configuration)
+10. [Python API](#python-api)
 
 ## 🔧 Core Components
 
 ### DocumentProcessor
 
-Handles PDF parsing and content extraction with support for multiple document formats. Primary component for document ingestion and RAG (Retrieval-Augmented Generation) capabilities.
+**Production-ready** PDF parsing and content extraction with comprehensive validation, error handling, and resource management. Primary component for document ingestion and RAG (Retrieval-Augmented Generation) capabilities.
 
 ```python
 from graphrag_mcp.core import DocumentProcessor, ProcessingConfig, DocumentData
 
 class DocumentProcessor:
     def __init__(self, config: ProcessingConfig = None):
-        """Initialize document processor with configuration."""
+        """Initialize document processor with validation and error handling."""
         
-    def process_document(self, file_path: str) -> DocumentData:
-        """Process a single document into structured data."""
+    def load_document(self, pdf_path: str) -> DocumentData:
+        """Load and process a document with comprehensive validation.
         
-    def extract_text(self, file_path: str) -> str:
-        """Extract raw text from PDF or other document formats."""
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            Structured document data
+            
+        Raises:
+            ValidationError: If file validation fails
+            ProcessingError: If document processing fails
+        """
         
-    def extract_metadata(self, content: str) -> Dict[str, Any]:
-        """Extract document metadata including title, authors, citations."""
+    def extract_entities(self, domain_guidance: dict = None) -> dict:
+        """Extract ALL entities from document without artificial constraints.
+        
+        Args:
+            domain_guidance: Optional hints about what might be important
+            
+        Returns:
+            Comprehensive entity extraction organized by discovered categories
+        """
+        
+    def query(self, question: str, top_k: int = 5) -> str:
+        """Query the document using RAG with error handling."""
+        
+    def get_document_summary(self) -> dict:
+        """Get summary of current document with validation."""
 
-# Factory function
-def create_document_processor(llm_model: str = "llama3.1:8b") -> DocumentProcessor:
-    """Create document processor with default configuration."""
+# Factory function with validation
+def create_document_processor(
+    embedding_model: str = "nomic-embed-text",
+    llm_model: str = "llama3.1:8b"
+) -> DocumentProcessor:
+    """Create document processor with validation and error handling."""
 ```
 
 ### AdvancedAnalyzer
@@ -405,6 +434,161 @@ def create_universal_server(template_name: str = "academic") -> UniversalMCPServ
 async def run_universal_server_cli(template_name: str = "academic", 
                                   transport: str = "stdio"):
     """Run universal MCP server from CLI."""
+```
+
+## 🔍 Validation & Testing
+
+The GraphRAG MCP Toolkit includes comprehensive validation and testing frameworks for production deployment.
+
+### System Validation
+
+```python
+# Basic functionality test
+python3 test_basic_functionality.py
+
+# Simple MCP integration test
+python3 test_mcp_simple.py
+
+# Comprehensive integration test
+python3 test_mcp_integration.py
+```
+
+### Prerequisites Validation
+
+```python
+from graphrag_mcp.utils.prerequisites import check_prerequisites, validate_environment
+
+# Comprehensive prerequisites check
+result = check_prerequisites(verbose=True)
+print(f"Status: {result.status}")
+print(f"Issues: {result.issues}")
+
+# Quick validation
+result = validate_environment(verbose=False)
+```
+
+### Citation Manager Health Check
+
+```python
+from graphrag_mcp.core.citation_manager import CitationTracker
+
+# Initialize citation manager
+citation_manager = CitationTracker()
+
+# Health check
+health = citation_manager.get_health_check()
+print(f"Overall health: {health['overall_health']}")
+print(f"Issues: {health['issues']}")
+
+# Data integrity report
+integrity = citation_manager.get_integrity_report()
+print(f"Total citations: {integrity['total_citations']}")
+print(f"Integrity errors: {integrity['integrity_errors']}")
+
+# Repair data integrity
+repair_report = citation_manager.repair_data_integrity()
+print(f"Repairs made: {repair_report['repairs_made']}")
+```
+
+### Query Engine Health Check
+
+```python
+from graphrag_mcp.core.query_engine import EnhancedQueryEngine
+
+# Initialize query engine
+query_engine = EnhancedQueryEngine()
+
+# System health metrics
+health = query_engine.get_system_health()
+print(f"Success rate: {health['success_rate']:.2%}")
+print(f"System status: {health['system_status']}")
+
+# Clear error history
+summary = query_engine.clear_error_history()
+print(f"Errors cleared: {summary['errors_cleared']}")
+```
+
+## ⚠️ Error Handling
+
+Comprehensive error handling with structured error types and recovery mechanisms.
+
+### Error Types
+
+```python
+from graphrag_mcp.utils.error_handling import (
+    GraphRAGError,
+    ValidationError,
+    ProcessingError,
+    ConfigurationError,
+    ServiceError,
+    MCPError
+)
+
+# All errors inherit from GraphRAGError
+try:
+    # Some operation
+    pass
+except GraphRAGError as e:
+    print(f"Error: {e}")
+    print(f"Details: {e.details}")
+```
+
+### Error Recovery
+
+```python
+from graphrag_mcp.core.query_engine import EnhancedQueryEngine
+
+# Query engine with error recovery
+query_engine = EnhancedQueryEngine(
+    max_retries=3,
+    timeout_seconds=30
+)
+
+# Process query with automatic recovery
+result = await query_engine.process_query("test query")
+
+if not result.success:
+    print(f"Error: {result.error_message}")
+    print(f"Recovery attempted: {result.recovery_attempted}")
+    print(f"Recovery strategies: {result.recovery_strategies}")
+```
+
+### Resource Management
+
+```python
+from graphrag_mcp.api.processor import GraphRAGProcessor
+
+# Use context manager for automatic cleanup
+with GraphRAGProcessor(project_name="test") as processor:
+    # Process documents
+    results = await processor.process_documents(documents)
+    
+    # Get processing statistics
+    stats = processor.get_processing_stats()
+    print(f"Memory usage: {stats['current_memory_mb']:.1f}MB")
+    
+    # Request graceful shutdown
+    processor.request_shutdown()
+# Automatic cleanup on exit
+```
+
+## 📊 Performance Monitoring
+
+```python
+# Get citation statistics
+citation_stats = citation_manager.get_citation_statistics()
+print(f"Usage rate: {citation_stats['usage_rate']:.2%}")
+print(f"Average completeness: {citation_stats['average_completeness']:.2%}")
+
+# Query engine performance
+query_stats = query_engine.query_stats
+print(f"Average response time: {query_stats['average_response_time']:.2f}s")
+print(f"Success rate: {query_stats['successful_queries']/query_stats['total_queries']:.2%}")
+
+# Processing statistics
+processing_stats = processor.get_processing_stats()
+print(f"Documents processed: {processing_stats['documents_processed']}")
+print(f"Processing time: {processing_stats['total_processing_time']:.2f}s")
 ```
 
 ### Dual-Mode MCP Tools

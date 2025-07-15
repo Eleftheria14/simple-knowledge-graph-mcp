@@ -1,12 +1,22 @@
 # GraphRAG MCP Toolkit
 
-> **Transform any document collection into a domain-specific AI assistant with GraphRAG and MCP**
+> **🚀 Production-Ready: Transform any document collection into a domain-specific AI assistant with GraphRAG and MCP**
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](docs/QUICKSTART.md)
 
-An open-source platform for creating domain-specific GraphRAG MCP servers that understand your field's unique context, terminology, and relationships. Built with privacy-first local processing using Ollama and seamless Claude integration via the Model Context Protocol.
+An **enterprise-grade** open-source platform for creating domain-specific GraphRAG MCP servers that understand your field's unique context, terminology, and relationships. Built with privacy-first local processing using Ollama and seamless Claude integration via the Model Context Protocol.
+
+## 🎉 **Now Production-Ready!**
+
+✅ **Enterprise-grade error handling** with comprehensive recovery mechanisms  
+✅ **Data integrity validation** with automated repair systems  
+✅ **Resource management** with cleanup and monitoring  
+✅ **Performance optimization** with detailed metrics  
+✅ **Comprehensive testing** with integration validation  
+✅ **Claude Desktop ready** with auto-generated configuration
 
 ## 🚀 Quick Start
 
@@ -37,7 +47,14 @@ pip install graphrag-mcp-toolkit
 
 2. **Verify Installation**:
    ```bash
+   # RECOMMENDED: Comprehensive system validation
+   python3 test_basic_functionality.py
+   
+   # Check system status
    graphrag-mcp status
+   
+   # Test MCP integration
+   python3 test_mcp_simple.py
    ```
 
 ### Create Your First Assistant
@@ -58,18 +75,31 @@ graphrag-mcp serve literature-assistant
 
 ### Connect to Claude
 
-Add to your Claude Desktop configuration:
+**RECOMMENDED: Use the auto-generated configuration:**
+
+```bash
+# The system generates a ready-to-use configuration
+cat claude_desktop_config.json
+```
+
+Add to your Claude Desktop configuration (`~/.config/claude-desktop/config.json`):
 
 ```json
 {
   "mcpServers": {
-    "literature-assistant": {
-      "command": "graphrag-mcp",
-      "args": ["serve", "literature-assistant", "--transport", "stdio"]
+    "graphrag-research": {
+      "command": "python3",
+      "args": ["-m", "graphrag_mcp.cli.main", "serve-universal", "--template", "academic", "--transport", "stdio"],
+      "cwd": "/Users/aimiegarces/Agents",
+      "env": {
+        "PYTHONPATH": "/Users/aimiegarces/Agents"
+      }
     }
   }
 }
 ```
+
+**Then restart Claude Desktop** and look for the 🔌 icon to confirm connection.
 
 ## 🎯 Features
 

@@ -1,15 +1,16 @@
 # GraphRAG MCP Toolkit Quickstart
 
-Get up and running with GraphRAG MCP Toolkit in 5 minutes! Transform your research papers into a dual-mode AI assistant that both chats conversationally about your research AND writes literature reviews with perfect citations.
+Get up and running with the **production-ready** GraphRAG MCP Toolkit in 5 minutes! Transform your research papers into a dual-mode AI assistant that both chats conversationally about your research AND writes literature reviews with perfect citations.
 
 ## 🎯 What You'll Build
 
 By the end of this quickstart, you'll have:
-- A production-ready dual-mode GraphRAG MCP server
-- Processed research papers in a persistent knowledge graph
-- Claude Desktop integration with 10+ specialized research tools
+- A **production-ready dual-mode GraphRAG MCP server** with enterprise-grade error handling
+- Processed research papers in a persistent knowledge graph with data integrity validation
+- Claude Desktop integration with **10+ specialized research tools** and comprehensive testing
 - Both conversational research exploration AND formal literature review capabilities
-- Automatic citation management in 4 academic styles (APA, IEEE, Nature, MLA)
+- Automatic citation management in 4 academic styles (APA, IEEE, Nature, MLA) with validation
+- **Robust error recovery** and performance monitoring for production use
 
 ## 📋 Prerequisites
 
@@ -77,13 +78,19 @@ ollama serve
 # Check if Ollama is running
 curl -s http://localhost:11434/api/tags
 
-# Test core components (comprehensive check)
+# RECOMMENDED: Run comprehensive system validation
+python3 test_basic_functionality.py
+
+# Test core components with validation
 python3 test_core_components.py
 
 # Quick component test
 python3 -c "from graphrag_mcp.core.citation_manager import CitationTracker; print('✅ Citation manager ready')"
 python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ Chat tools ready')"
 python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
+
+# Test MCP integration
+python3 test_mcp_simple.py
 ```
 
 ## 📄 Step 2: Start Analysis
@@ -134,24 +141,37 @@ graphrag-mcp serve-universal --template academic --transport stdio
 
 ### Configure Claude Desktop
 
-1. **Open Claude Desktop configuration**:
+1. **RECOMMENDED: Use the auto-generated configuration**:
+   ```bash
+   # The system has generated a ready-to-use configuration
+   cat claude_desktop_config.json
+   ```
+
+2. **Open Claude Desktop configuration**:
    - macOS: `~/.config/claude-desktop/config.json`
    - Windows: `%APPDATA%\Claude\config.json`
 
-2. **Add this configuration**:
+3. **Add the generated configuration**:
    ```json
    {
      "mcpServers": {
        "graphrag-research": {
          "command": "python3",
          "args": ["-m", "graphrag_mcp.cli.main", "serve-universal", "--template", "academic", "--transport", "stdio"],
-         "cwd": "/Users/aimiegarces/Agents"
+         "cwd": "/Users/aimiegarces/Agents",
+         "env": {
+           "PYTHONPATH": "/Users/aimiegarces/Agents"
+         }
        }
      }
    }
    ```
 
-3. **Restart Claude Desktop**
+4. **Restart Claude Desktop**
+
+5. **Verify Connection**:
+   - Look for the 🔌 icon in Claude Desktop
+   - Test with a simple query: "What MCP tools are available?"
 
 ## 🎉 Step 4: Start Dual-Mode Research!
 
@@ -212,6 +232,23 @@ generate_bibliography: in IEEE style with used citations only
 
 ## 🔧 Quick Troubleshooting
 
+### System Health Check
+
+```bash
+# RECOMMENDED: Comprehensive health check
+python3 test_basic_functionality.py
+
+# Run system validation
+python3 test_mcp_simple.py
+
+# Check component health
+python3 -c "
+from graphrag_mcp.core.citation_manager import CitationTracker
+cm = CitationTracker()
+print('Citation Manager Health:', cm.get_health_check()['overall_health'])
+"
+```
+
 ### Ollama Issues
 
 ```bash
@@ -220,23 +257,42 @@ ollama list
 
 # Restart if needed
 ollama serve
+
+# Test connectivity
+curl -s http://localhost:11434/api/tags
 ```
 
 ### MCP Server Issues
 
 ```bash
-# Test server manually
+# Test server manually with validation
 python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
 
-# Test core components
-python3 -c "from graphrag_mcp.core import DocumentProcessor; print('✅ Working')"
+# Test core components with error handling
+python3 -c "
+try:
+    from graphrag_mcp.core import DocumentProcessor
+    print('✅ Document processor ready')
+except Exception as e:
+    print('❌ Error:', e)
+"
+
+# Check prerequisites
+python3 -c "
+from graphrag_mcp.utils.prerequisites import check_prerequisites
+result = check_prerequisites(verbose=False)
+print('Prerequisites status:', result.status)
+"
 ```
 
 ### Claude Desktop Connection
 
-1. Check config file path is correct
-2. Restart Claude Desktop
-3. Look for 🔌 icon in Claude interface
+1. **Check config file path** is correct
+2. **Verify generated config**: `cat claude_desktop_config.json`
+3. **Restart Claude Desktop**
+4. **Look for 🔌 icon** in Claude interface
+5. **Test connection**: Ask "What MCP tools are available?"
+6. **Check error logs** in Claude Desktop developer tools
 
 ## 📈 Next Steps
 
