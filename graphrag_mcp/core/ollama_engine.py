@@ -182,13 +182,8 @@ class OllamaEngine:
             Configured LangChain chain
         """
         try:
-            if input_variables:
-                prompt = ChatPromptTemplate.from_template(
-                    prompt_template, 
-                    input_variables=input_variables
-                )
-            else:
-                prompt = ChatPromptTemplate.from_template(prompt_template)
+            # In modern LangChain, input_variables are automatically inferred
+            prompt = ChatPromptTemplate.from_template(prompt_template)
             
             chain = prompt | self.llm | StrOutputParser()
             logger.debug("🔗 Created LangChain chain")

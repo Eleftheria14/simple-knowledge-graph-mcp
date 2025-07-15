@@ -164,7 +164,7 @@ Some entities that might be particularly important: {', '.join(domain_guidance.v
 However, extract ALL important entities you find, not just these suggestions.
 """
         
-        entity_prompt = ChatPromptTemplate.from_template(f"""
+        template_text = f"""
 Extract ALL important entities from this document. Discover and categorize them naturally based on what you find.
 
 {guidance_text}
@@ -194,28 +194,94 @@ Example format (but use categories that fit THIS document):
 }}
 
 Document excerpt:
-{{content}}
+{content}
 
-JSON:""")
+JSON:"""
+        
+        entity_prompt = ChatPromptTemplate.from_template(template_text)
         
         chain = entity_prompt | self.llm | StrOutputParser()
         
         try:
-            result = chain.invoke({"content": content_sample})
-            # Clean up the result and parse JSON
-            json_start = result.find('{')
-            json_end = result.rfind('}') + 1
-            if json_start != -1 and json_end != -1:
-                json_str = result[json_start:json_end]
-                entities = json.loads(json_str)
-                
-                # Clean up empty categories
-                entities = {k: v for k, v in entities.items() if v and len(v) > 0}
-                
-            else:
-                # Fallback if JSON extraction fails - try simple extraction
-                logger.warning("JSON parsing failed, attempting simple extraction")
-                entities = self._fallback_entity_extraction(content_sample)
+            # Add robust timeout and retry handling for entity extraction
+            import signal
+            import time
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Entity extraction timed out")
+            
+            max_attempts = 3
+            timeout_seconds = 45  # Reduced timeout per attempt
+            entities = None
+            
+            for attempt in range(max_attempts):
+                try:
+                    logger.info(f"🔍 Entity extraction attempt {attempt + 1}/{max_attempts}")
+                    
+                    # Set timeout for this attempt
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(timeout_seconds)
+                    
+                    # Invoke the chain with explicit termination
+                    result = chain.invoke({"content": content_sample})
+                    signal.alarm(0)  # Cancel the alarm - SUCCESS
+                    
+                    # Validate we got a non-empty result
+                    if not result or len(result.strip()) == 0:
+                        raise ValueError("Empty result from LLM")
+                    
+                    # Clean up the result and parse JSON
+                    json_start = result.find('{')
+                    json_end = result.rfind('}') + 1
+                    
+                    if json_start != -1 and json_end != -1:
+                        json_str = result[json_start:json_end]
+                        entities = json.loads(json_str)
+                        
+                        # Validate entities is a dictionary with content
+                        if isinstance(entities, dict) and entities:
+                            # Clean up empty categories
+                            entities = {k: v for k, v in entities.items() if v and len(v) > 0}
+                            
+                            # Ensure we have at least some entities
+                            if entities:
+                                logger.info(f"✅ Successfully extracted entities on attempt {attempt + 1}")
+                                break
+                            else:
+                                raise ValueError("No valid entities extracted")
+                        else:
+                            raise ValueError("Invalid entity structure")
+                    else:
+                        raise ValueError("No valid JSON found in response")
+                        
+                except (TimeoutError, ValueError, json.JSONDecodeError) as e:
+                    signal.alarm(0)  # Cancel the alarm
+                    logger.warning(f"❌ Attempt {attempt + 1} failed: {e}")
+                    
+                    if attempt == max_attempts - 1:
+                        # Final attempt failed - use fallback
+                        logger.error("All entity extraction attempts failed, using fallback")
+                        entities = self._fallback_entity_extraction(content_sample)
+                        break
+                    else:
+                        # Wait before retry with exponential backoff
+                        wait_time = 2 ** attempt  # 1s, 2s, 4s
+                        logger.info(f"⏳ Waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
+                        
+                except Exception as e:
+                    signal.alarm(0)  # Cancel the alarm
+                    logger.error(f"❌ Unexpected error on attempt {attempt + 1}: {e}")
+                    if attempt == max_attempts - 1:
+                        entities = self._fallback_entity_extraction(content_sample)
+                        break
+                    else:
+                        time.sleep(2 ** attempt)
+            
+            # Final validation - ensure we have entities
+            if not entities:
+                logger.error("No entities extracted, using empty fallback")
+                entities = {"general": ["document_processed"]}
             
             self.document_data.entities = entities
             total_entities = sum(len(v) for v in entities.values())

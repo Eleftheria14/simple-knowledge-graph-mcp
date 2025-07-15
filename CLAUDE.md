@@ -7,13 +7,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Environment Setup
 ```bash
 # Modern Python 3.11+ environment (RECOMMENDED)
-source graphiti-env/bin/activate
+source graphrag-env/bin/activate
 
-# Legacy Python 3.9 environment (for compatibility)
-source langchain-env/bin/activate
+# Legacy environments (for compatibility)
+source graphiti-env/bin/activate  # Older setup
+source langchain-env/bin/activate  # Legacy setup
 
 # Install dependencies with UV (faster)
 uv pip install -r requirements.txt
+
+# Complete environment setup (creates graphrag-env)
+./setup_env.sh  # Creates Python 3.11 environment with all dependencies
 
 # Development setup with all tools
 make install-dev
@@ -84,6 +88,12 @@ python3 test_core_components.py           # Test citation manager and query engi
 python3 -c "from graphrag_mcp.core.citation_manager import CitationTracker; print('✅ Citation manager ready')"
 python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ Chat tools ready')"
 python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
+
+# Notebook Workflow (Interactive Document Processing)
+cd notebooks/Main
+source ../../graphrag-env/bin/activate
+python -c "from processing_utils import check_prerequisites; check_prerequisites()"  # Check prerequisites
+jupyter notebook Simple_Document_Processing.ipynb  # Interactive processing workflow
 ```
 
 ### Required Services Setup
@@ -96,12 +106,13 @@ ollama serve
 # Verify Ollama is running
 curl -s http://localhost:11434/api/tags
 
-# Neo4j Setup (Required for Graphiti)
+# Neo4j Setup (Optional - for Graphiti persistence)
 docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
 
 # Verify Neo4j is running
 curl -f http://localhost:7474/
 # Access Neo4j Browser: http://localhost:7474 (neo4j/password)
+# Note: System works without Neo4j but with reduced persistence capabilities
 ```
 
 ### MCP Integration Testing
@@ -179,6 +190,14 @@ graphrag_mcp/
 │   └── base.py               # Base template class
 └── visualization/            # Graph visualization
     └── graphiti_yfiles.py    # yFiles professional graphs
+
+notebooks/
+├── Main/                     # Primary notebook workflow
+│   ├── Simple_Document_Processing.ipynb  # Interactive document processing
+│   ├── processing_utils.py   # Notebook utilities with progress tracking
+│   └── README.md            # Notebook documentation
+├── Google CoLab/            # Google Colab versions
+└── Other/                   # Archive/alternative notebooks
 ```
 
 ### MCP Server Data Flow (Updated)
@@ -189,6 +208,16 @@ Documents → Processing → Knowledge Graph → Dual-Mode MCP Tools → Claude 
                                               ↓
                                     Citation Tracking System
                                          (APA/IEEE/Nature/MLA)
+```
+
+### Interactive Notebook Workflow (NEW)
+```
+PDF Documents → Notebook Interface → Progress Tracking → Analytics → MCP Server Setup
+     ↓               ↓                     ↓               ↓             ↓
+   Discovery → Processing Utils → Real-time Progress → Visualization → Claude Integration
+                     ↓                                      ↓
+              Concurrent Processing                  Interactive Graphs
+              Error Handling & Retry               Knowledge Graph Display
 ```
 
 **Key MCP Tools Provided (Updated):**
@@ -308,6 +337,31 @@ make ci              # Full CI simulation
 
 ## Common Development Patterns
 
+### Interactive Document Processing (Notebook Workflow)
+```python
+# Using the notebook processing utilities
+from processing_utils import NotebookDocumentProcessor, check_prerequisites
+
+# Check system prerequisites
+status = check_prerequisites()
+if status["status"] == "failed":
+    print("Fix these issues:", status["issues"])
+
+# Initialize processor
+processor = NotebookDocumentProcessor(project_name="my-research")
+
+# Discover documents
+documents = processor.discover_documents("../../examples")
+
+# Process with progress tracking
+import asyncio
+results = await processor.process_documents(documents)
+
+# Show analytics and visualization
+processor.show_analytics(documents)
+processor.visualize_knowledge_graph(documents)
+```
+
 ### Working with Citation Management
 ```python
 # Citation tracking workflow
@@ -375,11 +429,14 @@ python3 test_core_components.py
 ./clear_chromadb.sh
 
 # Python environment issues
-source graphiti-env/bin/activate
+source graphrag-env/bin/activate  # Use recommended environment
 uv pip install -r requirements.txt
 
 # Pre-commit hook issues
 make pre-commit-install
+
+# Environment setup issues
+./setup_env.sh  # Recreate complete environment
 ```
 
 ## Project Context and Vision

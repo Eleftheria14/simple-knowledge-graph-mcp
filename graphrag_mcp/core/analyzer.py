@@ -88,7 +88,7 @@ class AdvancedAnalyzer:
             entities = {}
             if self.config.extract_entities:
                 entities = self.document_processor.extract_entities(
-                    entity_schema=domain_schema or self._get_default_schema()
+                    domain_guidance=domain_schema or self._get_default_schema()
                 )
             
             # Extract relationships if enabled
@@ -167,7 +167,7 @@ class AdvancedAnalyzer:
             
             # Extract entities
             entities = self.document_processor.extract_entities(
-                entity_schema=domain_schema or self._get_default_schema()
+                domain_guidance=domain_schema or self._get_default_schema()
             )
             
             # Create analysis result
@@ -232,7 +232,11 @@ class AdvancedAnalyzer:
             if not entity_text:
                 return relationships
             
-            prompt_template = f"""
+            # Use first 2000 characters for relationship extraction
+            content_sample = document_data.content[:2000]
+            
+            # Create prompt with direct f-string formatting to avoid LangChain template issues
+            prompt_text = f"""
 Analyze the relationships between entities in this document. 
 Return relationships in JSON format:
 
@@ -245,17 +249,14 @@ Entities:
 {entity_text}
 
 Document excerpt:
-{{text}}
+{content_sample}
 
 Focus on the most important relationships. Limit to 10 relationships.
 
 JSON:"""
             
-            # Use first 2000 characters for relationship extraction
-            content_sample = document_data.content[:2000]
-            
-            chain = self.ollama_engine.create_chain(prompt_template, ["text"])
-            result = chain.invoke({"text": content_sample})
+            # Use direct chat method instead of create_chain
+            result = self.ollama_engine.chat(prompt_text)
             
             # Parse JSON response
             import json
@@ -354,20 +355,21 @@ JSON:"""
     def _generate_summary(self, document_data: DocumentData) -> str:
         """Generate document summary"""
         try:
-            prompt_template = """
+            # Use first 3000 characters for summary
+            content_sample = document_data.content[:3000]
+            
+            # Create a simple prompt without template variables to avoid LangChain issues
+            prompt_text = f"""
 Provide a concise summary of this document in 2-3 sentences.
 Focus on the main purpose, key findings, and significance.
 
 Document:
-{content}
+{content_sample}
 
 Summary:"""
             
-            # Use first 3000 characters for summary
-            content_sample = document_data.content[:3000]
-            
-            chain = self.ollama_engine.create_chain(prompt_template, ["content"])
-            summary = chain.invoke({"content": content_sample})
+            # Use the simpler chat method instead of create_chain
+            summary = self.ollama_engine.chat(prompt_text)
             
             logger.debug("📝 Generated document summary")
             return summary.strip()
