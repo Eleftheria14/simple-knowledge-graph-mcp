@@ -20,6 +20,7 @@ from ..core.query_engine import EnhancedQueryEngine
 from ..templates import BaseTemplate, template_registry
 from .chat_tools import ChatToolsEngine
 from .literature_tools import LiteratureToolsEngine
+from .base import StandardizedToolEngine, ToolExecutionContext, create_tool_context
 
 logger = logging.getLogger(__name__)
 
@@ -71,15 +72,27 @@ class UniversalMCPServer:
             ollama_engine=self.ollama_engine
         )
 
-        # Tool engines
+        # Create shared tool execution context
+        self.tool_context = create_tool_context(
+            citation_manager=self.citation_manager,
+            user_context={"server": name}
+        )
+
+        # Tool engines with shared context
         self.chat_tools = ChatToolsEngine(
             query_engine=self.query_engine,
-            citation_manager=self.citation_manager
+            citation_manager=self.citation_manager,
+            api_processor=self.tool_context.api_processor
         )
         self.literature_tools = LiteratureToolsEngine(
             query_engine=self.query_engine,
-            citation_manager=self.citation_manager
+            citation_manager=self.citation_manager,
+            api_processor=self.tool_context.api_processor
         )
+
+        # Tool registry for better management
+        self.registered_tools = {}
+        self.tool_execution_stats = {}
 
         # Current template
         self.current_template: BaseTemplate | None = None
@@ -168,8 +181,11 @@ class UniversalMCPServer:
                     "document_processing",
                     "entity_extraction",
                     "semantic_search",
-                    "citation_tracking"
-                ]
+                    "citation_tracking",
+                    "dual_mode_tools",
+                    "standardized_execution"
+                ],
+                "tool_analytics": self.get_tool_analytics()
             }
 
         @self.server.tool
@@ -292,6 +308,12 @@ class UniversalMCPServer:
                     ctx.error(f"Search failed: {e}")
                 return {"success": False, "error": str(e)}
 
+        @self.server.tool
+        async def get_tool_analytics(ctx: Context) -> dict[str, Any]:
+            """Get comprehensive analytics about tool usage and performance"""
+            ctx.info("Getting tool analytics")
+            return self.get_tool_analytics()
+
     def _load_template(self, template_name: str):
         """Load a domain template and register its tools"""
         try:
@@ -310,7 +332,7 @@ class UniversalMCPServer:
             raise
 
     def _register_template_tools(self, template: BaseTemplate):
-        """Register MCP tools from a domain template"""
+        """Register MCP tools from a domain template with enhanced management"""
 
         # Get template's MCP tools
         mcp_tools = template.get_mcp_tools()
@@ -319,109 +341,120 @@ class UniversalMCPServer:
             tool_name = tool_config["name"]
             tool_description = tool_config["description"]
             tool_params = tool_config.get("parameters", {})
+            tool_category = tool_config.get("category", "general")
 
-            # Create specific tool registration based on tool name
-            # CHAT TOOLS - Conversational knowledge exploration
-            if tool_name == "ask_knowledge_graph":
-                @self.server.tool
-                async def ask_knowledge_graph(question: str, depth: str = "quick", ctx: Context = None) -> dict[str, Any]:
-                    """Ask natural questions about the knowledge graph and get conversational answers"""
-                    return await self.chat_tools.ask_knowledge_graph(question, depth, ctx)
+            # Register tool with enhanced tracking
+            self.registered_tools[tool_name] = {
+                "description": tool_description,
+                "parameters": tool_params,
+                "category": tool_category,
+                "template": template.config.name,
+                "execution_count": 0,
+                "last_used": None
+            }
 
-            elif tool_name == "explore_topic":
-                @self.server.tool
-                async def explore_topic(topic: str, scope: str = "overview", ctx: Context = None) -> dict[str, Any]:
-                    """Explore a research topic to understand its key aspects and relationships"""
-                    return await self.chat_tools.explore_topic(topic, scope, ctx)
+            # Dynamic tool registration with standardized wrapper
+            self._register_standardized_tool(tool_name, tool_description, tool_params)
 
-            elif tool_name == "find_connections":
-                @self.server.tool
-                async def find_connections(concept_a: str, concept_b: str, connection_types: list[str] = None, ctx: Context = None) -> dict[str, Any]:
-                    """Discover how different concepts, methods, or ideas are connected"""
-                    return await self.chat_tools.find_connections(concept_a, concept_b, connection_types, ctx)
+            logger.debug(f"📝 Registered tool: {tool_name} ({tool_category})")
 
-            elif tool_name == "what_do_we_know_about":
-                @self.server.tool
-                async def what_do_we_know_about(topic: str, include_gaps: bool = True, ctx: Context = None) -> dict[str, Any]:
-                    """Get a comprehensive overview of what the research says about a specific topic"""
-                    return await self.chat_tools.what_do_we_know_about(topic, include_gaps, ctx)
+    def _register_standardized_tool(self, tool_name: str, description: str, params: dict):
+        """Register a tool with standardized execution wrapper"""
+        
+        async def tool_wrapper(*args, ctx: Context = None, **kwargs):
+            """Standardized tool execution wrapper with analytics"""
+            import time
+            start_time = time.time()
+            
+            try:
+                # Update execution stats
+                self.registered_tools[tool_name]["execution_count"] += 1
+                self.registered_tools[tool_name]["last_used"] = time.time()
+                
+                # Execute the appropriate tool
+                result = await self._execute_tool(tool_name, args, kwargs, ctx)
+                
+                # Track execution in context
+                processing_time = time.time() - start_time
+                self.tool_context.add_execution(tool_name, True, processing_time)
+                
+                return result
+                
+            except Exception as e:
+                # Track failed execution
+                processing_time = time.time() - start_time
+                self.tool_context.add_execution(tool_name, False, processing_time)
+                
+                if ctx:
+                    ctx.error(f"Tool {tool_name} failed: {e}")
+                
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "tool_name": tool_name,
+                    "processing_time": processing_time
+                }
+        
+        # Set the wrapper's name and docstring
+        tool_wrapper.__name__ = tool_name
+        tool_wrapper.__doc__ = description
+        
+        # Register with FastMCP
+        self.server.tool(tool_wrapper)
 
-            # LITERATURE REVIEW TOOLS - Formal writing with citations
-            elif tool_name == "gather_sources_for_topic":
-                @self.server.tool
-                async def gather_sources_for_topic(topic: str, scope: str = "comprehensive", sections: list[str] = None, ctx: Context = None) -> dict[str, Any]:
-                    """Gather and organize sources for a specific literature review topic"""
-                    return await self.literature_tools.gather_sources_for_topic(topic, scope, sections, ctx)
+    async def _execute_tool(self, tool_name: str, args: tuple, kwargs: dict, ctx: Context = None) -> dict[str, Any]:
+        """Execute a tool with proper routing to the appropriate engine"""
+        
+        # Route to appropriate tool engine based on tool name
+        if tool_name in ["ask_knowledge_graph", "explore_topic", "find_connections", "what_do_we_know_about"]:
+            # Chat tools
+            tool_method = getattr(self.chat_tools, tool_name, None)
+            if tool_method:
+                return await tool_method(*args, ctx=ctx, **kwargs)
+                
+        elif tool_name in ["gather_sources_for_topic", "get_facts_with_citations", "verify_claim_with_sources", 
+                          "get_topic_outline", "track_citations_used", "generate_bibliography"]:
+            # Literature tools
+            tool_method = getattr(self.literature_tools, tool_name, None)
+            if tool_method:
+                return await tool_method(*args, ctx=ctx, **kwargs)
+                
+        elif tool_name == "generate_bibliography":
+            # Special handling for bibliography generation
+            style = kwargs.get("style", "APA")
+            used_only = kwargs.get("used_only", True)
+            
+            return await self.literature_tools.generate_bibliography(style, used_only, ctx)
+            
+        else:
+            # Legacy tools - route to template tool execution
+            params = {}
+            if args:
+                # Map positional args to common parameter names
+                param_names = ["query", "topic", "domain", "concept", "author", "claim"]
+                for i, arg in enumerate(args):
+                    if i < len(param_names):
+                        params[param_names[i]] = arg
+            
+            params.update(kwargs)
+            return await self._execute_template_tool(tool_name, params, ctx)
 
-            elif tool_name == "get_facts_with_citations":
-                @self.server.tool
-                async def get_facts_with_citations(topic: str, section: str = None, citation_style: str = "APA", ctx: Context = None) -> dict[str, Any]:
-                    """Get factual statements about a topic with proper citations for literature review writing"""
-                    return await self.literature_tools.get_facts_with_citations(topic, section, citation_style, ctx)
-
-            elif tool_name == "verify_claim_with_sources":
-                @self.server.tool
-                async def verify_claim_with_sources(claim: str, evidence_strength: str = "strong", ctx: Context = None) -> dict[str, Any]:
-                    """Verify a claim and provide supporting evidence with citations"""
-                    return await self.literature_tools.verify_claim_with_sources(claim, evidence_strength, ctx)
-
-            elif tool_name == "get_topic_outline":
-                @self.server.tool
-                async def get_topic_outline(topic: str, section_type: str = "full_review", ctx: Context = None) -> dict[str, Any]:
-                    """Generate an outline for a literature review section with key points and sources"""
-                    return await self.literature_tools.get_topic_outline(topic, section_type, ctx)
-
-            elif tool_name == "track_citations_used":
-                @self.server.tool
-                async def track_citations_used(citation_keys: list[str], context: str = None, ctx: Context = None) -> dict[str, Any]:
-                    """Track which citations you've used in your writing to maintain proper attribution"""
-                    return await self.literature_tools.track_citations_used(citation_keys, context, ctx)
-
-            elif tool_name == "generate_bibliography":
-                @self.server.tool
-                async def generate_bibliography(style: str = "APA", used_only: bool = True, sort_by: str = "author", ctx: Context = None) -> dict[str, Any]:
-                    """Generate a formatted bibliography of all used citations"""
-                    bibliography = self.citation_manager.generate_bibliography(style, used_only, sort_by)
-                    return {
-                        "success": True,
-                        "bibliography": bibliography,
-                        "style": style,
-                        "total_citations": len(bibliography),
-                        "citation_statistics": self.citation_manager.get_citation_statistics()
-                    }
-
-            # LEGACY/CORE TOOLS - Existing functionality for backwards compatibility
-            elif tool_name == "query_papers":
-                @self.server.tool
-                async def query_papers(query: str, entity_filter: str = None, limit: int = 10, ctx: Context = None) -> dict[str, Any]:
-                    """Search and query papers in the corpus (core search functionality)"""
-                    return await self._execute_template_tool("query_papers", {"query": query, "entity_filter": entity_filter, "limit": limit}, ctx)
-
-            elif tool_name == "research_gaps":
-                @self.server.tool
-                async def research_gaps(domain: str, depth: str = "surface", ctx: Context = None) -> dict[str, Any]:
-                    """Identify research gaps and opportunities (analytical tool)"""
-                    return await self._execute_template_tool("research_gaps", {"domain": domain, "depth": depth}, ctx)
-
-            elif tool_name == "methodology_overview":
-                @self.server.tool
-                async def methodology_overview(topic: str, include_evolution: bool = True, ctx: Context = None) -> dict[str, Any]:
-                    """Compare and analyze research methodologies (analytical tool)"""
-                    return await self._execute_template_tool("methodology_overview", {"topic": topic, "include_evolution": include_evolution}, ctx)
-
-            elif tool_name == "author_analysis":
-                @self.server.tool
-                async def author_analysis(author: str = None, institution: str = None, ctx: Context = None) -> dict[str, Any]:
-                    """Analyze author contributions and collaborations (analytical tool)"""
-                    return await self._execute_template_tool("author_analysis", {"author": author, "institution": institution}, ctx)
-
-            elif tool_name == "concept_evolution":
-                @self.server.tool
-                async def concept_evolution(concept: str, time_range: str = None, ctx: Context = None) -> dict[str, Any]:
-                    """Track how concepts evolve across papers (analytical tool)"""
-                    return await self._execute_template_tool("concept_evolution", {"concept": concept, "time_range": time_range}, ctx)
-
-            logger.debug(f"📝 Registered tool: {tool_name}")
+    def get_tool_analytics(self) -> dict[str, Any]:
+        """Get comprehensive tool usage analytics"""
+        return {
+            "registered_tools": len(self.registered_tools),
+            "tool_details": self.registered_tools,
+            "execution_stats": self.tool_context.get_execution_stats(),
+            "most_used_tools": sorted(
+                self.registered_tools.items(),
+                key=lambda x: x[1]["execution_count"],
+                reverse=True
+            )[:5],
+            "tool_categories": {
+                category: len([t for t in self.registered_tools.values() if t["category"] == category])
+                for category in set(t["category"] for t in self.registered_tools.values())
+            }
+        }
 
     async def _execute_template_tool(self, tool_name: str, params: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
         """Execute a template-specific tool"""

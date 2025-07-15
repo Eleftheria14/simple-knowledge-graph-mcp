@@ -35,6 +35,12 @@ class MCPToolConfig(BaseModel):
     description: str = Field(description="Tool description")
     parameters: dict[str, Any] = Field(description="Tool parameter schema")
     implementation: str = Field(description="Implementation strategy")
+    category: str = Field(default="general", description="Tool category (chat, literature, core, utility)")
+    priority: int = Field(default=1, description="Tool priority (1=highest, 5=lowest)")
+    requirements: list[str] = Field(default_factory=list, description="Required components or dependencies")
+    examples: list[dict[str, Any]] = Field(default_factory=list, description="Example usage scenarios")
+    validation_rules: dict[str, Any] = Field(default_factory=dict, description="Parameter validation rules")
+    performance_hints: dict[str, Any] = Field(default_factory=dict, description="Performance optimization hints")
 
 
 class TemplateConfig(BaseModel):
@@ -47,6 +53,13 @@ class TemplateConfig(BaseModel):
     relationships: list[RelationshipConfig] = Field(description="Relationship configurations")
     mcp_tools: list[MCPToolConfig] = Field(description="MCP tool configurations")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    
+    # Enhanced template configuration
+    supported_formats: list[str] = Field(default_factory=lambda: ["pdf"], description="Supported document formats")
+    workflow_phases: list[str] = Field(default_factory=list, description="Processing workflow phases")
+    validation_config: dict[str, Any] = Field(default_factory=dict, description="Document validation configuration")
+    processing_config: dict[str, Any] = Field(default_factory=dict, description="Processing configuration")
+    output_formats: list[str] = Field(default_factory=lambda: ["text"], description="Supported output formats")
 
 
 class BaseTemplate(ABC):
@@ -100,7 +113,21 @@ class BaseTemplate(ABC):
         Returns:
             List of MCP tool configurations
         """
-        pass
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+                "implementation": tool.implementation,
+                "category": tool.category,
+                "priority": tool.priority,
+                "requirements": tool.requirements,
+                "examples": tool.examples,
+                "validation_rules": tool.validation_rules,
+                "performance_hints": tool.performance_hints
+            }
+            for tool in self.config.mcp_tools
+        ]
 
     def get_processing_config(self) -> dict[str, Any]:
         """
@@ -109,14 +136,21 @@ class BaseTemplate(ABC):
         Returns:
             Processing configuration dictionary
         """
-        return {
+        base_config = {
             "entity_schema": self.get_entity_schema(),
             "relationship_schema": self.get_relationship_schema(),
-            "max_entities_per_type": max(e.max_entities for e in self.config.entities),
+            "max_entities_per_type": max(e.max_entities for e in self.config.entities) if self.config.entities else 10,
             "domain": self.config.domain,
             "template_name": self.config.name,
-            "template_version": self.config.version
+            "template_version": self.config.version,
+            "supported_formats": self.config.supported_formats,
+            "workflow_phases": self.config.workflow_phases,
+            "output_formats": self.config.output_formats
         }
+        
+        # Merge with template-specific processing config
+        base_config.update(self.config.processing_config)
+        return base_config
 
     def generate_example_queries(self) -> list[str]:
         """
@@ -231,6 +265,19 @@ class BaseTemplate(ABC):
         for tool in self.config.mcp_tools:
             if not tool.name or not tool.description:
                 raise ValueError(f"MCP tool missing required fields: {tool}")
+            
+            # Validate tool categories
+            valid_categories = ["chat", "literature", "core", "utility", "general"]
+            if tool.category not in valid_categories:
+                raise ValueError(f"Invalid tool category '{tool.category}'. Must be one of: {valid_categories}")
+            
+            # Validate priority range
+            if not (1 <= tool.priority <= 5):
+                raise ValueError(f"Tool priority must be between 1 and 5, got {tool.priority}")
+            
+            # Validate parameter schema
+            if not isinstance(tool.parameters, dict):
+                raise ValueError(f"Tool parameters must be a dictionary, got {type(tool.parameters)}")
 
     def __str__(self) -> str:
         """String representation of template"""
@@ -291,6 +338,110 @@ class TemplateRegistry:
             List of template names
         """
         return list(self._templates.keys())
+    
+    def get_templates_by_domain(self, domain: str) -> list[str]:
+        """
+        Get templates for a specific domain.
+        
+        Args:
+            domain: Domain name
+            
+        Returns:
+            List of template names for the domain
+        """
+        matching_templates = []
+        for name in self._templates.keys():
+            template = self.get_template(name)
+            if template.config.domain == domain:
+                matching_templates.append(name)
+        return matching_templates
+    
+    def get_template_capabilities(self, name: str) -> dict[str, Any]:
+        """
+        Get detailed capabilities of a template.
+        
+        Args:
+            name: Template name
+            
+        Returns:
+            Template capabilities dictionary
+        """
+        template = self.get_template(name)
+        
+        # Analyze tool capabilities
+        capabilities = {
+            "conversational_tools": [],
+            "literature_tools": [],
+            "analytical_tools": [],
+            "utility_tools": [],
+            "total_tools": len(template.config.mcp_tools)
+        }
+        
+        for tool in template.config.mcp_tools:
+            tool_info = {
+                "name": tool.name,
+                "description": tool.description,
+                "priority": tool.priority,
+                "requirements": tool.requirements
+            }
+            
+            if tool.category == "chat":
+                capabilities["conversational_tools"].append(tool_info)
+            elif tool.category == "literature":
+                capabilities["literature_tools"].append(tool_info)
+            elif tool.category == "core":
+                capabilities["analytical_tools"].append(tool_info)
+            else:
+                capabilities["utility_tools"].append(tool_info)
+        
+        return capabilities
+    
+    def validate_template_configuration(self, name: str) -> dict[str, Any]:
+        """
+        Validate template configuration.
+        
+        Args:
+            name: Template name
+            
+        Returns:
+            Validation results
+        """
+        try:
+            template = self.get_template(name)
+            
+            validation_results = {
+                "valid": True,
+                "errors": [],
+                "warnings": [],
+                "info": {
+                    "total_entities": len(template.config.entities),
+                    "total_relationships": len(template.config.relationships),
+                    "total_tools": len(template.config.mcp_tools)
+                }
+            }
+            
+            # Check for missing recommended tools
+            tool_names = {tool.name for tool in template.config.mcp_tools}
+            recommended_tools = ["ask_knowledge_graph", "search_documents", "get_facts_with_citations"]
+            
+            for recommended in recommended_tools:
+                if recommended not in tool_names:
+                    validation_results["warnings"].append(f"Missing recommended tool: {recommended}")
+            
+            # Check tool priority distribution
+            priorities = [tool.priority for tool in template.config.mcp_tools]
+            if priorities and max(priorities) == min(priorities):
+                validation_results["warnings"].append("All tools have the same priority - consider varying priorities")
+            
+            return validation_results
+            
+        except Exception as e:
+            return {
+                "valid": False,
+                "errors": [str(e)],
+                "warnings": [],
+                "info": {}
+            }
 
     def get_template_info(self, name: str) -> dict[str, Any]:
         """
@@ -303,6 +454,20 @@ class TemplateRegistry:
             Template information dictionary
         """
         template = self.get_template(name)
+        
+        # Categorize tools by category
+        tool_categories = {}
+        for tool in template.config.mcp_tools:
+            category = tool.category
+            if category not in tool_categories:
+                tool_categories[category] = []
+            tool_categories[category].append({
+                "name": tool.name,
+                "description": tool.description,
+                "priority": tool.priority,
+                "requirements": tool.requirements
+            })
+        
         return {
             "name": template.config.name,
             "description": template.config.description,
@@ -310,9 +475,89 @@ class TemplateRegistry:
             "version": template.config.version,
             "entities": len(template.config.entities),
             "relationships": len(template.config.relationships),
-            "mcp_tools": len(template.config.mcp_tools)
+            "mcp_tools": len(template.config.mcp_tools),
+            "tool_categories": tool_categories,
+            "supported_formats": template.config.supported_formats,
+            "workflow_phases": template.config.workflow_phases,
+            "output_formats": template.config.output_formats,
+            "metadata": template.config.metadata
         }
 
+
+# Enhanced template utility functions
+def create_tool_config(name: str, description: str, parameters: dict[str, Any], 
+                       category: str = "general", priority: int = 1, 
+                       implementation: str = "default", **kwargs) -> MCPToolConfig:
+    """
+    Create a standardized MCP tool configuration.
+    
+    Args:
+        name: Tool name
+        description: Tool description
+        parameters: Tool parameters
+        category: Tool category
+        priority: Tool priority
+        implementation: Implementation strategy
+        **kwargs: Additional configuration options
+        
+    Returns:
+        MCPToolConfig instance
+    """
+    return MCPToolConfig(
+        name=name,
+        description=description,
+        parameters=parameters,
+        category=category,
+        priority=priority,
+        implementation=implementation,
+        requirements=kwargs.get("requirements", []),
+        examples=kwargs.get("examples", []),
+        validation_rules=kwargs.get("validation_rules", {}),
+        performance_hints=kwargs.get("performance_hints", {})
+    )
+
+def create_entity_config(name: str, description: str, max_entities: int = 10, 
+                        examples: list[str] = None) -> EntityConfig:
+    """
+    Create a standardized entity configuration.
+    
+    Args:
+        name: Entity name
+        description: Entity description
+        max_entities: Maximum entities to extract
+        examples: Example entities
+        
+    Returns:
+        EntityConfig instance
+    """
+    return EntityConfig(
+        name=name,
+        description=description,
+        max_entities=max_entities,
+        examples=examples or []
+    )
+
+def create_relationship_config(name: str, description: str, 
+                             source_entities: list[str] = None,
+                             target_entities: list[str] = None) -> RelationshipConfig:
+    """
+    Create a standardized relationship configuration.
+    
+    Args:
+        name: Relationship name
+        description: Relationship description
+        source_entities: Valid source entity types
+        target_entities: Valid target entity types
+        
+    Returns:
+        RelationshipConfig instance
+    """
+    return RelationshipConfig(
+        name=name,
+        description=description,
+        source_entities=source_entities or ["any"],
+        target_entities=target_entities or ["any"]
+    )
 
 # Global template registry
 template_registry = TemplateRegistry()

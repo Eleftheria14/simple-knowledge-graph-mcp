@@ -8,13 +8,15 @@ These tools prioritize accuracy, citation management, and formal writing standar
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fastmcp import Context
 from pydantic import BaseModel, Field
 
 from ..core.citation_manager import CitationTracker
 from ..core.query_engine import EnhancedQueryEngine
+from ..utils.error_handling import ProcessingError
+from .base import StandardizedToolEngine, standard_mcp_tool, MCPToolType
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class LiteratureOutline(BaseModel):
     writing_guidance: list[str] = Field(default_factory=list)
 
 
-class LiteratureToolsEngine:
+class LiteratureToolsEngine(StandardizedToolEngine):
     """
     Engine for formal literature review writing tools.
     
@@ -78,16 +80,22 @@ class LiteratureToolsEngine:
     """
 
     def __init__(self,
-                 query_engine: EnhancedQueryEngine | None = None,
-                 citation_manager: CitationTracker | None = None,
+                 query_engine: Optional[EnhancedQueryEngine] = None,
+                 citation_manager: Optional[CitationTracker] = None,
                  document_store=None,
-                 knowledge_graph=None):
+                 knowledge_graph=None,
+                 api_processor=None):
         """Initialize literature review tools engine"""
+        super().__init__(api_processor=api_processor, citation_manager=citation_manager)
+        
         self.query_engine = query_engine or EnhancedQueryEngine()
-        self.citation_manager = citation_manager or CitationTracker()
+        # Use the shared citation manager from parent if available
+        if not self.citation_manager:
+            self.citation_manager = citation_manager or CitationTracker()
         self.document_store = document_store
         self.knowledge_graph = knowledge_graph
 
+    @standard_mcp_tool("gather_sources_for_topic", MCPToolType.LITERATURE)
     async def gather_sources_for_topic(self,
                                      topic: str,
                                      scope: str = "comprehensive",
@@ -178,7 +186,7 @@ class LiteratureToolsEngine:
             return {
                 "success": True,
                 "topic": topic,
-                "source_gathering": source_gathering.dict(),
+                "source_gathering": source_gathering.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "queries_executed": len(search_queries),
@@ -189,17 +197,9 @@ class LiteratureToolsEngine:
 
         except Exception as e:
             logger.error(f"Source gathering failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "topic": topic,
-                "source_gathering": {
-                    "coverage_assessment": f"Failed to gather sources: {str(e)}",
-                    "total_sources": 0,
-                    "confidence": 0.0
-                }
-            }
+            raise ProcessingError(f"Source gathering failed: {str(e)}", {"topic": topic})
 
+    @standard_mcp_tool("get_facts_with_citations", MCPToolType.LITERATURE)
     async def get_facts_with_citations(self,
                                      topic: str,
                                      section: str | None = None,
@@ -275,7 +275,7 @@ class LiteratureToolsEngine:
                 "success": True,
                 "topic": topic,
                 "section": section,
-                "cited_facts": facts_result.dict(),
+                "cited_facts": facts_result.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "facts_generated": len(organized_facts),
@@ -286,17 +286,9 @@ class LiteratureToolsEngine:
 
         except Exception as e:
             logger.error(f"Cited facts generation failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "topic": topic,
-                "cited_facts": {
-                    "facts": [],
-                    "total_citations": 0,
-                    "confidence": 0.0
-                }
-            }
+            raise ProcessingError(f"Cited facts generation failed: {str(e)}", {"topic": topic, "section": section})
 
+    @standard_mcp_tool("verify_claim_with_sources", MCPToolType.LITERATURE)
     async def verify_claim_with_sources(self,
                                       claim: str,
                                       evidence_strength: str = "strong",
@@ -338,7 +330,7 @@ class LiteratureToolsEngine:
             return {
                 "success": True,
                 "claim": claim,
-                "verification": verification.dict(),
+                "verification": verification.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "evidence_strength": evidence_strength,
@@ -350,17 +342,9 @@ class LiteratureToolsEngine:
 
         except Exception as e:
             logger.error(f"Claim verification failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "claim": claim,
-                "verification": {
-                    "verification_status": "error",
-                    "recommendation": f"Unable to verify claim: {str(e)}",
-                    "confidence": 0.0
-                }
-            }
+            raise ProcessingError(f"Claim verification failed: {str(e)}", {"claim": claim, "evidence_strength": evidence_strength})
 
+    @standard_mcp_tool("get_topic_outline", MCPToolType.LITERATURE)
     async def get_topic_outline(self,
                               topic: str,
                               section_type: str = "full_review",
@@ -403,7 +387,7 @@ class LiteratureToolsEngine:
                 "success": True,
                 "topic": topic,
                 "section_type": section_type,
-                "outline": outline.dict(),
+                "outline": outline.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "outline_sections": len(populated_outline),
@@ -414,17 +398,9 @@ class LiteratureToolsEngine:
 
         except Exception as e:
             logger.error(f"Outline generation failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "topic": topic,
-                "outline": {
-                    "outline_structure": [],
-                    "estimated_length": "Unable to estimate",
-                    "writing_guidance": [f"Outline generation failed: {str(e)}"]
-                }
-            }
+            raise ProcessingError(f"Outline generation failed: {str(e)}", {"topic": topic, "section_type": section_type})
 
+    @standard_mcp_tool("track_citations_used", MCPToolType.LITERATURE)
     async def track_citations_used(self,
                                  citation_keys: list[str],
                                  context: str | None = None,
@@ -490,12 +466,48 @@ class LiteratureToolsEngine:
 
         except Exception as e:
             logger.error(f"Citation tracking failed: {e}")
+            raise ProcessingError(f"Citation tracking failed: {str(e)}", {"citation_keys": citation_keys, "context": context})
+
+    @standard_mcp_tool("generate_bibliography", MCPToolType.LITERATURE)
+    async def generate_bibliography(self,
+                                  style: str = "APA",
+                                  used_only: bool = True,
+                                  ctx: Optional[Context] = None) -> dict[str, Any]:
+        """
+        Generate a properly formatted bibliography from tracked citations.
+        
+        Creates academic bibliography in specified style with proper formatting
+        for use in literature reviews and research papers.
+        """
+        try:
+            if ctx:
+                ctx.info(f"Generating bibliography in {style} style")
+
+            # Generate bibliography using citation manager
+            bibliography = self.citation_manager.generate_bibliography(
+                style=style,
+                used_only=used_only
+            )
+
+            # Get citation statistics
+            stats = self.citation_manager.get_citation_statistics()
+
             return {
-                "success": False,
-                "error": str(e),
-                "tracking_results": {"successful": 0, "failed": len(citation_keys)},
-                "tracked_citations": []
+                "success": True,
+                "bibliography": bibliography,
+                "style": style,
+                "used_only": used_only,
+                "metadata": {
+                    "total_citations": stats.get("total_citations", 0),
+                    "used_citations": stats.get("used_citations", 0),
+                    "unused_citations": stats.get("unused_citations", 0),
+                    "style": style
+                }
             }
+
+        except Exception as e:
+            logger.error(f"Bibliography generation failed: {e}")
+            raise ProcessingError(f"Bibliography generation failed: {str(e)}", {"style": style, "used_only": used_only})
 
     # Helper methods for literature review processing
 

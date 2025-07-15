@@ -8,13 +8,14 @@ natural interaction and discovery over formal citation requirements.
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fastmcp import Context
 from pydantic import BaseModel
 
 from ..core.citation_manager import CitationTracker
 from ..core.query_engine import EnhancedQueryEngine
+from .base import StandardizedToolEngine, standard_mcp_tool, MCPToolType, MCPMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class ConnectionAnalysis(BaseModel):
     related_connections: list[dict[str, str]] = []
 
 
-class ChatToolsEngine:
+class ChatToolsEngine(StandardizedToolEngine):
     """
     Engine for conversational research exploration tools.
     
@@ -64,79 +65,70 @@ class ChatToolsEngine:
     """
 
     def __init__(self,
-                 query_engine: EnhancedQueryEngine | None = None,
-                 citation_manager: CitationTracker | None = None,
+                 query_engine: Optional[EnhancedQueryEngine] = None,
+                 citation_manager: Optional[CitationTracker] = None,
                  document_store=None,
-                 knowledge_graph=None):
+                 knowledge_graph=None,
+                 api_processor=None):
         """Initialize chat tools engine"""
+        super().__init__(api_processor=api_processor, citation_manager=citation_manager)
+        
         self.query_engine = query_engine or EnhancedQueryEngine()
-        self.citation_manager = citation_manager
         self.document_store = document_store
         self.knowledge_graph = knowledge_graph
 
+    @standard_mcp_tool("ask_knowledge_graph", MCPToolType.CHAT)
     async def ask_knowledge_graph(self,
                                 question: str,
                                 depth: str = "quick",
-                                ctx: Context | None = None) -> dict[str, Any]:
+                                ctx: Optional[Context] = None) -> dict[str, Any]:
         """
         Ask natural questions about the knowledge graph and get conversational answers.
         
         This is the main conversational interface - designed to feel like chatting
         with an expert who has read all the papers in your collection.
         """
-        start_time = asyncio.get_event_loop().time()
+        if ctx:
+            ctx.info(f"Processing question: {question}")
 
-        try:
-            if ctx:
-                ctx.info(f"Processing question: {question}")
+        # Use enhanced query engine for processing
+        result = await self.query_engine.process_query(
+            query=question,
+            context={"chat_mode": True, "depth": depth},
+            response_type="conversational"
+        )
 
-            # Use enhanced query engine for processing
-            result = await self.query_engine.process_query(
-                query=question,
-                context={"chat_mode": True, "depth": depth},
-                response_type="conversational"
-            )
+        # Track citations used
+        if result.primary_results:
+            for doc in result.primary_results:
+                if hasattr(doc, 'citation_key'):
+                    self.track_citation(doc.citation_key, f"chat question: {question}")
 
-            # Format for chat interface
-            response = ChatResponse(
-                answer=result.conversational_response or "I couldn't find specific information about that question.",
-                confidence=result.confidence,
-                sources_count=len(result.primary_results),
-                related_topics=await self._extract_related_topics(result),
-                follow_up_suggestions=result.suggestions,
-                entities_mentioned=await self._extract_entities_from_response(result),
-                processing_time=asyncio.get_event_loop().time() - start_time
-            )
+        # Format for chat interface
+        response = ChatResponse(
+            answer=result.conversational_response or "I couldn't find specific information about that question.",
+            confidence=result.confidence,
+            sources_count=len(result.primary_results),
+            related_topics=await self._extract_related_topics(result),
+            follow_up_suggestions=result.suggestions,
+            entities_mentioned=await self._extract_entities_from_response(result)
+        )
 
-            return {
-                "success": True,
-                "question": question,
-                "response": response.dict(),
-                "conversation_context": {
-                    "query_type": result.query_type.value,
-                    "intent": result.intent.value,
-                    "depth": depth
-                }
+        return {
+            "question": question,
+            "response": response.model_dump(),
+            "conversation_context": {
+                "query_type": result.query_type.value,
+                "intent": result.intent.value,
+                "depth": depth
             }
+        }
 
-        except Exception as e:
-            logger.error(f"Question processing failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "question": question,
-                "response": {
-                    "answer": f"I encountered an error while processing your question: {str(e)}",
-                    "confidence": 0.0,
-                    "sources_count": 0,
-                    "processing_time": asyncio.get_event_loop().time() - start_time
-                }
-            }
-
+    @standard_mcp_tool("explore_topic", MCPToolType.CHAT)
     async def explore_topic(self,
                           topic: str,
                           scope: str = "overview",
-                          ctx: Context | None = None) -> dict[str, Any]:
+                          ctx: Optional[Context] = None) -> dict[str, Any]:
         """
         Explore a research topic to understand its key aspects and relationships.
         
@@ -193,7 +185,7 @@ class ChatToolsEngine:
                 "success": True,
                 "topic": topic,
                 "scope": scope,
-                "exploration": exploration.dict(),
+                "exploration": exploration.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "queries_executed": len(queries),
@@ -213,11 +205,12 @@ class ChatToolsEngine:
                 }
             }
 
+    @standard_mcp_tool("find_connections", MCPToolType.CHAT)
     async def find_connections(self,
                              concept_a: str,
                              concept_b: str,
-                             connection_types: list[str] | None = None,
-                             ctx: Context | None = None) -> dict[str, Any]:
+                             connection_types: Optional[list[str]] = None,
+                             ctx: Optional[Context] = None) -> dict[str, Any]:
         """
         Discover how different concepts, methods, or ideas are connected.
         
@@ -225,7 +218,7 @@ class ChatToolsEngine:
         semantic analysis.
         """
         start_time = asyncio.get_event_loop().time()
-
+        
         try:
             if ctx:
                 ctx.info(f"Finding connections between '{concept_a}' and '{concept_b}'")
@@ -246,7 +239,7 @@ class ChatToolsEngine:
                 "success": True,
                 "concept_a": concept_a,
                 "concept_b": concept_b,
-                "connection_analysis": connection_analysis.dict(),
+                "connection_analysis": connection_analysis.model_dump(),
                 "processing_time": asyncio.get_event_loop().time() - start_time,
                 "metadata": {
                     "search_results": len(result.primary_results),
@@ -267,10 +260,11 @@ class ChatToolsEngine:
                 }
             }
 
+    @standard_mcp_tool("what_do_we_know_about", MCPToolType.CHAT)
     async def what_do_we_know_about(self,
                                   topic: str,
                                   include_gaps: bool = True,
-                                  ctx: Context | None = None) -> dict[str, Any]:
+                                  ctx: Optional[Context] = None) -> dict[str, Any]:
         """
         Get a comprehensive overview of what the research says about a specific topic.
         

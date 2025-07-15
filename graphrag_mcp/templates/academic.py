@@ -14,6 +14,9 @@ from .base import (
     RelationshipConfig,
     TemplateConfig,
     template_registry,
+    create_tool_config,
+    create_entity_config,
+    create_relationship_config,
 )
 
 
@@ -112,25 +115,39 @@ class AcademicTemplate(BaseTemplate):
 
         # CHAT TOOLS - Conversational knowledge exploration
         chat_tools = [
-            MCPToolConfig(
+            create_tool_config(
                 name="ask_knowledge_graph",
                 description="Ask natural questions about the knowledge graph and get conversational answers",
                 parameters={
                     "question": {"type": "string", "description": "Your question about the research"},
                     "depth": {"type": "string", "enum": ["quick", "detailed"], "default": "quick", "description": "Response detail level"}
                 },
-                implementation="conversational_query"
+                category="chat",
+                priority=1,
+                implementation="conversational_query",
+                requirements=["query_engine", "knowledge_graph"],
+                examples=[
+                    {"question": "What are the main findings in transformer research?", "depth": "quick"},
+                    {"question": "How do attention mechanisms work?", "depth": "detailed"}
+                ]
             ),
-            MCPToolConfig(
+            create_tool_config(
                 name="explore_topic",
                 description="Explore a research topic to understand its key aspects and relationships",
                 parameters={
                     "topic": {"type": "string", "description": "Research topic to explore"},
                     "scope": {"type": "string", "enum": ["overview", "detailed", "comprehensive"], "default": "overview", "description": "Exploration scope"}
                 },
-                implementation="topic_exploration"
+                category="chat",
+                priority=1,
+                implementation="topic_exploration",
+                requirements=["query_engine"],
+                examples=[
+                    {"topic": "neural networks", "scope": "overview"},
+                    {"topic": "reinforcement learning", "scope": "comprehensive"}
+                ]
             ),
-            MCPToolConfig(
+            create_tool_config(
                 name="find_connections",
                 description="Discover how different concepts, methods, or ideas are connected",
                 parameters={
@@ -138,16 +155,30 @@ class AcademicTemplate(BaseTemplate):
                     "concept_b": {"type": "string", "description": "Second concept or idea"},
                     "connection_types": {"type": "array", "items": {"type": "string"}, "optional": True, "description": "Types of connections to look for"}
                 },
-                implementation="connection_analysis"
+                category="chat",
+                priority=2,
+                implementation="connection_analysis",
+                requirements=["query_engine", "knowledge_graph"],
+                examples=[
+                    {"concept_a": "transformers", "concept_b": "attention mechanisms"},
+                    {"concept_a": "BERT", "concept_b": "GPT", "connection_types": ["similarity", "evolution"]}
+                ]
             ),
-            MCPToolConfig(
+            create_tool_config(
                 name="what_do_we_know_about",
                 description="Get a comprehensive overview of what the research says about a specific topic",
                 parameters={
                     "topic": {"type": "string", "description": "Topic to summarize knowledge about"},
                     "include_gaps": {"type": "boolean", "default": True, "description": "Include knowledge gaps"}
                 },
-                implementation="knowledge_overview"
+                category="chat",
+                priority=1,
+                implementation="knowledge_overview",
+                requirements=["query_engine"],
+                examples=[
+                    {"topic": "machine learning interpretability", "include_gaps": True},
+                    {"topic": "quantum computing", "include_gaps": False}
+                ]
             )
         ]
 
