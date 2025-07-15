@@ -14,18 +14,25 @@ Templates:
 Key principle: Templates guide interpretation, not extraction constraints.
 """
 
-from .base import BaseTemplate, TemplateConfig, EntityConfig, RelationshipConfig, MCPToolConfig, template_registry
 from .academic import AcademicTemplate
+from .base import (
+    BaseTemplate,
+    EntityConfig,
+    MCPToolConfig,
+    RelationshipConfig,
+    TemplateConfig,
+    template_registry,
+)
 
 __all__ = [
     # Base classes
     "BaseTemplate",
-    "TemplateConfig", 
+    "TemplateConfig",
     "EntityConfig",
     "RelationshipConfig",
     "MCPToolConfig",
     "template_registry",
-    
+
     # Domain templates
     "AcademicTemplate",
 ]

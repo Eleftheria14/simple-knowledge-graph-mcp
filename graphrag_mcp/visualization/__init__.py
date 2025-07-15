@@ -14,7 +14,7 @@ interactive exploration, and professional-grade output.
 from .graphiti_yfiles import (
     GraphitiYFilesVisualizer,
     create_graphiti_yfiles_visualizer,
-    display_graphiti_knowledge_graph
+    display_graphiti_knowledge_graph,
 )
 
 # NetworkX legacy code removed - Graphiti is now the only backend
@@ -23,9 +23,9 @@ NETWORKX_VISUALIZATION_AVAILABLE = False
 __all__ = [
     # Graphiti + yFiles visualization (primary)
     'GraphitiYFilesVisualizer',
-    'create_graphiti_yfiles_visualizer', 
+    'create_graphiti_yfiles_visualizer',
     'display_graphiti_knowledge_graph',
-    
+
     # Status flags
     'NETWORKX_VISUALIZATION_AVAILABLE'
 ]
@@ -37,7 +37,7 @@ def get_available_visualizers():
         'matplotlib': True,  # Fallback visualization
         'yfiles': True  # Professional visualization
     }
-    
+
     return available
 
 def recommend_visualizer(use_case: str = "general") -> str:

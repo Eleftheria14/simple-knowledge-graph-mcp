@@ -5,11 +5,15 @@ Specialized template for academic literature review and research analysis.
 Optimized for scientific papers, citations, and research workflows.
 """
 
-from typing import Dict, List, Any
+from typing import Any
 
 from .base import (
-    BaseTemplate, TemplateConfig, EntityConfig, RelationshipConfig, 
-    MCPToolConfig, template_registry
+    BaseTemplate,
+    EntityConfig,
+    MCPToolConfig,
+    RelationshipConfig,
+    TemplateConfig,
+    template_registry,
 )
 
 
@@ -24,10 +28,10 @@ class AcademicTemplate(BaseTemplate):
     - Research gap identification
     - Cross-paper relationship discovery
     """
-    
+
     def get_template_config(self) -> TemplateConfig:
         """Get academic template configuration"""
-        
+
         # Academic domain guidance (hints, not constraints)
         # These suggest what might be important but don't limit discovery
         domain_guidance = [
@@ -38,7 +42,7 @@ class AcademicTemplate(BaseTemplate):
                 examples=["authors", "institutions", "research methods", "theories", "datasets", "metrics", "citations"]
             )
         ]
-        
+
         # Define academic relationship patterns (applied to discovered entities)
         relationships = [
             RelationshipConfig(
@@ -49,7 +53,7 @@ class AcademicTemplate(BaseTemplate):
             ),
             RelationshipConfig(
                 name="extends",
-                description="One approach extends or builds upon another", 
+                description="One approach extends or builds upon another",
                 source_entities=["any"],
                 target_entities=["any"]
             ),
@@ -81,7 +85,7 @@ class AcademicTemplate(BaseTemplate):
                 name="addresses",
                 description="Solutions addressing problems or challenges",
                 source_entities=["any"],
-                target_entities=["any"] 
+                target_entities=["any"]
             ),
             RelationshipConfig(
                 name="collaborates_with",
@@ -96,16 +100,16 @@ class AcademicTemplate(BaseTemplate):
                 target_entities=["any"]
             ),
             RelationshipConfig(
-                name="related_to", 
+                name="related_to",
                 description="General semantic relationship between entities",
                 source_entities=["any"],
                 target_entities=["any"]
             )
         ]
-        
+
         # Define MCP tools for academic domain - organized by category
         mcp_tools = []
-        
+
         # CHAT TOOLS - Conversational knowledge exploration
         chat_tools = [
             MCPToolConfig(
@@ -118,7 +122,7 @@ class AcademicTemplate(BaseTemplate):
                 implementation="conversational_query"
             ),
             MCPToolConfig(
-                name="explore_topic", 
+                name="explore_topic",
                 description="Explore a research topic to understand its key aspects and relationships",
                 parameters={
                     "topic": {"type": "string", "description": "Research topic to explore"},
@@ -146,7 +150,7 @@ class AcademicTemplate(BaseTemplate):
                 implementation="knowledge_overview"
             )
         ]
-        
+
         # LITERATURE REVIEW TOOLS - Formal writing with citations
         literature_tools = [
             MCPToolConfig(
@@ -207,8 +211,8 @@ class AcademicTemplate(BaseTemplate):
                 implementation="bibliography_generation"
             )
         ]
-        
-        # LEGACY/CORE TOOLS - Existing functionality 
+
+        # LEGACY/CORE TOOLS - Existing functionality
         core_tools = [
             MCPToolConfig(
                 name="query_papers",
@@ -257,10 +261,10 @@ class AcademicTemplate(BaseTemplate):
                 implementation="temporal_concept_analysis"
             )
         ]
-        
+
         # Combine all tools
         mcp_tools = chat_tools + literature_tools + core_tools
-        
+
         return TemplateConfig(
             name="Academic Research",
             description="Template for academic literature review and research analysis",
@@ -276,21 +280,21 @@ class AcademicTemplate(BaseTemplate):
                 "output_formats": ["structured_text", "markdown", "latex"],
                 "workflow_phases": [
                     "corpus_building",
-                    "entity_extraction", 
+                    "entity_extraction",
                     "relationship_mapping",
                     "analysis_and_synthesis",
                     "writing_and_citation"
                 ]
             }
         )
-    
-    def get_entity_schema(self) -> Dict[str, str]:
+
+    def get_entity_schema(self) -> dict[str, str]:
         """Get domain guidance for academic documents (not constraints)"""
         return {
             "academic": "academic research context - extract all entities but focus on research-related information like authors, institutions, methods, concepts, datasets, and citations"
         }
-    
-    def get_relationship_schema(self) -> List[Dict[str, Any]]:
+
+    def get_relationship_schema(self) -> list[dict[str, Any]]:
         """Get relationship schema for academic knowledge graphs"""
         return [
             {
@@ -301,8 +305,8 @@ class AcademicTemplate(BaseTemplate):
             }
             for rel in self.config.relationships
         ]
-    
-    def get_mcp_tools(self) -> List[Dict[str, Any]]:
+
+    def get_mcp_tools(self) -> list[dict[str, Any]]:
         """Get MCP tool definitions for academic domain"""
         return [
             {
@@ -313,8 +317,8 @@ class AcademicTemplate(BaseTemplate):
             }
             for tool in self.config.mcp_tools
         ]
-    
-    def generate_example_queries(self) -> List[str]:
+
+    def generate_example_queries(self) -> list[str]:
         """Generate academic-specific example queries"""
         return [
             # General academic queries
@@ -322,65 +326,65 @@ class AcademicTemplate(BaseTemplate):
             "What research methods were employed in this study?",
             "Who are the primary contributors to this field?",
             "What datasets were used for evaluation?",
-            
+
             # Literature review specific
             "How has this field evolved over time?",
             "What are the current limitations and challenges?",
             "Which approaches have been most successful?",
             "What gaps exist in the current research?",
-            
+
             # Methodology focused
             "Compare the different approaches to solving this problem",
             "What evaluation metrics are commonly used?",
             "How do the proposed methods differ from existing work?",
             "What are the theoretical foundations of these approaches?",
-            
+
             # Citation and evidence
             "Find evidence for the claim that deep learning outperforms traditional methods",
             "What papers support the use of transformer architectures?",
             "Show me the citation trail for this specific technique",
             "Verify the accuracy of this performance benchmark"
         ]
-    
-    def validate_document(self, document_path: str) -> Dict[str, Any]:
+
+    def validate_document(self, document_path: str) -> dict[str, Any]:
         """Validate document for academic template"""
         result = super().validate_document(document_path)
-        
+
         if not result["valid"]:
             return result
-        
+
         # Additional academic-specific validation
         from pathlib import Path
         path = Path(document_path)
-        
+
         # Check for academic indicators in filename
         academic_indicators = [
-            "arxiv", "paper", "research", "study", "analysis", 
+            "arxiv", "paper", "research", "study", "analysis",
             "conference", "journal", "proceedings"
         ]
-        
+
         filename_lower = path.stem.lower()
         has_academic_indicators = any(
             indicator in filename_lower for indicator in academic_indicators
         )
-        
+
         if has_academic_indicators:
             result["score"] = min(result["score"] + 0.1, 1.0)
             result["messages"].append("Filename suggests academic content")
-        
+
         # Add academic-specific recommendations
         result["recommendations"].extend([
             "Ensure document contains citations and references",
             "Check for methodology and results sections",
             "Verify author and institution information is present"
         ])
-        
+
         return result
-    
-    def get_processing_config(self) -> Dict[str, Any]:
+
+    def get_processing_config(self) -> dict[str, Any]:
         """Get academic-specific processing configuration"""
         config = super().get_processing_config()
-        
+
         # Academic-specific settings
         config.update({
             "citation_extraction": True,
@@ -391,7 +395,7 @@ class AcademicTemplate(BaseTemplate):
             "academic_entity_priority": ["authors", "methods", "concepts", "institutions"],
             "literature_review_mode": True
         })
-        
+
         return config
 
 

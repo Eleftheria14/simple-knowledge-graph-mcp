@@ -5,21 +5,19 @@ Replaces NetworkX with Graphiti for real-time, persistent knowledge graphs
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
-import json
-from pathlib import Path
+from typing import Any
 
 # Graphiti core imports
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
-from graphiti_core.llm_client import OpenAIClient, LLMConfig
 from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
+from graphiti_core.nodes import EpisodeType
 
 # LangChain imports for document processing
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +26,10 @@ class GraphitiKnowledgeGraph:
     Advanced knowledge graph system using Graphiti and Neo4j
     Provides real-time, persistent knowledge graphs for document analysis
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  neo4j_uri: str = "bolt://localhost:7687",
-                 neo4j_user: str = "neo4j", 
+                 neo4j_user: str = "neo4j",
                  neo4j_password: str = "password",
                  ollama_base_url: str = "http://localhost:11434/v1",
                  llm_model: str = "llama3.1:8b",
@@ -53,24 +51,24 @@ class GraphitiKnowledgeGraph:
         self.ollama_base_url = ollama_base_url
         self.llm_model = llm_model
         self.embedding_model = embedding_model
-        
+
         # Initialize Graphiti components
         self.graphiti = None
         self.llm_client = None
         self.embedder = None
-        
+
         # Document processing
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len
         )
-        
+
         # Track processed documents
         self.processed_documents = {}
-        
+
         logger.info(f"Initialized GraphitiKnowledgeGraph with Neo4j: {neo4j_uri}")
-    
+
     async def initialize(self):
         """Initialize Graphiti connection and components"""
         try:
@@ -78,7 +76,7 @@ class GraphitiKnowledgeGraph:
             import os
             os.environ['OPENAI_API_KEY'] = 'ollama'
             os.environ['OPENAI_BASE_URL'] = self.ollama_base_url
-            
+
             # Create LLM configuration for Ollama
             llm_config = LLMConfig(
                 api_key='ollama',
@@ -88,20 +86,20 @@ class GraphitiKnowledgeGraph:
                 temperature=0.1,
                 max_tokens=4096
             )
-            
+
             # Create LLM client
             self.llm_client = OpenAIClient(llm_config)
-            
+
             # Create embedder configuration
             embedder_config = OpenAIEmbedderConfig(
                 api_key='ollama',
                 base_url=self.ollama_base_url,
                 embedding_model=self.embedding_model
             )
-            
+
             # Create embedder client
             self.embedder = OpenAIEmbedder(embedder_config)
-            
+
             # Initialize Graphiti
             self.graphiti = Graphiti(
                 uri=self.neo4j_uri,
@@ -110,21 +108,21 @@ class GraphitiKnowledgeGraph:
                 llm_client=self.llm_client,
                 embedder=self.embedder
             )
-            
+
             # Build database indices and constraints
             await self.graphiti.build_indices_and_constraints()
-            
+
             logger.info("✅ Graphiti knowledge graph initialized successfully")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to initialize Graphiti: {e}")
             return False
-    
-    async def add_document(self, 
+
+    async def add_document(self,
                           document_content: str,
                           document_id: str,
-                          metadata: Dict[str, Any] = None,
+                          metadata: dict[str, Any] = None,
                           source_description: str = "Academic paper") -> bool:
         """
         Add a document to the knowledge graph
@@ -141,14 +139,14 @@ class GraphitiKnowledgeGraph:
         try:
             if not self.graphiti:
                 await self.initialize()
-            
+
             # Split document into chunks for processing
             chunks = self.text_splitter.split_text(document_content)
-            
+
             # Process each chunk as an episode
             for i, chunk in enumerate(chunks):
                 episode_name = f"{document_id}_chunk_{i}"
-                
+
                 # Create episode with metadata
                 episode_body = {
                     "content": chunk,
@@ -157,7 +155,7 @@ class GraphitiKnowledgeGraph:
                     "total_chunks": len(chunks),
                     "metadata": metadata or {}
                 }
-                
+
                 # Add episode to Graphiti
                 await self.graphiti.add_episode(
                     name=episode_name,
@@ -166,24 +164,24 @@ class GraphitiKnowledgeGraph:
                     source_description=f"{source_description} - Chunk {i+1}/{len(chunks)}",
                     reference_time=datetime.now()
                 )
-            
+
             # Track processed document
             self.processed_documents[document_id] = {
                 "chunks": len(chunks),
                 "metadata": metadata,
                 "processed_at": datetime.now().isoformat()
             }
-            
+
             logger.info(f"✅ Added document {document_id} with {len(chunks)} chunks")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to add document {document_id}: {e}")
             return False
-    
-    async def search_knowledge_graph(self, 
+
+    async def search_knowledge_graph(self,
                                    query: str,
-                                   max_results: int = 10) -> List[Dict[str, Any]]:
+                                   max_results: int = 10) -> list[dict[str, Any]]:
         """
         Search the knowledge graph for relevant content
         
@@ -197,10 +195,10 @@ class GraphitiKnowledgeGraph:
         try:
             if not self.graphiti:
                 await self.initialize()
-            
+
             # Perform hybrid search using Graphiti
             search_results = await self.graphiti.search(query=query)
-            
+
             # Process and format results
             formatted_results = []
             for result in search_results[:max_results]:
@@ -255,17 +253,17 @@ class GraphitiKnowledgeGraph:
                         "score": getattr(result, 'score', None),
                         "result_type": "unknown"
                     }
-                
+
                 formatted_results.append(formatted_result)
-            
+
             logger.info(f"🔍 Search for '{query}' returned {len(formatted_results)} results")
             return formatted_results
-            
+
         except Exception as e:
             logger.error(f"❌ Search failed for query '{query}': {e}")
             return []
-    
-    async def get_entity_relationships(self, entity_name: str) -> List[Dict[str, Any]]:
+
+    async def get_entity_relationships(self, entity_name: str) -> list[dict[str, Any]]:
         """
         Get relationships for a specific entity
         
@@ -278,10 +276,10 @@ class GraphitiKnowledgeGraph:
         try:
             if not self.graphiti:
                 await self.initialize()
-            
+
             # Search for the entity
             entity_results = await self.graphiti.search(query=entity_name)
-            
+
             relationships = []
             for result in entity_results:
                 # Get related entities through graph traversal
@@ -293,15 +291,15 @@ class GraphitiKnowledgeGraph:
                     "episode_name": result.name,
                     "created_at": result.created_at.isoformat() if result.created_at else None
                 })
-            
+
             logger.info(f"🔗 Found {len(relationships)} relationships for '{entity_name}'")
             return relationships
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get relationships for '{entity_name}': {e}")
             return []
-    
-    async def get_document_summary(self, document_id: str) -> Dict[str, Any]:
+
+    async def get_document_summary(self, document_id: str) -> dict[str, Any]:
         """
         Get summary information for a processed document
         
@@ -314,25 +312,25 @@ class GraphitiKnowledgeGraph:
         try:
             if document_id not in self.processed_documents:
                 return {"error": f"Document {document_id} not found"}
-            
+
             doc_info = self.processed_documents[document_id]
-            
+
             # Search for all chunks of this document
             search_results = await self.search_knowledge_graph(
                 query=f"document_id:{document_id}",
                 max_results=doc_info["chunks"]
             )
-            
+
             # Extract entities and concepts from search results
             entities = set()
             concepts = set()
-            
+
             for result in search_results:
                 # Simple entity extraction from content
                 # In production, this would use more sophisticated NLP
                 content = result.get("content", "")
                 # Add basic entity extraction logic here
-                
+
             return {
                 "document_id": document_id,
                 "chunks_processed": doc_info["chunks"],
@@ -342,12 +340,12 @@ class GraphitiKnowledgeGraph:
                 "concepts_found": len(concepts),
                 "total_content_length": sum(len(r.get("content", "")) for r in search_results)
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get summary for document {document_id}: {e}")
             return {"error": str(e)}
-    
-    async def get_knowledge_graph_stats(self) -> Dict[str, Any]:
+
+    async def get_knowledge_graph_stats(self) -> dict[str, Any]:
         """
         Get statistics about the knowledge graph
         
@@ -357,7 +355,7 @@ class GraphitiKnowledgeGraph:
         try:
             if not self.graphiti:
                 await self.initialize()
-            
+
             # Get basic statistics
             stats = {
                 "total_documents": len(self.processed_documents),
@@ -367,7 +365,7 @@ class GraphitiKnowledgeGraph:
                 "embedding_model": self.embedding_model,
                 "last_updated": datetime.now().isoformat()
             }
-            
+
             # Add document processing summary
             if self.processed_documents:
                 stats["documents"] = [
@@ -379,13 +377,13 @@ class GraphitiKnowledgeGraph:
                     }
                     for doc_id, doc_info in self.processed_documents.items()
                 ]
-            
+
             return stats
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get knowledge graph stats: {e}")
             return {"error": str(e)}
-    
+
     async def close(self):
         """Close Graphiti connection"""
         try:
@@ -413,17 +411,17 @@ async def create_graphiti_knowledge_graph(**kwargs) -> GraphitiKnowledgeGraph:
 # Example usage
 async def main():
     """Example usage of GraphitiKnowledgeGraph"""
-    
+
     # Initialize knowledge graph
     kg = await create_graphiti_knowledge_graph()
-    
+
     # Add a test document
     test_content = """
     This is a research paper about machine learning for drug discovery.
     The paper discusses graph neural networks and their application to molecular property prediction.
     Key findings include improved accuracy using transformer-based architectures.
     """
-    
+
     await kg.add_document(
         document_content=test_content,
         document_id="test_paper_001",
@@ -433,19 +431,19 @@ async def main():
             "year": 2024
         }
     )
-    
+
     # Search the knowledge graph
     results = await kg.search_knowledge_graph("machine learning")
     print(f"Search results: {len(results)}")
-    
+
     # Get document summary
     summary = await kg.get_document_summary("test_paper_001")
     print(f"Document summary: {summary}")
-    
+
     # Get graph statistics
     stats = await kg.get_knowledge_graph_stats()
     print(f"Graph stats: {stats}")
-    
+
     # Close connection
     await kg.close()
 

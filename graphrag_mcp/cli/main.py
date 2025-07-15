@@ -5,23 +5,22 @@ Typer-based command-line interface for creating, managing, and deploying
 GraphRAG MCP servers across different domains.
 """
 
+import json
 import logging
 from pathlib import Path
-from typing import Optional, List
-import json
 
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.prompt import Confirm
-
-# Core components
-from ..core import DocumentProcessor, AdvancedAnalyzer, OllamaEngine
 
 # Configuration
 from pydantic import BaseModel
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.prompt import Confirm
+from rich.table import Table
+
+# Core components
+from ..core import AdvancedAnalyzer, OllamaEngine
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +40,7 @@ console = Console()
 # CLI State
 class CLIState(BaseModel):
     """CLI application state"""
-    current_project: Optional[str] = None
+    current_project: str | None = None
     config_dir: Path = Path.home() / ".graphrag-mcp"
     projects_dir: Path = Path.home() / ".graphrag-mcp" / "projects"
     templates_dir: Path = Path.home() / ".graphrag-mcp" / "templates"
@@ -52,7 +51,7 @@ cli_state = CLIState()
 @app.callback()
 def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    config_dir: Optional[str] = typer.Option(None, "--config-dir", help="Custom config directory")
+    config_dir: str | None = typer.Option(None, "--config-dir", help="Custom config directory")
 ):
     """
     GraphRAG MCP Toolkit - Transform documents into domain-specific AI assistants.
@@ -60,12 +59,12 @@ def main(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
         console.print("🔍 Verbose mode enabled", style="dim")
-    
+
     if config_dir:
         cli_state.config_dir = Path(config_dir)
         cli_state.projects_dir = cli_state.config_dir / "projects"
         cli_state.templates_dir = cli_state.config_dir / "templates"
-    
+
     # Ensure directories exist
     cli_state.config_dir.mkdir(exist_ok=True)
     cli_state.projects_dir.mkdir(exist_ok=True)
@@ -76,7 +75,7 @@ def main(
 def create(
     name: str = typer.Argument(..., help="Name of the assistant to create"),
     template: str = typer.Option("academic", "--template", "-t", help="Domain template to use"),
-    directory: Optional[str] = typer.Option(None, "--directory", "-d", help="Project directory"),
+    directory: str | None = typer.Option(None, "--directory", "-d", help="Project directory"),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing project")
 ):
     """
@@ -89,31 +88,31 @@ def create(
         graphrag-mcp create legal-helper --template legal --directory ./my-projects
     """
     console.print(f"🚀 Creating new assistant: [bold blue]{name}[/bold blue]")
-    
+
     # Determine project directory
     if directory:
         project_dir = Path(directory) / name
     else:
         project_dir = cli_state.projects_dir / name
-    
+
     # Check if project exists
     if project_dir.exists() and not force:
         if not Confirm.ask(f"Project '{name}' already exists. Overwrite?"):
             console.print("❌ Project creation cancelled", style="red")
             raise typer.Exit(1)
-    
+
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        
+
         # Task 1: Validate template
         task1 = progress.add_task("Validating template...", total=None)
-        
+
         available_templates = _get_available_templates()
         if template not in available_templates:
             progress.update(task1, description="❌ Template validation failed")
@@ -122,20 +121,20 @@ def create(
             for tmpl in available_templates:
                 console.print(f"  • {tmpl}")
             raise typer.Exit(1)
-        
+
         progress.update(task1, description="✅ Template validated")
-        
+
         # Task 2: Create project structure
         task2 = progress.add_task("Creating project structure...", total=None)
-        
+
         # Create project files
         _create_project_structure(project_dir, name, template)
-        
+
         progress.update(task2, description="✅ Project structure created")
-        
+
         # Task 3: Initialize configuration
         task3 = progress.add_task("Initializing configuration...", total=None)
-        
+
         project_config = {
             "name": name,
             "template": template,
@@ -148,13 +147,13 @@ def create(
                 "enabled": False
             }
         }
-        
+
         config_file = project_dir / "config.json"
         with open(config_file, 'w') as f:
             json.dump(project_config, f, indent=2)
-        
+
         progress.update(task3, description="✅ Configuration initialized")
-    
+
     # Success message
     console.print()
     panel = Panel.fit(
@@ -174,8 +173,8 @@ def create(
 @app.command("templates")
 def templates_command(
     list_templates: bool = typer.Option(True, "--list", "-l", help="List available templates"),
-    info: Optional[str] = typer.Option(None, "--info", "-i", help="Show template info"),
-    install: Optional[str] = typer.Option(None, "--install", help="Install template from URL/path")
+    info: str | None = typer.Option(None, "--info", "-i", help="Show template info"),
+    install: str | None = typer.Option(None, "--install", help="Install template from URL/path")
 ):
     """
     Manage domain templates.
@@ -190,11 +189,11 @@ def templates_command(
         console.print(f"📥 Installing template from: {install}")
         console.print("⚠️  Template installation not yet implemented", style="yellow")
         return
-    
+
     if info:
         _show_template_info(info)
         return
-    
+
     if list_templates:
         _list_templates()
 
@@ -202,7 +201,7 @@ def templates_command(
 @app.command("add-documents")
 def add_documents(
     project: str = typer.Argument(..., help="Project name"),
-    paths: List[str] = typer.Argument(..., help="Document paths to add"),
+    paths: list[str] = typer.Argument(..., help="Document paths to add"),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Scan directories recursively")
 ):
     """
@@ -215,40 +214,40 @@ def add_documents(
         graphrag-mcp add-documents legal-helper ./documents/ --recursive
     """
     console.print(f"📄 Adding documents to project: [bold blue]{project}[/bold blue]")
-    
+
     project_dir = _get_project_dir(project)
     if not project_dir:
         return
-    
+
     # Create documents directory
     docs_dir = project_dir / "documents"
     docs_dir.mkdir(exist_ok=True)
-    
+
     added_files = []
-    
+
     for path_str in paths:
         path = Path(path_str)
-        
+
         if path.is_file() and path.suffix.lower() == '.pdf':
             # Copy single PDF file
             dest = docs_dir / path.name
             dest.write_bytes(path.read_bytes())
             added_files.append(dest)
-            
+
         elif path.is_dir() and recursive:
             # Scan directory for PDFs
             for pdf_file in path.rglob("*.pdf"):
                 dest = docs_dir / pdf_file.name
                 dest.write_bytes(pdf_file.read_bytes())
                 added_files.append(dest)
-        
+
         elif path.is_dir():
             # Scan directory (non-recursive)
             for pdf_file in path.glob("*.pdf"):
                 dest = docs_dir / pdf_file.name
                 dest.write_bytes(pdf_file.read_bytes())
                 added_files.append(dest)
-    
+
     if added_files:
         console.print(f"✅ Added {len(added_files)} documents:")
         for doc in added_files:
@@ -280,21 +279,21 @@ def process(
         graphrag-mcp process my-research --graphiti-only
     """
     console.print(f"⚙️  Processing project: [bold blue]{project}[/bold blue]")
-    
+
     project_dir = _get_project_dir(project)
     if not project_dir:
         return
-    
+
     docs_dir = project_dir / "documents"
     if not docs_dir.exists():
         console.print("❌ No documents directory found. Add documents first.", style="red")
         return
-    
+
     pdf_files = list(docs_dir.glob("*.pdf"))
     if not pdf_files:
         console.print("❌ No PDF documents found. Add documents first.", style="red")
         return
-    
+
     # Load project config to get template
     config_file = project_dir / "config.json"
     template = "academic"  # Default
@@ -302,25 +301,25 @@ def process(
         with open(config_file) as f:
             config = json.load(f)
             template = config.get('template', 'academic')
-    
+
     console.print(f"📋 Template: {template}")
     console.print(f"📁 Documents: {len(pdf_files)} PDF files")
-    console.print(f"🧠 Knowledge Graph: Persistent Graphiti/Neo4j")
-    
+    console.print("🧠 Knowledge Graph: Persistent Graphiti/Neo4j")
+
     # Initialize components
     analyzer = AdvancedAnalyzer()
-    
+
     # Create output directory
     output_dir = project_dir / "processed"
     output_dir.mkdir(exist_ok=True)
-    
+
     # Initialize Graphiti with project namespace
     async def process_with_graphiti():
         from ..core.graphiti_engine import GraphitiKnowledgeGraph
-        
+
         # Create project-specific Graphiti instance
         graphiti_engine = GraphitiKnowledgeGraph()
-        
+
         # Initialize Graphiti connection
         console.print("🔌 Connecting to Neo4j/Graphiti...")
         init_success = await graphiti_engine.initialize()
@@ -328,15 +327,15 @@ def process(
             console.print("❌ Failed to connect to Neo4j. Make sure Neo4j is running.", style="red")
             console.print("💡 Start Neo4j: make setup-neo4j", style="yellow")
             return False
-        
+
         console.print("✅ Connected to Graphiti knowledge graph")
-        
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            
+
             # Track processed documents for this project
             project_metadata = {
                 "project_name": project,
@@ -345,16 +344,16 @@ def process(
                 "documents_processed": [],
                 "graphiti_stats": {}
             }
-            
+
             for i, pdf_file in enumerate(pdf_files):
                 task = progress.add_task(f"Processing {pdf_file.name}...", total=None)
-                
+
                 try:
                     # Check if already processed (JSON file exists)
                     output_file = output_dir / f"{pdf_file.stem}.json"
                     if output_file.exists() and not force:
                         progress.update(task, description=f"⏭️  Skipping {pdf_file.name} (already processed)")
-                        
+
                         # Load existing metadata
                         with open(output_file) as f:
                             existing_data = json.load(f)
@@ -365,14 +364,14 @@ def process(
                                 "title": existing_data.get("title", pdf_file.stem)
                             })
                         continue
-                    
+
                     progress.update(task, description=f"📄 Analyzing {pdf_file.name}...")
-                    
+
                     # Analyze document
                     corpus_doc = analyzer.analyze_for_corpus(str(pdf_file))
-                    
-                    progress.update(task, description=f"🧠 Adding to knowledge graph...")
-                    
+
+                    progress.update(task, description="🧠 Adding to knowledge graph...")
+
                     # Add to Graphiti knowledge graph
                     success = await graphiti_engine.add_document(
                         document_content=corpus_doc.content,
@@ -388,15 +387,15 @@ def process(
                         },
                         source_description=f"{template} document from {project} project"
                     )
-                    
+
                     if success:
                         progress.update(task, description=f"✅ Added to knowledge graph: {pdf_file.name}")
-                        
+
                         # Save JSON metadata (unless graphiti-only mode)
                         if not graphiti_only:
                             with open(output_file, 'w') as f:
                                 json.dump(corpus_doc.model_dump(), f, indent=2)
-                        
+
                         # Update project metadata
                         project_metadata["documents_processed"].append({
                             "filename": pdf_file.name,
@@ -406,14 +405,14 @@ def process(
                             "entities_count": len(corpus_doc.entities),
                             "graphiti_success": True
                         })
-                        
+
                     else:
                         progress.update(task, description=f"⚠️  Knowledge graph failed, saved locally: {pdf_file.name}")
-                        
+
                         # Save JSON as fallback
                         with open(output_file, 'w') as f:
                             json.dump(corpus_doc.model_dump(), f, indent=2)
-                        
+
                         project_metadata["documents_processed"].append({
                             "filename": pdf_file.name,
                             "document_id": pdf_file.stem,
@@ -421,17 +420,17 @@ def process(
                             "title": corpus_doc.title,
                             "graphiti_success": False
                         })
-                
+
                 except Exception as e:
                     progress.update(task, description=f"❌ Failed {pdf_file.name}: {str(e)}")
                     logger.error(f"Processing failed for {pdf_file}: {e}")
-                    
+
                     project_metadata["documents_processed"].append({
                         "filename": pdf_file.name,
                         "status": "failed",
                         "error": str(e)
                     })
-            
+
             # Get Graphiti statistics
             try:
                 stats = await graphiti_engine.get_graph_stats()
@@ -439,12 +438,12 @@ def process(
                 console.print(f"📊 Knowledge Graph Stats: {stats.get('total_nodes', 0)} nodes, {stats.get('total_edges', 0)} relationships")
             except Exception as e:
                 logger.warning(f"Could not get Graphiti stats: {e}")
-            
+
             # Save project processing metadata
             metadata_file = project_dir / "processing_metadata.json"
             with open(metadata_file, 'w') as f:
                 json.dump(project_metadata, f, indent=2)
-            
+
             # Update project config
             if config_file.exists():
                 with open(config_file) as f:
@@ -454,15 +453,15 @@ def process(
                 config["graphiti_enabled"] = True
                 with open(config_file, 'w') as f:
                     json.dump(config, f, indent=2)
-        
+
         await graphiti_engine.close()
         return True
-    
+
     # Run async processing
     try:
         import asyncio
         success = asyncio.run(process_with_graphiti())
-        
+
         if success:
             processed_count = len([f for f in pdf_files])
             console.print()
@@ -478,7 +477,7 @@ def process(
             ))
         else:
             console.print("❌ Processing failed. Check Neo4j connection.", style="red")
-            
+
     except Exception as e:
         console.print(f"❌ Processing failed: {e}", style="red")
         logger.error(f"Async processing failed: {e}")
@@ -505,22 +504,22 @@ def serve(
         graphrag-mcp serve legal-helper --port 8081 --transport stdio
     """
     console.print(f"🚀 Starting Graphiti MCP server for: [bold blue]{project}[/bold blue]")
-    
+
     project_dir = _get_project_dir(project)
     if not project_dir:
         return
-    
+
     # Check if project has been processed
     metadata_file = project_dir / "processing_metadata.json"
     if not metadata_file.exists():
         console.print("❌ No processing metadata found. Run 'process' first.", style="red")
         console.print("💡 Process documents: [code]graphrag-mcp process {project}[/code]", style="yellow")
         return
-    
+
     # Load project metadata
     with open(metadata_file) as f:
         metadata = json.load(f)
-    
+
     # Load project config
     config_file = project_dir / "config.json"
     if config_file.exists():
@@ -531,35 +530,35 @@ def serve(
     else:
         template = 'academic'
         graphiti_enabled = False
-    
+
     if not graphiti_enabled:
         console.print("⚠️  Project not processed with Graphiti. Run 'process' with current version.", style="yellow")
         console.print("💡 Reprocess: [code]graphrag-mcp process {project} --force[/code]", style="yellow")
-    
+
     # Display server info
     documents_in_graph = metadata.get("documents_processed", [])
     successful_docs = [d for d in documents_in_graph if d.get("graphiti_success", False)]
-    
+
     console.print(f"📋 Server: {host}:{port} ({transport})")
     console.print(f"🎯 Template: {template}")
-    console.print(f"🧠 Knowledge Graph: Neo4j/Graphiti")
+    console.print("🧠 Knowledge Graph: Neo4j/Graphiti")
     console.print(f"📊 Documents in Graph: {len(successful_docs)}/{len(documents_in_graph)}")
-    
+
     if metadata.get("graphiti_stats"):
         stats = metadata["graphiti_stats"]
         console.print(f"📈 Graph Stats: {stats.get('total_nodes', 0)} nodes, {stats.get('total_edges', 0)} relationships")
-    
+
     if background:
         console.print("⚠️  Background mode not yet implemented", style="yellow")
         return
-    
+
     # Start Graphiti MCP server
     async def start_graphiti_server():
         try:
             from ..mcp.graphiti_server import GraphitiMCPServer
-            
+
             console.print("🔌 Connecting to Graphiti knowledge graph...")
-            
+
             # Create Graphiti MCP server with project context
             server = GraphitiMCPServer(
                 name=f"GraphRAG {project.title()} Assistant",
@@ -567,14 +566,14 @@ def serve(
                 host=host,
                 port=port
             )
-            
+
             # Initialize server and connect to existing Graphiti graph
             await server.initialize()
-            
+
             # Set project context for queries
             server.project_name = project
             server.template_name = template
-            
+
             console.print("✅ Connected to knowledge graph")
             console.print()
             console.print(Panel.fit(
@@ -589,22 +588,22 @@ def serve(
                 title="🎯 Server Ready",
                 border_style="green"
             ))
-            
+
             # Start server
             if transport == "http":
                 await server.run_server(transport="http", host=host, port=port)
             else:
                 await server.run_server(transport="stdio")
-                
+
         except Exception as e:
             console.print(f"❌ Failed to start Graphiti server: {e}", style="red")
             logger.error(f"Graphiti server startup failed: {e}")
             raise
-    
+
     try:
         import asyncio
         asyncio.run(start_graphiti_server())
-    
+
     except KeyboardInterrupt:
         console.print("\n👋 Graphiti MCP server stopped by user")
     except Exception as e:
@@ -628,16 +627,17 @@ def serve_universal(
         
         graphrag-mcp serve-universal --template academic --transport stdio
     """
-    console.print(f"🚀 Starting Universal MCP Server")
+    console.print("🚀 Starting Universal MCP Server")
     console.print(f"📋 Server: {host}:{port} ({transport})")
     console.print(f"🎯 Template: {template}")
     console.print("📄 No documents loaded (use load_document_collection tool)")
-    
+
     # Import and start server
     try:
         import asyncio
+
         from ..mcp.server_generator import run_universal_server_cli
-        
+
         console.print("🚀 Starting Universal MCP Server...")
         asyncio.run(run_universal_server_cli(
             template=template,
@@ -645,7 +645,7 @@ def serve_universal(
             port=port,
             transport=transport
         ))
-    
+
     except KeyboardInterrupt:
         console.print("\n👋 Server stopped by user")
     except Exception as e:
@@ -655,17 +655,17 @@ def serve_universal(
 
 @app.command()
 def status(
-    project: Optional[str] = typer.Argument(None, help="Project name (optional)")
+    project: str | None = typer.Argument(None, help="Project name (optional)")
 ):
     """
     Show status of projects and system health.
     """
     console.print("📊 [bold]GraphRAG MCP Toolkit Status[/bold]")
     console.print()
-    
+
     # System health
     console.print("🔧 [bold]System Health[/bold]")
-    
+
     # Check Ollama
     try:
         ollama_engine = OllamaEngine()
@@ -678,9 +678,9 @@ def status(
             console.print("❌ Ollama server: Offline", style="red")
     except Exception as e:
         console.print(f"❌ Ollama health check failed: {e}", style="red")
-    
+
     console.print()
-    
+
     # Projects overview
     if project:
         _show_project_status(project)
@@ -688,7 +688,7 @@ def status(
         _show_all_projects_status()
 
 
-def _get_available_templates() -> List[str]:
+def _get_available_templates() -> list[str]:
     """Get list of available domain templates"""
     # For now, return built-in templates
     # Later this will scan the templates directory
@@ -701,7 +701,7 @@ def _create_project_structure(project_dir: Path, name: str, template: str):
     (project_dir / "documents").mkdir(exist_ok=True)
     (project_dir / "processed").mkdir(exist_ok=True)
     (project_dir / "mcp").mkdir(exist_ok=True)
-    
+
     # Create README
     readme_content = f"""# {name}
 
@@ -720,7 +720,7 @@ GraphRAG MCP Assistant using {template} template.
 2. Process corpus: `graphrag-mcp process {name}`
 3. Start server: `graphrag-mcp serve {name}`
 """
-    
+
     (project_dir / "README.md").write_text(readme_content)
 
 
@@ -728,24 +728,24 @@ def _list_templates():
     """List available templates"""
     console.print("📋 [bold]Available Templates[/bold]")
     console.print()
-    
+
     templates = {
         "academic": "Literature review and research analysis",
-        "legal": "Legal document analysis (planned)", 
+        "legal": "Legal document analysis (planned)",
         "medical": "Clinical guidelines and protocols (planned)",
         "financial": "Financial document analysis (planned)",
         "engineering": "Technical specifications (planned)"
     }
-    
+
     table = Table(show_header=True, header_style="bold blue")
     table.add_column("Template", style="cyan")
     table.add_column("Description")
     table.add_column("Status")
-    
+
     for name, desc in templates.items():
         status = "✅ Available" if name == "academic" else "🚧 Planned"
         table.add_row(name, desc, status)
-    
+
     console.print(table)
 
 
@@ -760,13 +760,13 @@ def _show_template_info(template: str):
             "status": "available"
         }
     }
-    
+
     if template not in templates_info:
         console.print(f"❌ Template '{template}' not found", style="red")
         return
-    
+
     info = templates_info[template]
-    
+
     panel = Panel.fit(
         f"[bold]{info['name']}[/bold]\\n\\n"
         f"{info['description']}\\n\\n"
@@ -779,15 +779,15 @@ def _show_template_info(template: str):
     console.print(panel)
 
 
-def _get_project_dir(project: str) -> Optional[Path]:
+def _get_project_dir(project: str) -> Path | None:
     """Get project directory and validate it exists"""
     project_dir = cli_state.projects_dir / project
-    
+
     if not project_dir.exists():
         console.print(f"❌ Project '{project}' not found", style="red")
         console.print(f"Available projects: {[p.name for p in cli_state.projects_dir.glob('*') if p.is_dir()]}")
         return None
-    
+
     return project_dir
 
 
@@ -796,26 +796,26 @@ def _show_project_status(project: str):
     project_dir = _get_project_dir(project)
     if not project_dir:
         return
-    
+
     console.print(f"📁 [bold]Project: {project}[/bold]")
-    
+
     # Load config
     config_file = project_dir / "config.json"
     if config_file.exists():
         with open(config_file) as f:
             config = json.load(f)
         console.print(f"🎯 Template: {config.get('template', 'unknown')}")
-    
+
     # Document count
     docs_dir = project_dir / "documents"
     doc_count = len(list(docs_dir.glob("*.pdf"))) if docs_dir.exists() else 0
     console.print(f"📄 Documents: {doc_count}")
-    
+
     # Processed count
     processed_dir = project_dir / "processed"
     processed_count = len(list(processed_dir.glob("*.json"))) if processed_dir.exists() else 0
     console.print(f"⚙️  Processed: {processed_count}")
-    
+
     # MCP server status
     console.print("🚀 MCP Server: Not started")
 
@@ -823,23 +823,23 @@ def _show_project_status(project: str):
 def _show_all_projects_status():
     """Show status for all projects"""
     console.print("📁 [bold]Projects[/bold]")
-    
+
     projects = [p for p in cli_state.projects_dir.glob("*") if p.is_dir()]
-    
+
     if not projects:
         console.print("No projects found. Create one with: [code]graphrag-mcp create my-assistant[/code]")
         return
-    
+
     table = Table(show_header=True, header_style="bold blue")
-    table.add_column("Project", style="cyan") 
+    table.add_column("Project", style="cyan")
     table.add_column("Template")
     table.add_column("Documents", justify="right")
     table.add_column("Processed", justify="right")
     table.add_column("Status")
-    
+
     for project_dir in projects:
         name = project_dir.name
-        
+
         # Load config
         config_file = project_dir / "config.json"
         template = "unknown"
@@ -850,15 +850,15 @@ def _show_all_projects_status():
                 template = config.get('template', 'unknown')
             except:
                 pass
-        
+
         # Count documents
         docs_dir = project_dir / "documents"
         doc_count = len(list(docs_dir.glob("*.pdf"))) if docs_dir.exists() else 0
-        
+
         # Count processed
         processed_dir = project_dir / "processed"
         processed_count = len(list(processed_dir.glob("*.json"))) if processed_dir.exists() else 0
-        
+
         # Determine status
         if processed_count > 0:
             status = "✅ Ready"
@@ -866,9 +866,9 @@ def _show_all_projects_status():
             status = "🔄 Needs processing"
         else:
             status = "📄 Needs documents"
-        
+
         table.add_row(name, template, str(doc_count), str(processed_count), status)
-    
+
     console.print(table)
 
 
@@ -892,21 +892,22 @@ def serve_graphiti(
         
         graphrag-mcp serve-graphiti --neo4j-uri bolt://localhost:7687
     """
-    console.print(f"🚀 Starting Graphiti MCP Server")
+    console.print("🚀 Starting Graphiti MCP Server")
     console.print(f"📋 Server: {host}:{port}")
     console.print(f"🎯 Template: {template}")
     console.print(f"🗃️  Neo4j: {neo4j_uri}")
-    console.print(f"🧠 Backend: [bold magenta]Graphiti + Neo4j[/bold magenta]")
-    
+    console.print("🧠 Backend: [bold magenta]Graphiti + Neo4j[/bold magenta]")
+
     # Check Neo4j connection
     console.print("🔍 Checking Neo4j connection...")
     try:
         import asyncio
+
         from ..mcp.graphiti_server import GraphitiMCPServer
-        
+
         # Create server
         server = GraphitiMCPServer(
-            name=f"GraphRAG Graphiti Assistant",
+            name="GraphRAG Graphiti Assistant",
             instructions=f"Real-time knowledge graph assistant using {template} template",
             host=host,
             port=port,
@@ -914,15 +915,15 @@ def serve_graphiti(
             neo4j_user=neo4j_user,
             neo4j_password=neo4j_password
         )
-        
+
         console.print("🚀 Starting Graphiti MCP Server...")
         console.print("📊 Real-time knowledge graph capabilities enabled")
         console.print("🔗 Use add_document_to_graph tool to add documents")
         console.print("🔍 Use search_knowledge_graph tool for semantic search")
-        
+
         # Run server
         asyncio.run(server.run())
-        
+
     except KeyboardInterrupt:
         console.print("\n👋 Server stopped by user", style="yellow")
     except Exception as e:

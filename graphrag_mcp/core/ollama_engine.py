@@ -6,14 +6,14 @@ Provides consistent local AI processing across all domain templates.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Union
-from pathlib import Path
+from typing import Any
+
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
 
 # LangChain Ollama imports
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable
+from langchain_ollama import ChatOllama, OllamaEmbeddings
 
 # Configuration
 from pydantic import BaseModel, Field
@@ -39,11 +39,11 @@ class OllamaEngine:
     Provides embeddings, chat completion, and prompt management across all
     domain templates while maintaining privacy and local processing.
     """
-    
-    def __init__(self, config: Optional[OllamaConfig] = None):
+
+    def __init__(self, config: OllamaConfig | None = None):
         """Initialize Ollama engine with configuration"""
         self.config = config or OllamaConfig()
-        
+
         # Initialize embeddings
         try:
             self.embeddings = OllamaEmbeddings(
@@ -54,7 +54,7 @@ class OllamaEngine:
         except Exception as e:
             logger.error(f"❌ Failed to initialize embeddings: {e}")
             raise
-        
+
         # Initialize LLM
         try:
             self.llm = ChatOllama(
@@ -69,7 +69,7 @@ class OllamaEngine:
         except Exception as e:
             logger.error(f"❌ Failed to initialize LLM: {e}")
             raise
-        
+
         # Track usage for monitoring
         self.usage_stats = {
             "embedding_calls": 0,
@@ -77,10 +77,10 @@ class OllamaEngine:
             "total_tokens": 0,
             "errors": 0
         }
-        
+
         logger.info("✅ OllamaEngine initialized successfully")
-    
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for multiple documents
         
@@ -99,8 +99,8 @@ class OllamaEngine:
             self.usage_stats["errors"] += 1
             logger.error(f"❌ Embedding generation failed: {e}")
             raise
-    
-    def embed_query(self, text: str) -> List[float]:
+
+    def embed_query(self, text: str) -> list[float]:
         """
         Generate embedding for a single query
         
@@ -113,15 +113,15 @@ class OllamaEngine:
         try:
             embedding = self.embeddings.embed_query(text)
             self.usage_stats["embedding_calls"] += 1
-            logger.debug(f"📊 Generated query embedding")
+            logger.debug("📊 Generated query embedding")
             return embedding
         except Exception as e:
             self.usage_stats["errors"] += 1
             logger.error(f"❌ Query embedding failed: {e}")
             raise
-    
-    def chat_completion(self, messages: Union[str, List[Dict[str, str]]], 
-                       system_prompt: Optional[str] = None) -> str:
+
+    def chat_completion(self, messages: str | list[dict[str, str]],
+                       system_prompt: str | None = None) -> str:
         """
         Generate chat completion
         
@@ -142,7 +142,7 @@ class OllamaEngine:
                     ])
                 else:
                     prompt = ChatPromptTemplate.from_template(messages)
-                
+
                 chain = prompt | self.llm | StrOutputParser()
                 response = chain.invoke({})
             else:
@@ -150,27 +150,27 @@ class OllamaEngine:
                 prompt_messages = []
                 if system_prompt:
                     prompt_messages.append(("system", system_prompt))
-                
+
                 for msg in messages:
                     role = msg.get("role", "human")
                     content = msg.get("content", "")
                     prompt_messages.append((role, content))
-                
+
                 prompt = ChatPromptTemplate.from_messages(prompt_messages)
                 chain = prompt | self.llm | StrOutputParser()
                 response = chain.invoke({})
-            
+
             self.usage_stats["llm_calls"] += 1
             logger.debug(f"💬 Generated chat completion ({len(response)} chars)")
             return response
-            
+
         except Exception as e:
             self.usage_stats["errors"] += 1
             logger.error(f"❌ Chat completion failed: {e}")
             raise
-    
-    def create_chain(self, prompt_template: str, 
-                    input_variables: Optional[List[str]] = None) -> Runnable:
+
+    def create_chain(self, prompt_template: str,
+                    input_variables: list[str] | None = None) -> Runnable:
         """
         Create a reusable LangChain chain
         
@@ -184,17 +184,17 @@ class OllamaEngine:
         try:
             # In modern LangChain, input_variables are automatically inferred
             prompt = ChatPromptTemplate.from_template(prompt_template)
-            
+
             chain = prompt | self.llm | StrOutputParser()
             logger.debug("🔗 Created LangChain chain")
             return chain
-            
+
         except Exception as e:
             logger.error(f"❌ Chain creation failed: {e}")
             raise
-    
-    def extract_entities(self, text: str, entity_schema: Dict[str, str], 
-                        max_entities_per_type: int = 5) -> Dict[str, List[str]]:
+
+    def extract_entities(self, text: str, entity_schema: dict[str, str],
+                        max_entities_per_type: int = 5) -> dict[str, list[str]]:
         """
         Extract entities using domain-specific schema
         
@@ -208,7 +208,7 @@ class OllamaEngine:
         """
         entity_categories = list(entity_schema.keys())
         schema_description = {cat: desc for cat, desc in entity_schema.items()}
-        
+
         prompt_template = f"""
 Extract key entities from this text. Return ONLY a JSON object with these categories:
 
@@ -225,16 +225,16 @@ Text:
 {{text}}
 
 JSON:"""
-        
+
         try:
             chain = self.create_chain(prompt_template, ["text"])
             result = chain.invoke({"text": text})
-            
+
             # Parse JSON response
             import json
             json_start = result.find('{')
             json_end = result.rfind('}') + 1
-            
+
             if json_start != -1 and json_end != -1:
                 json_str = result[json_start:json_end]
                 entities = json.loads(json_str)
@@ -244,12 +244,12 @@ JSON:"""
                 # Fallback if JSON extraction fails
                 logger.warning("⚠️ JSON extraction failed, returning empty entities")
                 return {cat: [] for cat in entity_categories}
-                
+
         except Exception as e:
             logger.error(f"❌ Entity extraction failed: {e}")
             return {cat: [] for cat in entity_categories}
-    
-    def check_health(self) -> Dict[str, Any]:
+
+    def check_health(self) -> dict[str, Any]:
         """
         Check Ollama server health and model availability
         
@@ -264,7 +264,7 @@ JSON:"""
             "config": self.config.model_dump(),
             "usage_stats": self.usage_stats
         }
-        
+
         try:
             # Test embedding model
             test_embedding = self.embeddings.embed_query("test")
@@ -273,7 +273,7 @@ JSON:"""
                 health_status["server_accessible"] = True
         except Exception as e:
             logger.error(f"❌ Embedding model test failed: {e}")
-        
+
         try:
             # Test LLM model
             test_response = self.llm.invoke("Say 'OK' if you can respond.")
@@ -282,10 +282,10 @@ JSON:"""
                 health_status["server_accessible"] = True
         except Exception as e:
             logger.error(f"❌ LLM model test failed: {e}")
-        
+
         return health_status
-    
-    def get_usage_stats(self) -> Dict[str, Any]:
+
+    def get_usage_stats(self) -> dict[str, Any]:
         """Get engine usage statistics"""
         return {
             **self.usage_stats,

@@ -20,41 +20,44 @@ __version__ = "0.1.0"
 __author__ = "Aimie Garces"
 
 # Core components for backwards compatibility with existing src/
-from .core.document_processor import DocumentProcessor
-from .core.chat_engine import ChatEngine
-from .core.analyzer import AdvancedAnalyzer
-from .core.ollama_engine import OllamaEngine
-
 # CLI interface
 from .cli.main import app as cli_app
+from .core.analyzer import AdvancedAnalyzer
+from .core.chat_engine import ChatEngine
+from .core.document_processor import DocumentProcessor
+from .core.ollama_engine import OllamaEngine
+
+# MCP generation
+from .mcp.server_generator import (
+    UniversalMCPServer,
+    create_universal_server,
+    run_universal_server_cli,
+)
+from .templates.academic import AcademicTemplate
 
 # Template system
 from .templates.base import BaseTemplate, template_registry
-from .templates.academic import AcademicTemplate
-
-# MCP generation
-from .mcp.server_generator import UniversalMCPServer, create_universal_server, run_universal_server_cli
 
 __all__ = [
     # Core processing components
     "DocumentProcessor",
-    "ChatEngine", 
+    "ChatEngine",
     "AdvancedAnalyzer",
     "OllamaEngine",
-    
+
     # CLI interface
     "cli_app",
-    
+
     # Template system
     "BaseTemplate",
-    "AcademicTemplate", 
+    "AcademicTemplate",
     "template_registry",
-    
+
     # MCP generation
     "UniversalMCPServer",
-    "create_universal_server", 
+    "create_universal_server",
     "run_universal_server_cli",
-    
+
     # Package metadata
     "__version__",
     "__author__",

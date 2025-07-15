@@ -3,12 +3,10 @@ Hybrid Visualization System: Graphiti + yFiles
 Combines Graphiti's real-time knowledge graphs with yFiles professional visualization
 """
 
-import logging
 import asyncio
-from typing import Dict, List, Any, Optional, Tuple
 import json
-from datetime import datetime
-from pathlib import Path
+import logging
+from typing import Any
 
 # Core visualization components
 from ..core.graphiti_engine import GraphitiKnowledgeGraph
@@ -25,7 +23,7 @@ class GraphitiYFilesVisualizer:
     - Interactive exploration of knowledge graphs
     - Export capabilities to multiple formats
     """
-    
+
     def __init__(self, knowledge_graph: GraphitiKnowledgeGraph):
         """
         Initialize the hybrid visualizer
@@ -38,16 +36,16 @@ class GraphitiYFilesVisualizer:
         self.graph_data = None
         self.node_cache = {}
         self.edge_cache = {}
-        
+
         logger.info("Initialized GraphitiYFilesVisualizer")
-    
-    async def create_visualization(self, 
+
+    async def create_visualization(self,
                                  title: str = "Knowledge Graph",
-                                 query: Optional[str] = None,
+                                 query: str | None = None,
                                  max_nodes: int = 100,
                                  enable_sidebar: bool = True,
                                  enable_search: bool = True,
-                                 enable_neighborhood: bool = True) -> Optional[Any]:
+                                 enable_neighborhood: bool = True) -> Any | None:
         """
         Create yFiles visualization from Graphiti knowledge graph
         
@@ -69,7 +67,7 @@ class GraphitiYFilesVisualizer:
             except ImportError:
                 logger.error("yFiles Jupyter Graphs not installed. Install with: pip install yfiles_jupyter_graphs")
                 return None
-            
+
             # Get data from Graphiti
             if query:
                 # Use search results to build graph
@@ -81,52 +79,52 @@ class GraphitiYFilesVisualizer:
             else:
                 # Build graph from all knowledge graph data
                 nodes, edges = await self._convert_full_graph_to_yfiles(max_nodes)
-            
+
             if not nodes:
                 logger.warning("No nodes found for visualization")
                 return None
-            
+
             # Create graph data structure
             self.graph_data = {'nodes': nodes, 'edges': edges}
-            
+
             # Create yFiles widget
             self.widget = GraphWidget(graph=self.graph_data)
-            
+
             # Configure professional features
             if enable_sidebar:
                 self.widget.set_sidebar(enabled=True, start_with='Data')
-            
+
             if enable_search:
                 self.widget.search(enabled=True)
-            
+
             if enable_neighborhood:
                 self.widget.neighborhood(enabled=True, max_distance=2)
-            
+
             # Enable overview panel
             self.widget.overview(enabled=True)
-            
+
             # Set professional styling
             self._configure_professional_styling()
-            
+
             logger.info(f"✅ yFiles visualization created: {len(nodes)} nodes, {len(edges)} edges")
             return self.widget
-            
+
         except Exception as e:
             logger.error(f"❌ yFiles visualization failed: {e}")
             return None
-    
-    async def _convert_search_results_to_yfiles(self, search_results: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+
+    async def _convert_search_results_to_yfiles(self, search_results: list[dict]) -> tuple[list[dict], list[dict]]:
         """Convert Graphiti search results to yFiles format"""
         nodes = []
         edges = []
         node_ids = set()
-        
+
         try:
             for result in search_results:
                 document_id = result.get('document_id')
                 if not document_id:
                     continue
-                
+
                 # Create document node
                 doc_node_id = f"doc_{document_id}"
                 if doc_node_id not in node_ids:
@@ -145,7 +143,7 @@ class GraphitiYFilesVisualizer:
                     }
                     nodes.append(doc_node)
                     node_ids.add(doc_node_id)
-                
+
                 # Create content node
                 content_node_id = f"content_{result.get('episode_name', 'unknown')}"
                 if content_node_id not in node_ids:
@@ -165,7 +163,7 @@ class GraphitiYFilesVisualizer:
                     }
                     nodes.append(content_node)
                     node_ids.add(content_node_id)
-                    
+
                     # Create edge from document to content
                     edge = {
                         'start': doc_node_id,
@@ -173,30 +171,30 @@ class GraphitiYFilesVisualizer:
                         'properties': {
                             'relationship': 'contains',
                             'type': 'document_content',
-                            'description': f"Document contains this content"
+                            'description': "Document contains this content"
                         }
                     }
                     edges.append(edge)
-            
+
             return nodes, edges
-            
+
         except Exception as e:
             logger.error(f"Error converting search results to yFiles: {e}")
             return [], []
-    
-    async def _convert_full_graph_to_yfiles(self, max_nodes: int) -> Tuple[List[Dict], List[Dict]]:
+
+    async def _convert_full_graph_to_yfiles(self, max_nodes: int) -> tuple[list[dict], list[dict]]:
         """Convert full Graphiti knowledge graph to yFiles format"""
         nodes = []
         edges = []
-        
+
         try:
             # Get knowledge graph statistics
             stats = await self.knowledge_graph.get_knowledge_graph_stats()
-            
+
             # For each document, create nodes and relationships
             for doc_info in stats.get('documents', []):
                 document_id = doc_info['document_id']
-                
+
                 # Create document node
                 doc_node = {
                     'id': f"doc_{document_id}",
@@ -214,16 +212,16 @@ class GraphitiYFilesVisualizer:
                     }
                 }
                 nodes.append(doc_node)
-                
+
                 # Get document summary for entity extraction
                 summary = await self.knowledge_graph.get_document_summary(document_id)
-                
+
                 # Create concept nodes based on content
                 search_results = await self.knowledge_graph.search_knowledge_graph(
                     query=f"document_id:{document_id}",
                     max_results=5
                 )
-                
+
                 for i, result in enumerate(search_results):
                     content = result.get('content', '')
                     if len(content) > 20:  # Only meaningful content
@@ -242,7 +240,7 @@ class GraphitiYFilesVisualizer:
                             }
                         }
                         nodes.append(concept_node)
-                        
+
                         # Create edge from document to concept
                         edge = {
                             'start': f"doc_{document_id}",
@@ -250,44 +248,44 @@ class GraphitiYFilesVisualizer:
                             'properties': {
                                 'relationship': 'contains_concept',
                                 'type': 'document_concept',
-                                'description': f"Document contains this concept"
+                                'description': "Document contains this concept"
                             }
                         }
                         edges.append(edge)
-                
+
                 # Limit nodes to max_nodes
                 if len(nodes) >= max_nodes:
                     break
-            
+
             return nodes, edges
-            
+
         except Exception as e:
             logger.error(f"Error converting full graph to yFiles: {e}")
             return [], []
-    
+
     def _configure_professional_styling(self):
         """Configure professional yFiles styling"""
         if not self.widget:
             return
-        
+
         try:
             # Set professional layout
             self.widget.set_layout('hierarchic')
-            
+
             # Configure node styling based on type
             def node_color_mapping(node):
                 return node['properties'].get('color', '#95A5A6')
-            
+
             def node_size_mapping(node):
                 return node['properties'].get('size', 20)
-            
+
             def node_shape_mapping(node):
                 return node['properties'].get('shape', 'ellipse')
-            
+
             # Apply styling
             self.widget.node_color_mapping = node_color_mapping
             self.widget.node_size_mapping = node_size_mapping
-            
+
             # Configure edge styling
             def edge_color_mapping(edge):
                 edge_type = edge['properties'].get('type', 'default')
@@ -296,19 +294,19 @@ class GraphitiYFilesVisualizer:
                 elif edge_type == 'document_concept':
                     return '#E67E22'  # Orange
                 return '#95A5A6'  # Default gray
-            
+
             self.widget.edge_color_mapping = edge_color_mapping
-            
+
             logger.info("Professional styling applied")
-            
+
         except Exception as e:
             logger.warning(f"Styling configuration failed: {e}")
-    
-    async def update_visualization(self, query: Optional[str] = None):
+
+    async def update_visualization(self, query: str | None = None):
         """Update the visualization with new data from Graphiti"""
         if not self.widget:
             return False
-        
+
         try:
             # Get fresh data from Graphiti
             if query:
@@ -319,61 +317,61 @@ class GraphitiYFilesVisualizer:
                 nodes, edges = await self._convert_search_results_to_yfiles(search_results)
             else:
                 nodes, edges = await self._convert_full_graph_to_yfiles(100)
-            
+
             # Update graph data
             self.graph_data = {'nodes': nodes, 'edges': edges}
-            
+
             # Update widget (this depends on yFiles API)
             # self.widget.update_graph(self.graph_data)
-            
+
             logger.info(f"✅ Visualization updated: {len(nodes)} nodes, {len(edges)} edges")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to update visualization: {e}")
             return False
-    
-    def export_to_formats(self, base_filename: str = "knowledge_graph") -> Dict[str, str]:
+
+    def export_to_formats(self, base_filename: str = "knowledge_graph") -> dict[str, str]:
         """Export graph to multiple standard formats"""
         if not self.graph_data:
             logger.warning("No graph data to export")
             return {}
-        
+
         exported_files = {}
-        
+
         try:
             # Export to JSON for web applications
             json_file = f"{base_filename}_graphiti.json"
             with open(json_file, 'w') as f:
                 json.dump(self.graph_data, f, indent=2)
             exported_files['json'] = json_file
-            
+
             # Export to GraphML (standard format)
             graphml_file = f"{base_filename}_graphiti.graphml"
             self._export_to_graphml(graphml_file)
             exported_files['graphml'] = graphml_file
-            
+
             # Export to Cytoscape format
             cytoscape_file = f"{base_filename}_graphiti_cytoscape.json"
             self._export_to_cytoscape(cytoscape_file)
             exported_files['cytoscape'] = cytoscape_file
-            
+
             logger.info(f"Exported to formats: {list(exported_files.keys())}")
             return exported_files
-            
+
         except Exception as e:
             logger.error(f"Export failed: {e}")
             return exported_files
-    
+
     def _export_to_graphml(self, filename: str):
         """Export to GraphML format for Gephi/yEd"""
         try:
             import xml.etree.ElementTree as ET
-            
+
             # Create GraphML structure
             root = ET.Element("graphml")
             root.set("xmlns", "http://graphml.graphdrawing.org/xmlns")
-            
+
             # Define attributes
             for attr_id, attr_info in [
                 ("label", {"for": "node", "type": "string"}),
@@ -386,42 +384,42 @@ class GraphitiYFilesVisualizer:
                 key_elem.set("for", attr_info["for"])
                 key_elem.set("attr.name", attr_id)
                 key_elem.set("attr.type", attr_info["type"])
-            
+
             # Create graph
             graph_elem = ET.SubElement(root, "graph")
             graph_elem.set("id", "graphiti_knowledge_graph")
             graph_elem.set("edgedefault", "undirected")
-            
+
             # Add nodes
             for node in self.graph_data['nodes']:
                 node_elem = ET.SubElement(graph_elem, "node")
                 node_elem.set("id", node['id'])
-                
+
                 for attr_name, attr_value in node['properties'].items():
                     if attr_name in ['label', 'type', 'color']:
                         data_elem = ET.SubElement(node_elem, "data")
                         data_elem.set("key", attr_name)
                         data_elem.text = str(attr_value)
-            
+
             # Add edges
             for i, edge in enumerate(self.graph_data['edges']):
                 edge_elem = ET.SubElement(graph_elem, "edge")
                 edge_elem.set("id", f"e{i}")
                 edge_elem.set("source", edge['start'])
                 edge_elem.set("target", edge['end'])
-                
+
                 if 'relationship' in edge['properties']:
                     data_elem = ET.SubElement(edge_elem, "data")
                     data_elem.set("key", "relationship")
                     data_elem.text = edge['properties']['relationship']
-            
+
             # Write to file
             tree = ET.ElementTree(root)
             tree.write(filename, encoding='utf-8', xml_declaration=True)
-            
+
         except Exception as e:
             logger.error(f"GraphML export failed: {e}")
-    
+
     def _export_to_cytoscape(self, filename: str):
         """Export to Cytoscape.js format"""
         try:
@@ -449,10 +447,10 @@ class GraphitiYFilesVisualizer:
                     ]
                 }
             }
-            
+
             with open(filename, 'w') as f:
                 json.dump(cytoscape_data, f, indent=2)
-                
+
         except Exception as e:
             logger.error(f"Cytoscape export failed: {e}")
 
@@ -474,7 +472,7 @@ async def create_graphiti_yfiles_visualizer(knowledge_graph: GraphitiKnowledgeGr
 # Jupyter notebook helper functions
 def display_graphiti_knowledge_graph(knowledge_graph: GraphitiKnowledgeGraph,
                                    title: str = "Graphiti Knowledge Graph",
-                                   query: Optional[str] = None,
+                                   query: str | None = None,
                                    max_nodes: int = 100):
     """
     Display Graphiti knowledge graph in Jupyter notebook
@@ -492,15 +490,15 @@ def display_graphiti_knowledge_graph(knowledge_graph: GraphitiKnowledgeGraph,
             query=query,
             max_nodes=max_nodes
         )
-        
+
         if widget:
             try:
                 from IPython.display import display
                 display(widget)
-                print(f"✅ Interactive Graphiti + yFiles graph displayed!")
+                print("✅ Interactive Graphiti + yFiles graph displayed!")
                 print(f"🔍 Query: {query or 'All documents'}")
-                print(f"🎯 Use the sidebar to explore nodes and relationships")
-                print(f"📊 Real-time updates from Graphiti backend")
+                print("🎯 Use the sidebar to explore nodes and relationships")
+                print("📊 Real-time updates from Graphiti backend")
                 return True
             except ImportError:
                 print("⚠️ Not in Jupyter environment")
@@ -509,7 +507,7 @@ def display_graphiti_knowledge_graph(knowledge_graph: GraphitiKnowledgeGraph,
             print("❌ Failed to create visualization")
             print("💡 Install with: pip install yfiles_jupyter_graphs")
             return False
-    
+
     # Run async function
     import asyncio
     return asyncio.run(_display())
@@ -518,35 +516,35 @@ def display_graphiti_knowledge_graph(knowledge_graph: GraphitiKnowledgeGraph,
 # Example usage
 async def main():
     """Example usage of GraphitiYFilesVisualizer"""
-    
+
     # Create knowledge graph
     from ..core.graphiti_engine import create_graphiti_knowledge_graph
-    
+
     kg = await create_graphiti_knowledge_graph()
-    
+
     # Add test document
     await kg.add_document(
         document_content="This is a test document about machine learning and graph neural networks.",
         document_id="test_doc_001",
         metadata={"title": "Test ML Paper", "authors": ["Test Author"]}
     )
-    
+
     # Create visualizer
     visualizer = await create_graphiti_yfiles_visualizer(kg)
-    
+
     # Create visualization
     widget = await visualizer.create_visualization(
         title="Test Knowledge Graph",
         query="machine learning"
     )
-    
+
     if widget:
         print("✅ Visualization created successfully!")
-        
+
         # Export to formats
         exported = visualizer.export_to_formats("test_graph")
         print(f"📁 Exported to: {exported}")
-    
+
     # Clean up
     await kg.close()
 
