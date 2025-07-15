@@ -53,7 +53,7 @@ uv run pytest tests/ -m "unit" -v                   # Run tests with specific ma
 make setup-ollama    # Install Ollama models (llama3.1:8b, nomic-embed-text)
 make setup-neo4j     # Start Neo4j Docker container
 make clear-db        # Clear all ChromaDB databases
-make tutorial        # Start tutorial system
+make tutorial        # Start tutorial system (same as ./start_tutorial.sh)
 
 # Documentation & Build
 make docs            # Build documentation with mkdocs
@@ -66,6 +66,21 @@ make clean           # Clean build artifacts
 # Development Workflow
 make dev             # Complete development setup (install-dev + pre-commit-install)
 make ci              # Simulate CI pipeline (clean + install-dev + quality + test)
+```
+
+### Quick Start Scripts (NEW)
+```bash
+# Notebook Processing (RECOMMENDED)
+./start_tutorial.sh     # Complete setup + launches Jupyter notebook
+./start_tutorial.sh --start-ollama  # Also starts Ollama in background
+
+# Services Only
+./start_services.sh                 # Start Ollama + Neo4j services only
+
+# Environment
+./activate_graphrag_env.sh          # Activate Python environment
+./setup_env.sh                      # Create fresh environment
+./clear_chromadb.sh                 # Clear all databases
 ```
 
 ### CLI Commands (graphrag-mcp)
@@ -90,6 +105,11 @@ python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ 
 python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
 
 # Notebook Workflow (Interactive Document Processing)
+# RECOMMENDED: Use the automated startup script
+./start_tutorial.sh  # Complete setup + launches notebook
+
+# OR: Manual setup
+./start_services.sh  # Start Ollama + Neo4j services only
 cd notebooks/Main
 source ../../graphrag-env/bin/activate
 python -c "from processing_utils import check_prerequisites; check_prerequisites()"  # Check prerequisites
@@ -294,6 +314,28 @@ class NewDomainTemplate(BaseTemplate):
 
 ## Key Implementation Details
 
+### Critical Architecture Principles
+
+#### Dual-Mode Tool Design
+When adding new tools, always implement both modes:
+- **Chat Tools**: Conversational, exploratory, with follow-up suggestions
+- **Literature Tools**: Formal, citation-ready, academic-style responses
+- **Shared State**: Both modes share the same CitationTracker instance
+
+#### Citation-First Development
+All literature tools must:
+- Integrate with `CitationTracker` for automatic citation tracking
+- Support multiple academic styles (APA, IEEE, Nature, MLA)
+- Track usage context and confidence scores
+- Generate properly formatted in-text citations
+
+#### Template-Based Extension
+When adding new domain templates:
+- Extend `BaseTemplate` with domain-specific configurations
+- Define entity schemas as "guidance" rather than constraints
+- Register tools in both chat and literature categories
+- Include relationship schemas for knowledge graph construction
+
 ### Modern Development Stack (Updated)
 - **Framework**: Python 3.11+, FastMCP, Typer, Pydantic
 - **LLM Integration**: Ollama (llama3.1:8b, nomic-embed-text) for local privacy
@@ -439,6 +481,29 @@ make pre-commit-install
 ./setup_env.sh  # Recreate complete environment
 ```
 
+### Common Development Pitfalls
+
+#### MCP Tool Registration
+- Tools must be registered in both `server_generator.py` and template configurations
+- Parameter schemas must match between tool definition and implementation
+- FastMCP context (`ctx: Context`) should be included in all tool functions
+
+#### Citation Management
+- Never create separate CitationTracker instances - use the shared one
+- Always call `track_citation()` when a tool references a paper
+- Use `get_citation_key()` for consistent citation key generation
+
+#### Async/Await Patterns
+- All MCP tools must be async functions
+- Use `await` for all database and LLM operations
+- Implement proper error handling with try/except blocks
+
+#### Testing Strategy
+- Run `test_core_components.py` before committing changes
+- Test both chat and literature tools in isolation
+- Verify citation tracking across tool interactions
+- Check MCP server startup with `serve-universal` command
+
 ## Project Context and Vision
 
 ### Current Status: Dual-Mode Research Assistant
@@ -490,3 +555,33 @@ The recent major implementation added:
 - **Production-ready architecture** with shared state management across all tools
 
 This represents the transformation from a research prototype to a production-ready dual-mode research assistant that can both chat about research content and write formal literature reviews with perfect citations.
+
+## Essential Development Reminders
+
+### Before Starting Development
+1. **Environment**: Always use `source graphrag-env/bin/activate` (Python 3.11+)
+2. **Services**: Ensure Ollama is running (`ollama serve`)
+3. **Dependencies**: Run `uv pip install -r requirements.txt` if needed
+4. **Core Test**: Run `python3 test_core_components.py` to verify system health
+
+### During Development
+1. **Dual-Mode Principle**: Every research feature should have both chat and literature tools
+2. **Citation Integration**: All literature tools must integrate with `CitationTracker`
+3. **Template Architecture**: Use the academic template as the reference implementation
+4. **Testing**: Test individual components before integration
+
+### Before Committing
+1. **Quality Checks**: Run `make quality` (lint + type-check + security)
+2. **Tests**: Run `make test` with full coverage
+3. **Integration**: Test MCP server with `serve-universal` command
+4. **Documentation**: Update docstrings and type hints
+
+### MCP Integration Testing
+```bash
+# Always test MCP server before deployment
+python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
+
+# Test with sample queries in Claude Desktop
+# Chat mode: "ask_knowledge_graph: What are the main research themes?"
+# Literature mode: "get_facts_with_citations: about attention mechanisms in APA style"
+```

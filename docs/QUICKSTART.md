@@ -1,30 +1,36 @@
 # GraphRAG MCP Toolkit Quickstart
 
-Get up and running with GraphRAG MCP Toolkit in 5 minutes!
+Get up and running with GraphRAG MCP Toolkit in 5 minutes! Transform your research papers into a dual-mode AI assistant that both chats conversationally about your research AND writes literature reviews with perfect citations.
 
 ## 🎯 What You'll Build
 
 By the end of this quickstart, you'll have:
-- A working GraphRAG MCP server
-- Processed research papers in a knowledge graph
-- Claude Desktop integration for AI-powered research
+- A production-ready dual-mode GraphRAG MCP server
+- Processed research papers in a persistent knowledge graph
+- Claude Desktop integration with 10+ specialized research tools
+- Both conversational research exploration AND formal literature review capabilities
+- Automatic citation management in 4 academic styles (APA, IEEE, Nature, MLA)
 
 ## 📋 Prerequisites
 
-- **Python 3.10+** (check with `python --version`)
-- **5-10 research papers** in PDF format
-- **10 minutes** of your time
+- **Python 3.11+** (check with `python --version`) - Modern Python environment recommended
+- **5-10 research papers** in PDF format for testing
+- **10-15 minutes** of your time
+- **Optional**: Neo4j for persistent knowledge graphs
 
 ## 🚀 Step 1: Install Everything
 
 ### Set Up Environment
 
 ```bash
-# Create Python environment (recommended)
+# RECOMMENDED: Use the automated setup script
+./setup_env.sh  # Creates Python 3.11 environment with all dependencies
+
+# OR: Manual setup
 python -m venv graphrag-env
 source graphrag-env/bin/activate  # On Windows: graphrag-env\Scripts\activate
 
-# Or use existing environment
+# OR: Use existing environment
 cd /path/to/your/project
 source langchain-env/bin/activate  # Example: existing environment
 ```
@@ -32,11 +38,14 @@ source langchain-env/bin/activate  # Example: existing environment
 ### Install Dependencies
 
 ```bash
-# Using UV (fastest)
+# Using UV (fastest - recommended)
 uv pip install -r requirements.txt
 
 # Or using pip
 pip install -r requirements.txt
+
+# Or using make (includes dev dependencies)
+make install-dev
 ```
 
 ### Install Ollama
@@ -68,32 +77,44 @@ ollama serve
 # Check if Ollama is running
 curl -s http://localhost:11434/api/tags
 
-# Test core components
-python3 -c "from graphrag_mcp.core import DocumentProcessor; print('✅ Core components ready')"
+# Test core components (comprehensive check)
+python3 test_core_components.py
+
+# Quick component test
+python3 -c "from graphrag_mcp.core.citation_manager import CitationTracker; print('✅ Citation manager ready')"
+python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ Chat tools ready')"
+python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
 ```
 
 ## 📄 Step 2: Start Analysis
 
-### Quick Tutorial Setup
+### RECOMMENDED: Interactive Tutorial Workflow
 
 ```bash
-# Set up tutorial environment (handles everything automatically)
+# Complete setup + launches tutorial (RECOMMENDED)
 ./start_tutorial.sh
 
-# Or manually start Jupyter
-jupyter notebook notebooks/Simple_Paper_RAG_Chat.ipynb
+# Or with Ollama startup
+./start_tutorial.sh --start-ollama
+
+# Or start services only
+./start_services.sh  # Starts Ollama + Neo4j services
 ```
 
 ### Test with Sample Papers
 
 ```bash
-# Try the main interface
+# Test document processing
 python3 -c "
 from graphrag_mcp.core import DocumentProcessor
 processor = DocumentProcessor()
 doc = processor.process_document('examples/d4sc03921a.pdf')
 print('✅ Document processed successfully')
 "
+
+# Test the complete workflow in notebook
+cd notebooks/Main
+jupyter notebook Simple_Document_Processing.ipynb
 ```
 
 ### Test MCP Server
@@ -101,6 +122,12 @@ print('✅ Document processed successfully')
 ```bash
 # Start universal MCP server for testing
 python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
+
+# Check server status
+graphrag-mcp status
+
+# Test with specific template
+graphrag-mcp serve-universal --template academic --transport stdio
 ```
 
 ## 🌐 Step 3: Connect to Claude Desktop
@@ -132,41 +159,56 @@ python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport
 
 You should see a 🔌 icon indicating your MCP server is connected.
 
-### Conversational Research Mode
+### 🗣️ Conversational Research Mode (Chat Tools)
+
+Use these tools for natural exploration and discovery:
 
 ```
-Ask knowledge graph: "What are the main research themes in my documents?"
-```
-
-```
-Explore topic: "machine learning applications"
-```
-
-```
-Find connections between "neural networks" and "optimization"
+ask_knowledge_graph: "What are the main research themes in my documents?"
 ```
 
 ```
-What do we know about "drug discovery"?
-```
-
-### Literature Review Mode
-
-```
-Gather sources for topic: "transformer architectures"
+explore_topic: "machine learning applications" with scope "comprehensive"
 ```
 
 ```
-Get facts with citations about "attention mechanisms" in APA style
+find_connections: between "neural networks" and "optimization"
 ```
 
 ```
-Verify claim with sources: "BERT outperforms traditional NLP models"
+what_do_we_know_about: "drug discovery" including gaps
+```
+
+### 📝 Literature Review Mode (Literature Tools)
+
+Use these tools for formal academic writing with citations:
+
+```
+gather_sources_for_topic: "transformer architectures" for "comprehensive" literature review
 ```
 
 ```
-Generate bibliography in IEEE style
+get_facts_with_citations: about "attention mechanisms" in APA style
 ```
+
+```
+verify_claim_with_sources: "BERT outperforms traditional NLP models"
+```
+
+```
+get_topic_outline: for "transformer efficiency" literature review
+```
+
+```
+generate_bibliography: in IEEE style with used citations only
+```
+
+### 🔄 Integrated Workflow
+
+1. **Explore** with chat tools to understand the landscape
+2. **Gather** sources with literature tools for formal writing
+3. **Verify** claims with evidence-based tools
+4. **Generate** citations and bibliography automatically
 
 ## 🔧 Quick Troubleshooting
 
@@ -200,68 +242,76 @@ python3 -c "from graphrag_mcp.core import DocumentProcessor; print('✅ Working'
 
 ### Explore More Features
 
-- **Add more papers**: `graphrag-mcp add-documents my-research ./new-papers/`
-- **Reprocess**: `graphrag-mcp process my-research --force`
-- **Multiple projects**: `graphrag-mcp create project-2 --template academic`
+- **Use Interactive Tutorials**: `./start_tutorial.sh` for complete workflow
+- **Neo4j Integration**: `make setup-neo4j` for persistent knowledge graphs
+- **Template Management**: `graphrag-mcp templates --list` and `--info academic`
+- **Advanced Analysis**: Try the comprehensive test in `test_core_components.py`
 
 ### Advanced Usage
 
-- **Template management**: `graphrag-mcp templates --list`
-- **Server options**: `graphrag-mcp serve my-research --port 8081`
-- **Batch processing**: Add multiple directories of papers
+- **Quality Control**: `make quality` for comprehensive code analysis
+- **Development Mode**: `make dev` for complete development environment
+- **Batch Processing**: Process multiple document collections
+- **Custom Templates**: Create domain-specific templates
 
 ### Learn More
 
-- **[Usage Guide](USAGE_GUIDE.md)**: Comprehensive documentation
-- **[README](../README.md)**: Full feature overview
+- **[Usage Guide](USAGE_GUIDE.md)**: Comprehensive dual-mode documentation
+- **[API Reference](API_REFERENCE.md)**: Complete API documentation
+- **[README](../README.md)**: Full feature overview and architecture
 - **[Contributing](../CONTRIBUTING.md)**: Help improve the project
 
-## 🎓 Example Research Session
+## 🎓 Example Dual-Mode Research Session
 
-Here's a complete example of using your new research assistant:
+Here's a complete example demonstrating both conversational and formal modes:
 
-### 1. Broad Overview
+### Phase 1: Exploration (Chat Tools)
 ```
-Query papers about "transformer architectures"
-```
-
-### 2. Specific Analysis
-```
-Find citations for "transformers improve NLP performance"
+ask_knowledge_graph: "What are the main themes in transformer research?"
+explore_topic: "attention mechanisms" with scope "detailed"
+find_connections: between "transformers" and "computational efficiency"
+what_do_we_know_about: "BERT variants" including gaps
 ```
 
-### 3. Gap Analysis
+### Phase 2: Formal Writing (Literature Tools)
 ```
-Find research gaps in "transformer efficiency"
+gather_sources_for_topic: "transformer architectures" for "introduction" section
+get_facts_with_citations: about "attention mechanisms" in APA style
+verify_claim_with_sources: "Transformers outperform RNNs on long sequences"
+get_topic_outline: for "transformer efficiency" literature review
+track_citations_used: ["vaswani2017", "devlin2018", "brown2020"]
+generate_bibliography: in IEEE style with used citations only
 ```
 
-### 4. Methodology Comparison
+### Phase 3: Quality Control
 ```
-Compare methodologies for "attention mechanisms"
-```
-
-### 5. Bibliography Generation
-```
-Generate bibliography in IEEE style
+track_citations_used: Check citation distribution
+verify_claim_with_sources: Double-check key claims
+generate_bibliography: Final bibliography in required style
 ```
 
 ## 💡 Tips for Success
 
-1. **Start with 5-10 papers** to test the system
-2. **Use specific queries** for better results
-3. **Organize papers by topic** for easier management
-4. **Reprocess when adding new papers**
-5. **Use descriptive project names**
+1. **Start with the tutorial workflow** - `./start_tutorial.sh` for best experience
+2. **Use dual-mode approach** - Explore with chat tools, then write with literature tools
+3. **Test core components** - Run `python3 test_core_components.py` to verify setup
+4. **Use specific queries** for better results in both modes
+5. **Track citations consistently** - Use `track_citations_used` throughout your writing
+6. **Organize papers by topic** for easier management
+7. **Choose appropriate citation styles** - APA, IEEE, Nature, or MLA based on your field
 
 ## 🆘 Need Help?
 
 - **Check status**: `graphrag-mcp status`
+- **Test components**: `python3 test_core_components.py`
+- **Check services**: `curl -s http://localhost:11434/api/tags` (Ollama)
 - **Verbose mode**: `graphrag-mcp --verbose status`
+- **Interactive tutorial**: `./start_tutorial.sh` for guided workflow
 - **GitHub Issues**: Report problems or ask questions
-- **Documentation**: See [docs/](.) for more guides
+- **Documentation**: See [docs/](.) for comprehensive guides
 
 ---
 
-**Congratulations!** 🎉 You now have a working GraphRAG MCP Toolkit setup. Your research papers are transformed into an AI-powered assistant that can help you discover insights, find gaps, and manage citations.
+**Congratulations!** 🎉 You now have a production-ready dual-mode GraphRAG MCP Toolkit setup. Your research papers are transformed into an AI-powered assistant that can both chat conversationally about your research AND write formal literature reviews with perfect citations.
 
-**Ready to level up?** Check out the [Usage Guide](USAGE_GUIDE.md) for advanced features and workflows.
+**Ready to level up?** Check out the [Usage Guide](USAGE_GUIDE.md) for advanced dual-mode workflows and the [API Reference](API_REFERENCE.md) for complete documentation.

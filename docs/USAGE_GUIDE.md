@@ -1,27 +1,28 @@
 # GraphRAG MCP Toolkit Usage Guide
 
-This comprehensive guide covers everything you need to know to use the GraphRAG MCP Toolkit effectively.
+This comprehensive guide covers everything you need to know to use the GraphRAG MCP Toolkit effectively. The toolkit provides a production-ready dual-mode GraphRAG MCP system that enables Claude to both **chat conversationally** about research content AND **write literature reviews with automatic citations**.
 
 ## 📋 Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [CLI Reference](#cli-reference)
-3. [Academic Template Guide](#academic-template-guide)
-4. [MCP Server Configuration](#mcp-server-configuration)
-5. [Advanced Usage](#advanced-usage)
-6. [Troubleshooting](#troubleshooting)
-7. [Best Practices](#best-practices)
+2. [Dual-Mode Architecture](#dual-mode-architecture)
+3. [CLI Reference](#cli-reference)
+4. [Academic Template Guide](#academic-template-guide)
+5. [MCP Server Configuration](#mcp-server-configuration)
+6. [Advanced Usage](#advanced-usage)
+7. [Troubleshooting](#troubleshooting)
+8. [Best Practices](#best-practices)
 
 ## 🚀 Quick Start
 
 ### Installation and Setup
 
 ```bash
-# Set up environment
-python -m venv graphrag-env
-source graphrag-env/bin/activate
+# RECOMMENDED: Use automated setup
+./setup_env.sh  # Creates Python 3.11 environment with all dependencies
 
-# Install dependencies
+# OR: Manual setup
+source graphrag-env/bin/activate
 uv pip install -r requirements.txt
 
 # Install Ollama and models
@@ -30,18 +31,27 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ollama serve
 
-# Install and start Neo4j (required for Graphiti)
-docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
+# Optional: Install Neo4j for persistent knowledge graphs
+make setup-neo4j
 
-# Verify installation
-python3 -c "from graphrag_mcp.core.graphiti_engine import GraphitiKnowledgeGraph; print('✅ Graphiti Ready')"
+# Verify installation (comprehensive check)
+python3 test_core_components.py
+
+# Quick component verification
+python3 -c "from graphrag_mcp.core.citation_manager import CitationTracker; print('✅ Citation manager ready')"
+python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ Chat tools ready')"
+python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
 ```
 
 ### Your First Analysis
 
 ```bash
-# Set up tutorial environment
+# RECOMMENDED: Interactive tutorial workflow
 ./start_tutorial.sh
+
+# Or use notebook processing (complete workflow)
+cd notebooks/Main
+jupyter notebook Simple_Document_Processing.ipynb
 
 # Or manually test components
 python3 -c "
@@ -220,22 +230,223 @@ graphrag-mcp status research-assistant
 
 ## 🔄 Dual-Mode Architecture
 
-The system provides two specialized modes for different research approaches:
+The GraphRAG MCP Toolkit provides a sophisticated dual-mode architecture that enables Claude to support complete research workflows:
 
-### Chat Tools - Conversational Research Exploration
-Natural, exploratory tools for research discovery and understanding.
+### 🗣️ Chat Tools - Conversational Research Exploration
+Natural, exploratory tools for research discovery and understanding optimized for conversational interaction:
 
-### Literature Review Tools - Formal Academic Writing  
-Citation-aware tools for systematic literature review and formal academic writing.
+- **ask_knowledge_graph**: Natural Q&A with conversational responses
+- **explore_topic**: Structured topic exploration with multiple scopes
+- **find_connections**: Discover relationships between concepts
+- **what_do_we_know_about**: Comprehensive knowledge summaries
+
+### 📝 Literature Review Tools - Formal Academic Writing
+Citation-aware tools for systematic literature review and formal academic writing with integrated citation management:
+
+- **gather_sources_for_topic**: Source gathering and organization
+- **get_facts_with_citations**: Citation-ready factual statements
+- **verify_claim_with_sources**: Evidence-based claim verification
+- **get_topic_outline**: Structured literature review outlines
+- **track_citations_used**: Citation usage management
+- **generate_bibliography**: Multi-style bibliography generation
+
+### 🔗 Integrated Citation Management
+Both tool sets share a central **CitationTracker** that:
+- Automatically tracks which papers are referenced
+- Maintains citation usage context and confidence scores
+- Supports 4 academic citation styles (APA, IEEE, Nature, MLA)
+- Generates in-text citations and bibliographies on demand
+
+### 🔄 Workflow Integration
+1. **Exploration Phase**: Use chat tools to explore topics, find connections, understand the landscape
+2. **Writing Phase**: Use literature review tools to gather sources, verify claims, generate citations
+3. **Citation Management**: Automatic tracking and formatting throughout both phases
 
 ## 📚 Academic Template Guide
 
-The academic template supports both conversational and literature review modes.
+The academic template demonstrates the full power of the dual-mode system with **16 MCP tools** organized into three categories:
 
-### Dual-Mode Tool Categories
+### 🗣️ Chat Tools (4 tools) - Conversational Exploration
+Natural exploration and discovery tools with enhanced query processing:
+
+#### `ask_knowledge_graph`
+Natural Q&A interface with conversational responses.
+
+```json
+{
+  "question": "string",
+  "depth": "quick | detailed (default: quick)"
+}
+```
+
+**Usage in Claude:**
+```
+ask_knowledge_graph: "What are the main research themes in transformer architectures?"
+```
+
+#### `explore_topic`
+Structured topic exploration with different detail levels.
+
+```json
+{
+  "topic": "string",
+  "scope": "overview | detailed | comprehensive (default: overview)"
+}
+```
+
+**Usage in Claude:**
+```
+explore_topic: "attention mechanisms" with scope "comprehensive"
+```
+
+#### `find_connections`
+Discover relationships between concepts using graph traversal.
+
+```json
+{
+  "concept_a": "string",
+  "concept_b": "string",
+  "connection_types": "array[string] (optional)"
+}
+```
+
+**Usage in Claude:**
+```
+find_connections: between "neural networks" and "optimization algorithms"
+```
+
+#### `what_do_we_know_about`
+Comprehensive knowledge summaries with optional gap analysis.
+
+```json
+{
+  "topic": "string",
+  "include_gaps": "boolean (default: true)"
+}
+```
+
+**Usage in Claude:**
+```
+what_do_we_know_about: "BERT variants" including gaps
+```
+
+### 📝 Literature Review Tools (6 tools) - Formal Writing
+Citation-aware tools for systematic literature review and formal academic writing:
+
+#### `gather_sources_for_topic`
+Systematic source collection and organization for literature reviews.
+
+```json
+{
+  "topic": "string",
+  "scope": "focused | comprehensive (default: comprehensive)",
+  "sections": "array[string] (optional)"
+}
+```
+
+**Usage in Claude:**
+```
+gather_sources_for_topic: "transformer architectures" for "comprehensive" literature review
+```
+
+#### `get_facts_with_citations`
+Citation-ready factual statements for academic writing.
+
+```json
+{
+  "topic": "string",
+  "section": "string (optional)",
+  "citation_style": "APA | IEEE | Nature | MLA (default: APA)"
+}
+```
+
+**Usage in Claude:**
+```
+get_facts_with_citations: about "attention mechanisms" in APA style
+```
+
+#### `verify_claim_with_sources`
+Evidence-based claim verification with supporting/contradicting evidence.
+
+```json
+{
+  "claim": "string",
+  "evidence_strength": "weak | medium | strong (default: strong)"
+}
+```
+
+**Usage in Claude:**
+```
+verify_claim_with_sources: "Transformers outperform RNNs on long sequences"
+```
+
+#### `get_topic_outline`
+Structured literature review outlines and section organization.
+
+```json
+{
+  "topic": "string",
+  "outline_type": "introduction | methods | results | discussion | comprehensive (default: comprehensive)"
+}
+```
+
+**Usage in Claude:**
+```
+get_topic_outline: for "transformer efficiency" literature review
+```
+
+#### `track_citations_used`
+Citation usage management and tracking.
+
+```json
+{
+  "citation_keys": "array[string]",
+  "context": "string (optional)"
+}
+```
+
+**Usage in Claude:**
+```
+track_citations_used: ["vaswani2017", "devlin2018", "brown2020"]
+```
+
+#### `generate_bibliography`
+Multi-style bibliography generation with usage statistics.
+
+```json
+{
+  "style": "APA | IEEE | Nature | MLA (default: APA)",
+  "used_only": "boolean (default: true)",
+  "sort_by": "author | year | title (default: author)"
+}
+```
+
+**Usage in Claude:**
+```
+generate_bibliography: in IEEE style with used citations only
+```
+
+### 🔍 Legacy/Core Tools (6 tools) - Backwards Compatibility
+Existing tools maintained for specialized analytical functions:
+
+### Core Tools
+
+#### `list_templates`
+Browse available domain templates.
+
+#### `switch_template`
+Change domain focus dynamically.
+
+#### `load_document_collection`
+Process document sets into knowledge graphs.
+
+#### `search_documents`
+Semantic search across document corpus.
+
+### Legacy Tools
 
 #### `query_papers`
-Semantic search across your document corpus.
+Basic semantic search across your document corpus.
 
 ```json
 {
@@ -250,95 +461,17 @@ Semantic search across your document corpus.
 Query papers about "transformer architectures in NLP"
 ```
 
-#### `find_citations`
-Finds supporting evidence for claims.
-
-```json
-{
-  "claim": "string",
-  "context": "string (optional)"
-}
-```
-
-**Usage in Claude:**
-```
-Find citations for "BERT outperforms traditional NLP models"
-```
-
 #### `research_gaps`
 Identifies unexplored research areas.
-
-```json
-{
-  "domain": "string",
-  "depth": "surface | deep (default: surface)"
-}
-```
-
-**Usage in Claude:**
-```
-Find research gaps in "neural machine translation"
-```
 
 #### `methodology_overview`
 Compares research methodologies.
 
-```json
-{
-  "topic": "string",
-  "include_evolution": "boolean (default: true)"
-}
-```
-
-**Usage in Claude:**
-```
-Compare methodologies for "sentiment analysis"
-```
-
 #### `author_analysis`
 Analyzes author contributions and collaborations.
 
-```json
-{
-  "author": "string (optional)",
-  "institution": "string (optional)"
-}
-```
-
-**Usage in Claude:**
-```
-Analyze contributions by "Yoshua Bengio"
-```
-
 #### `concept_evolution`
 Tracks concept development over time.
-
-```json
-{
-  "concept": "string",
-  "time_range": "string (optional)"
-}
-```
-
-**Usage in Claude:**
-```
-Track evolution of "attention mechanisms"
-```
-
-#### `generate_bibliography`
-Creates formatted bibliography.
-
-```json
-{
-  "style": "APA | IEEE | Nature (default: APA)",
-  "filter_used": "boolean (default: true)"
-}
-```
-
-**Usage in Claude:**
-```
-Generate APA style bibliography
-```
 
 ### Academic Workflow Examples
 
