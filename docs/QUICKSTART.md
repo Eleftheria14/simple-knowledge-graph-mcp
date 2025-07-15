@@ -79,7 +79,7 @@ ollama serve
 curl -s http://localhost:11434/api/tags
 
 # RECOMMENDED: Run comprehensive system validation
-python3 test_basic_functionality.py
+python3 tests/test_basic_functionality.py
 
 # Test core components with validation
 python3 test_core_components.py
@@ -90,7 +90,7 @@ python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ 
 python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
 
 # Test MCP integration
-python3 test_mcp_simple.py
+python3 tests/test_mcp_simple.py
 ```
 
 ## 📄 Step 2: Start Analysis
@@ -236,10 +236,10 @@ generate_bibliography: in IEEE style with used citations only
 
 ```bash
 # RECOMMENDED: Comprehensive health check
-python3 test_basic_functionality.py
+python3 tests/test_basic_functionality.py
 
 # Run system validation
-python3 test_mcp_simple.py
+python3 tests/test_mcp_simple.py
 
 # Check component health
 python3 -c "

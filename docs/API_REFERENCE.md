@@ -444,13 +444,13 @@ The GraphRAG MCP Toolkit includes comprehensive validation and testing framework
 
 ```python
 # Basic functionality test
-python3 test_basic_functionality.py
+python3 tests/test_basic_functionality.py
 
 # Simple MCP integration test
-python3 test_mcp_simple.py
+python3 tests/test_mcp_simple.py
 
 # Comprehensive integration test
-python3 test_mcp_integration.py
+python3 tests/test_mcp_integration.py
 ```
 
 ### Prerequisites Validation
