@@ -13,8 +13,8 @@ from typing import Any, Optional
 from fastmcp import Context
 from pydantic import BaseModel
 
-from ..core.citation_manager import CitationTracker
-from ..core.query_engine import EnhancedQueryEngine
+from ..core.chromadb_citation_manager import ChromaDBCitationManager
+from ..core.neo4j_entity_manager import Neo4jEntityManager
 from .base import StandardizedToolEngine, standard_mcp_tool, MCPToolType, MCPMetadata
 
 logger = logging.getLogger(__name__)
@@ -65,15 +65,18 @@ class ChatToolsEngine(StandardizedToolEngine):
     """
 
     def __init__(self,
-                 query_engine: Optional[EnhancedQueryEngine] = None,
-                 citation_manager: Optional[CitationTracker] = None,
+                 query_engine=None,
+                 citation_manager: Optional[ChromaDBCitationManager] = None,
+                 entity_manager: Optional[Neo4jEntityManager] = None,
                  document_store=None,
                  knowledge_graph=None,
                  api_processor=None):
         """Initialize chat tools engine"""
         super().__init__(api_processor=api_processor, citation_manager=citation_manager)
         
-        self.query_engine = query_engine or EnhancedQueryEngine()
+        self.query_engine = query_engine  # Use enhanced query engine or None
+        self.citation_manager = citation_manager or ChromaDBCitationManager()
+        self.entity_manager = entity_manager or Neo4jEntityManager()
         self.document_store = document_store
         self.knowledge_graph = knowledge_graph
 

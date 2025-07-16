@@ -1,52 +1,33 @@
 """
-Core processing engine for GraphRAG MCP Toolkit
+GraphRAG MCP Core Components
 
-Domain-agnostic components for document processing, knowledge graph extraction,
-and chat interface functionality. These components are used by all domain templates.
-
-Components:
-- DocumentProcessor: PDF processing and text chunking
-- ChatEngine: RAG + Knowledge Graph unified interface  
-- AdvancedAnalyzer: Enhanced document analysis with citations
-- OllamaEngine: Local LLM integration layer
+Enhanced architecture with sequential processing, persistent citations,
+and knowledge graph integration.
 """
 
-from .analyzer import (
-    AdvancedAnalyzer,
-    AnalysisConfig,
-    CorpusDocument,
-    create_advanced_analyzer,
-)
-from .chat_engine import ChatConfig, ChatEngine, ChatResponse, create_chat_engine
-from .document_processor import (
-    DocumentData,
-    DocumentProcessor,
-    ProcessingConfig,
-    create_document_processor,
-)
-from .ollama_engine import OllamaConfig, OllamaEngine, create_ollama_engine
+# Enhanced architecture components
+from .config import GraphRAGConfig, ProcessingConfig, StorageConfig, ModelConfig
+from .chromadb_citation_manager import ChromaDBCitationManager
+from .neo4j_entity_manager import Neo4jEntityManager
+from .llm_analysis_engine import LLMAnalysisEngine
+from .embedding_service import EmbeddingService
+from .knowledge_graph_integrator import KnowledgeGraphIntegrator
+from .enhanced_document_processor import EnhancedDocumentProcessor
+
+# Legacy components removed - use enhanced architecture
 
 __all__ = [
-    # Main classes
-    "DocumentProcessor",
-    "ChatEngine",
-    "AdvancedAnalyzer",
-    "OllamaEngine",
-
-    # Configuration classes
-    "ProcessingConfig",
-    "ChatConfig",
-    "AnalysisConfig",
-    "OllamaConfig",
-
-    # Data classes
-    "DocumentData",
-    "ChatResponse",
-    "CorpusDocument",
-
-    # Factory functions
-    "create_document_processor",
-    "create_chat_engine",
-    "create_advanced_analyzer",
-    "create_ollama_engine",
+    # Enhanced architecture
+    'GraphRAGConfig',
+    'ProcessingConfig',
+    'StorageConfig',
+    'ModelConfig',
+    'ChromaDBCitationManager',
+    'Neo4jEntityManager',
+    'LLMAnalysisEngine',
+    'EmbeddingService',
+    'KnowledgeGraphIntegrator',
+    'EnhancedDocumentProcessor',
+    
+    # Legacy components removed - use enhanced architecture
 ]

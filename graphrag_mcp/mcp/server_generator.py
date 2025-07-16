@@ -13,10 +13,16 @@ from typing import Any
 from fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field
 
-# Core components
-from ..core import AdvancedAnalyzer, ChatEngine, DocumentProcessor, OllamaEngine
-from ..core.citation_manager import CitationTracker
-from ..core.query_engine import EnhancedQueryEngine
+# Core components - NEW ARCHITECTURE
+from ..core.config import GraphRAGConfig
+from ..core.enhanced_document_processor import EnhancedDocumentProcessor
+from ..core.chromadb_citation_manager import ChromaDBCitationManager
+from ..core.neo4j_entity_manager import Neo4jEntityManager
+from ..core.knowledge_graph_integrator import KnowledgeGraphIntegrator
+from ..core.llm_analysis_engine import LLMAnalysisEngine
+from ..core.embedding_service import EmbeddingService
+
+# Legacy imports removed - using enhanced architecture
 from ..templates import BaseTemplate, template_registry
 from .chat_tools import ChatToolsEngine
 from .literature_tools import LiteratureToolsEngine
@@ -50,43 +56,41 @@ class UniversalMCPServer:
                  name: str = "GraphRAG Universal Assistant",
                  instructions: str = "Universal GraphRAG assistant with domain-specific capabilities",
                  host: str = "localhost",
-                 port: int = 8080):
-        """Initialize the universal MCP server"""
+                 port: int = 8080,
+                 config: GraphRAGConfig = None):
+        """Initialize the universal MCP server with new architecture"""
 
         self.server = FastMCP(name=name)
+        self.config = config or GraphRAGConfig()
 
         # Server state
         self.state = ServerState()
 
-        # Core components
-        self.document_processor = DocumentProcessor()
-        self.chat_engine = ChatEngine()
-        self.analyzer = AdvancedAnalyzer()
-        self.ollama_engine = OllamaEngine()
+        # NEW ARCHITECTURE: Initialize enhanced components
+        self._initialize_enhanced_components()
 
-        # Enhanced components for new tools
-        self.citation_manager = CitationTracker()
-        self.query_engine = EnhancedQueryEngine(
-            knowledge_interface=None,  # Will be set when documents are loaded
-            citation_manager=self.citation_manager,
-            ollama_engine=self.ollama_engine
-        )
+        # Legacy components removed - using enhanced architecture
+        
+        # Initialize enhanced query engine with enhanced components
+        self.query_engine = self.enhanced_processor.query_engine if hasattr(self.enhanced_processor, 'query_engine') else None
 
-        # Create shared tool execution context
+        # Create shared tool execution context (enhanced + legacy)
         self.tool_context = create_tool_context(
-            citation_manager=self.citation_manager,
+            citation_manager=self.citation_manager,  # Use enhanced citation manager
             user_context={"server": name}
         )
 
-        # Tool engines with shared context
+        # Tool engines with NEW ARCHITECTURE
         self.chat_tools = ChatToolsEngine(
             query_engine=self.query_engine,
-            citation_manager=self.citation_manager,
+            citation_manager=self.citation_manager,  # Enhanced citation manager
+            entity_manager=self.entity_manager,  # Add entity manager
             api_processor=self.tool_context.api_processor
         )
         self.literature_tools = LiteratureToolsEngine(
             query_engine=self.query_engine,
-            citation_manager=self.citation_manager,
+            citation_manager=self.citation_manager,  # Enhanced citation manager
+            entity_manager=self.entity_manager,  # Add entity manager
             api_processor=self.tool_context.api_processor
         )
 
@@ -104,6 +108,32 @@ class UniversalMCPServer:
         self._load_template("academic")
 
         logger.info(f"🚀 Universal MCP Server initialized: {name}")
+        logger.info(f"   📊 Processing Mode: {self.config.processing.processing_mode}")
+        logger.info(f"   🧠 LLM Model: {self.config.model.llm_model}")
+        logger.info(f"   🔢 Embedding Model: {self.config.model.embedding_model}")
+        logger.info(f"   💾 ChromaDB: {self.config.storage.chromadb.persist_directory}")
+        logger.info(f"   🗄️ Neo4j: {self.config.storage.neo4j.uri}")
+        logger.info(f"   ✅ Enhanced Architecture: Active")
+
+    def _initialize_enhanced_components(self):
+        """Initialize all enhanced architecture components"""
+        try:
+            # Enhanced Document Processor (main orchestrator)
+            self.enhanced_processor = EnhancedDocumentProcessor(config=self.config)
+            
+            # Get individual components from processor
+            self.citation_manager = self.enhanced_processor.citation_manager
+            self.entity_manager = self.enhanced_processor.entity_manager
+            self.kg_integrator = self.enhanced_processor.kg_integrator
+            self.llm_engine = self.enhanced_processor.llm_engine
+            self.embedding_service = self.enhanced_processor.embedding_service
+            
+            logger.info("✅ Enhanced architecture components initialized")
+            
+        except Exception as e:
+            logger.error(f"❌ Enhanced component initialization failed: {e}")
+            # No fallback - enhanced components are required
+            raise RuntimeError(f"Enhanced architecture initialization failed: {e}")
 
     def _register_core_tools(self):
         """Register core MCP tools that work across all domains"""
@@ -162,7 +192,7 @@ class UniversalMCPServer:
             ctx.info("Getting server status")
 
             # Check Ollama health
-            ollama_health = self.ollama_engine.check_health()
+            ollama_health = self.llm_engine.check_health() if self.llm_engine else {"server_accessible": False}
 
             return {
                 "server_name": self.server.name,
@@ -178,19 +208,31 @@ class UniversalMCPServer:
                 },
                 "capabilities": [
                     "domain_switching",
-                    "document_processing",
-                    "entity_extraction",
+                    "enhanced_document_processing",
+                    "sequential_processing",
+                    "entity_extraction_with_provenance",
+                    "context_aware_embeddings",
+                    "citation_graph_linking",
+                    "chromadb_persistence",
+                    "neo4j_knowledge_graph",
                     "semantic_search",
                     "citation_tracking",
                     "dual_mode_tools",
                     "standardized_execution"
                 ],
+                "enhanced_components": {
+                    "citation_manager": "ChromaDBCitationManager" if hasattr(self, 'citation_manager') and hasattr(self.citation_manager, 'collection') else "CitationTracker",
+                    "entity_manager": "Neo4jEntityManager" if self.entity_manager else "None",
+                    "knowledge_graph_integrator": "Active" if self.kg_integrator else "None",
+                    "embedding_service": "EmbeddingService" if self.embedding_service else "None",
+                    "llm_engine": "LLMAnalysisEngine" if self.llm_engine else "None"
+                },
                 "tool_analytics": self.get_tool_analytics()
             }
 
         @self.server.tool
         async def load_document_collection(collection_path: str, collection_name: str, ctx: Context) -> dict[str, Any]:
-            """Load and process a collection of documents"""
+            """Load and process a collection of documents using enhanced architecture"""
             ctx.info(f"Loading document collection: {collection_name}")
 
             try:
@@ -207,18 +249,39 @@ class UniversalMCPServer:
                 if not pdf_files:
                     return {"success": False, "error": "No PDF files found in collection"}
 
-                # Process documents
+                # Process documents using ENHANCED ARCHITECTURE
                 processed_docs = {}
-                domain_guidance = self.current_template.get_entity_schema() if self.current_template else None
+                total_entities = 0
+                total_citations = 0
+                total_relationships = 0
 
                 for pdf_file in pdf_files[:10]:  # Limit to 10 files for now
-                    ctx.info(f"Processing: {pdf_file.name}")
+                    ctx.info(f"Processing: {pdf_file.name} (Enhanced Sequential Processing)")
                     try:
-                        corpus_doc = self.analyzer.analyze_for_corpus(
-                            str(pdf_file),
-                            domain_schema=domain_guidance
-                        )
-                        processed_docs[pdf_file.stem] = corpus_doc.model_dump()
+                        # Use enhanced document processor
+                        if hasattr(self, 'enhanced_processor') and self.enhanced_processor:
+                            processing_result = self.enhanced_processor.process_document(str(pdf_file))
+                            
+                            processed_docs[pdf_file.stem] = {
+                                "title": processing_result.document_title,
+                                "path": processing_result.document_path,
+                                "entities_created": processing_result.entities_created,
+                                "citations_stored": processing_result.citations_stored,
+                                "relationships_created": processing_result.relationships_created,
+                                "processing_time": processing_result.processing_time,
+                                "enhanced_chunks": len(processing_result.enhanced_chunks),
+                                "embedding_dimensions": processing_result.embeddings.shape[1] if processing_result.embeddings.ndim > 1 else 0,
+                                "metadata": processing_result.metadata
+                            }
+                            
+                            total_entities += processing_result.entities_created
+                            total_citations += processing_result.citations_stored
+                            total_relationships += processing_result.relationships_created
+                        else:
+                            # Enhanced processor not available - skip processing
+                            ctx.error(f"Enhanced processor not available for {pdf_file.name}")
+                            processed_docs[pdf_file.stem] = {"error": "Enhanced processor not available"}
+                            
                     except Exception as e:
                         ctx.error(f"Failed to process {pdf_file.name}: {e}")
 
@@ -232,10 +295,11 @@ class UniversalMCPServer:
                     "documents_found": len(pdf_files),
                     "documents_processed": len(processed_docs),
                     "documents": list(processed_docs.keys()),
-                    "entities_extracted": sum(
-                        len(doc.get("entities", {}))
-                        for doc in processed_docs.values()
-                    )
+                    "total_entities_created": total_entities,
+                    "total_citations_stored": total_citations,
+                    "total_relationships_created": total_relationships,
+                    "processing_mode": "enhanced_sequential" if hasattr(self, 'enhanced_processor') and self.enhanced_processor else "legacy",
+                    "architecture": "citation_graph_linked" if self.kg_integrator else "basic"
                 }
 
             except Exception as e:
@@ -361,7 +425,7 @@ class UniversalMCPServer:
     def _register_standardized_tool(self, tool_name: str, description: str, params: dict):
         """Register a tool with standardized execution wrapper"""
         
-        async def tool_wrapper(*args, ctx: Context = None, **kwargs):
+        async def tool_wrapper(ctx: Context = None):
             """Standardized tool execution wrapper with analytics"""
             import time
             start_time = time.time()
@@ -371,8 +435,8 @@ class UniversalMCPServer:
                 self.registered_tools[tool_name]["execution_count"] += 1
                 self.registered_tools[tool_name]["last_used"] = time.time()
                 
-                # Execute the appropriate tool
-                result = await self._execute_tool(tool_name, args, kwargs, ctx)
+                # Execute the appropriate tool with empty kwargs
+                result = await self._execute_tool(tool_name, (), {}, ctx)
                 
                 # Track execution in context
                 processing_time = time.time() - start_time
@@ -410,14 +474,14 @@ class UniversalMCPServer:
             # Chat tools
             tool_method = getattr(self.chat_tools, tool_name, None)
             if tool_method:
-                return await tool_method(*args, ctx=ctx, **kwargs)
+                return await tool_method(ctx=ctx)
                 
         elif tool_name in ["gather_sources_for_topic", "get_facts_with_citations", "verify_claim_with_sources", 
                           "get_topic_outline", "track_citations_used", "generate_bibliography"]:
             # Literature tools
             tool_method = getattr(self.literature_tools, tool_name, None)
             if tool_method:
-                return await tool_method(*args, ctx=ctx, **kwargs)
+                return await tool_method(ctx=ctx)
                 
         elif tool_name == "generate_bibliography":
             # Special handling for bibliography generation
@@ -428,15 +492,7 @@ class UniversalMCPServer:
             
         else:
             # Legacy tools - route to template tool execution
-            params = {}
-            if args:
-                # Map positional args to common parameter names
-                param_names = ["query", "topic", "domain", "concept", "author", "claim"]
-                for i, arg in enumerate(args):
-                    if i < len(param_names):
-                        params[param_names[i]] = arg
-            
-            params.update(kwargs)
+            params = kwargs.copy()
             return await self._execute_template_tool(tool_name, params, ctx)
 
     def get_tool_analytics(self) -> dict[str, Any]:
@@ -591,14 +647,16 @@ def create_universal_server(
     name: str = "GraphRAG Universal Assistant",
     template: str = "academic",
     host: str = "localhost",
-    port: int = 8080
+    port: int = 8080,
+    config: GraphRAGConfig = None
 ) -> UniversalMCPServer:
-    """Create a universal MCP server with specified configuration"""
+    """Create a universal MCP server with enhanced architecture"""
 
     server = UniversalMCPServer(
         name=name,
         host=host,
-        port=port
+        port=port,
+        config=config or GraphRAGConfig()
     )
 
     if template != "academic":  # academic is loaded by default
@@ -612,14 +670,23 @@ async def run_universal_server_cli(
     template: str = "academic",
     host: str = "localhost",
     port: int = 8080,
-    transport: str = "http"
+    transport: str = "http",
+    config_file: str = None
 ):
-    """Run universal server from CLI"""
+    """Run universal server from CLI with enhanced architecture"""
+
+    # Load configuration if specified
+    config = None
+    if config_file:
+        config = GraphRAGConfig.load_from_file(config_file)
+    else:
+        config = GraphRAGConfig()
 
     server = create_universal_server(
         template=template,
         host=host,
-        port=port
+        port=port,
+        config=config
     )
 
     await server.run_server(transport=transport, host=host, port=port)

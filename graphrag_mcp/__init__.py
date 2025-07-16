@@ -19,7 +19,11 @@ Built with LangChain, Graphiti, and FastMCP for professional-grade AI tools.
 __version__ = "0.1.0"
 __author__ = "Aimie Garces"
 
-# Core components for backwards compatibility with existing src/
+# Enhanced architecture components
+from .core.enhanced_document_processor import EnhancedDocumentProcessor
+from .core.chromadb_citation_manager import ChromaDBCitationManager
+from .core.neo4j_entity_manager import Neo4jEntityManager
+
 # CLI interface (optional - requires typer)
 try:
     from .cli.main import app as cli_app
@@ -27,10 +31,6 @@ try:
 except ImportError:
     cli_app = None
     CLI_AVAILABLE = False
-from .core.analyzer import AdvancedAnalyzer
-from .core.chat_engine import ChatEngine
-from .core.document_processor import DocumentProcessor
-from .core.ollama_engine import OllamaEngine
 
 # MCP generation
 from .mcp.server_generator import (
@@ -44,11 +44,10 @@ from .templates.academic import AcademicTemplate
 from .templates.base import BaseTemplate, template_registry
 
 __all__ = [
-    # Core processing components
-    "DocumentProcessor",
-    "ChatEngine",
-    "AdvancedAnalyzer",
-    "OllamaEngine",
+    # Enhanced architecture components
+    "EnhancedDocumentProcessor",
+    "ChromaDBCitationManager", 
+    "Neo4jEntityManager",
 
     # CLI interface
     "cli_app",

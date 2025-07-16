@@ -13,8 +13,10 @@ from typing import Any, Optional
 from fastmcp import Context
 from pydantic import BaseModel, Field
 
-from ..core.citation_manager import CitationTracker
-from ..core.query_engine import EnhancedQueryEngine
+from ..core.chromadb_citation_manager import ChromaDBCitationManager
+from ..core.neo4j_entity_manager import Neo4jEntityManager
+from ..core.knowledge_graph_integrator import KnowledgeGraphIntegrator
+# Enhanced query engine removed - using KnowledgeGraphIntegrator directly
 from ..utils.error_handling import ProcessingError
 from .base import StandardizedToolEngine, standard_mcp_tool, MCPToolType
 
@@ -80,20 +82,28 @@ class LiteratureToolsEngine(StandardizedToolEngine):
     """
 
     def __init__(self,
-                 query_engine: Optional[EnhancedQueryEngine] = None,
-                 citation_manager: Optional[CitationTracker] = None,
+                 query_engine=None,
+                 citation_manager: Optional[ChromaDBCitationManager] = None,
+                 entity_manager: Optional[Neo4jEntityManager] = None,
+                 knowledge_graph: Optional[KnowledgeGraphIntegrator] = None,
                  document_store=None,
-                 knowledge_graph=None,
                  api_processor=None):
         """Initialize literature review tools engine"""
         super().__init__(api_processor=api_processor, citation_manager=citation_manager)
         
-        self.query_engine = query_engine or EnhancedQueryEngine()
-        # Use the shared citation manager from parent if available
-        if not self.citation_manager:
-            self.citation_manager = citation_manager or CitationTracker()
+        self.query_engine = query_engine  # Use enhanced query engine or None
+        self.citation_manager = citation_manager or ChromaDBCitationManager()
+        self.entity_manager = entity_manager or Neo4jEntityManager()
+        self.knowledge_graph = knowledge_graph or KnowledgeGraphIntegrator(
+            neo4j_manager=self.entity_manager,
+            chromadb_manager=self.citation_manager
+        )
         self.document_store = document_store
-        self.knowledge_graph = knowledge_graph
+        
+        logger.info("📚 Literature Tools Engine initialized with new architecture")
+        logger.info(f"   💾 ChromaDB Citation Manager: {type(self.citation_manager).__name__}")
+        logger.info(f"   🗄️ Neo4j Entity Manager: {type(self.entity_manager).__name__}")
+        logger.info(f"   🔗 Knowledge Graph Integrator: {type(self.knowledge_graph).__name__}")
 
     @standard_mcp_tool("gather_sources_for_topic", MCPToolType.LITERATURE)
     async def gather_sources_for_topic(self,
@@ -145,21 +155,25 @@ class LiteratureToolsEngine(StandardizedToolEngine):
 
             for query in search_queries:
                 try:
-                    result = await self.query_engine.process_query(
-                        query=query,
-                        context={"literature_mode": True, "topic": topic},
-                        response_type="literature"
-                    )
+                    # Use knowledge graph integrator for enhanced search
+                    if self.knowledge_graph:
+                        result = await self.knowledge_graph.semantic_search(
+                            query=query,
+                            context={"literature_mode": True, "topic": topic},
+                            limit=10
+                        )
+                        
+                        # Process and categorize sources
+                        for source in result.get("results", []):
+                            categorized_source = await self._categorize_source(source, topic, sections)
+                            all_sources.append(categorized_source)
 
-                    # Process and categorize sources
-                    for source in result.primary_results:
-                        categorized_source = await self._categorize_source(source, topic, sections)
-                        all_sources.append(categorized_source)
-
-                        # Update category counts
-                        category = categorized_source.get("category", "other")
-                        if category in source_categories:
-                            source_categories[category] += 1
+                            # Update category counts
+                            category = categorized_source.get("category", "other")
+                            if category in source_categories:
+                                source_categories[category] += 1
+                    else:
+                        logger.warning(f"Knowledge graph not available for query: {query}")
 
                 except Exception as e:
                     logger.warning(f"Source gathering query failed: {query} - {e}")
@@ -234,27 +248,31 @@ class LiteratureToolsEngine(StandardizedToolEngine):
 
             for query_context in query_contexts:
                 try:
-                    result = await self.query_engine.process_literature_query(
-                        topic=query_context,
-                        section=section,
-                        scope="comprehensive"
-                    )
+                    # Use knowledge graph integrator for literature search
+                    if self.knowledge_graph:
+                        result = await self.knowledge_graph.semantic_search(
+                            query=query_context,
+                            context={"section": section, "scope": "comprehensive"},
+                            limit=10
+                        )
 
-                    # Extract facts with citations
-                    facts = await self._extract_cited_facts(result, citation_style)
+                        # Extract facts with citations
+                        facts = await self._extract_cited_facts(result, citation_style)
 
-                    for fact in facts:
-                        if fact["citation_key"] not in used_citations:
-                            cited_facts.append(fact)
-                            used_citations.add(fact["citation_key"])
+                        for fact in facts:
+                            if fact["citation_key"] not in used_citations:
+                                cited_facts.append(fact)
+                                used_citations.add(fact["citation_key"])
 
-                            # Track citation usage
-                            self.citation_manager.track_citation(
-                                fact["citation_key"],
-                                context_text=fact["statement"],
-                                section=section or "literature_review",
-                                confidence=fact.get("confidence", 0.8)
-                            )
+                                # Track citation usage
+                                self.citation_manager.track_citation(
+                                    fact["citation_key"],
+                                    context_text=fact["statement"],
+                                    section=section or "literature_review",
+                                    confidence=fact.get("confidence", 0.8)
+                                )
+                    else:
+                        logger.warning(f"Knowledge graph not available for query: {query_context}")
 
                 except Exception as e:
                     logger.warning(f"Fact extraction failed for: {query_context} - {e}")
@@ -305,11 +323,16 @@ class LiteratureToolsEngine(StandardizedToolEngine):
             if ctx:
                 ctx.info(f"Verifying claim: {claim}")
 
-            # Use enhanced query engine for claim verification
-            result = await self.query_engine.verify_claim(
-                claim=claim,
-                evidence_threshold=0.7 if evidence_strength == "strong" else 0.5
-            )
+            # Use knowledge graph integrator for claim verification
+            if self.knowledge_graph:
+                result = await self.knowledge_graph.semantic_search(
+                    query=claim,
+                    context={"task": "claim_verification", "evidence_strength": evidence_strength},
+                    limit=20
+                )
+            else:
+                logger.warning("Knowledge graph not available for claim verification")
+                result = {"results": []}
 
             # Analyze evidence for and against claim
             verification = await self._analyze_claim_evidence(claim, result, evidence_strength)
@@ -429,14 +452,13 @@ class LiteratureToolsEngine(StandardizedToolEngine):
                     )
 
                     if success:
-                        # Get citation details
-                        if citation_key in self.citation_manager.citations:
-                            citation = self.citation_manager.citations[citation_key]
+                        # Get citation details from ChromaDB
+                        usage_info = self.citation_manager.get_citation_usage(citation_key)
+                        if not usage_info.get("error"):
                             tracked_citations.append({
                                 "citation_key": citation_key,
-                                "title": citation.title,
-                                "authors": citation.authors,
-                                "usage_count": citation.citation_count,
+                                "usage_count": usage_info.get("usage_count", 0),
+                                "confidence_score": usage_info.get("confidence_score", 0.0),
                                 "status": "tracked"
                             })
                         tracking_results["successful"] += 1
@@ -449,7 +471,7 @@ class LiteratureToolsEngine(StandardizedToolEngine):
                     tracking_results["warnings"].append(f"Failed to track {citation_key}: {str(e)}")
 
             # Get current citation statistics
-            stats = self.citation_manager.get_citation_statistics()
+            stats = self.citation_manager.get_citation_stats()
 
             return {
                 "success": True,
@@ -484,13 +506,19 @@ class LiteratureToolsEngine(StandardizedToolEngine):
                 ctx.info(f"Generating bibliography in {style} style")
 
             # Generate bibliography using citation manager
-            bibliography = self.citation_manager.generate_bibliography(
-                style=style,
-                used_only=used_only
-            )
+            if used_only:
+                bibliography = self.citation_manager.generate_bibliography(
+                    style=style,
+                    entity_filter=None  # ChromaDB manager doesn't use entity_filter for used_only
+                )
+            else:
+                bibliography = self.citation_manager.generate_bibliography(
+                    style=style,
+                    entity_filter=None
+                )
 
             # Get citation statistics
-            stats = self.citation_manager.get_citation_statistics()
+            stats = self.citation_manager.get_citation_stats()
 
             return {
                 "success": True,
@@ -651,35 +679,30 @@ class LiteratureToolsEngine(StandardizedToolEngine):
         """Extract facts with citations from query results"""
         facts = []
 
-        if not query_result.formal_response:
-            return facts
-
-        # Simple fact extraction (in production, use more sophisticated NLP)
-        sentences = query_result.formal_response.split('.')
-
-        for i, sentence in enumerate(sentences):
-            sentence = sentence.strip()
-            if len(sentence) > 20:  # Reasonable sentence length
-                # Look for citations in the sentence
-                citation_key = None
-                if query_result.citations_used and i < len(query_result.citations_used):
-                    citation_key = query_result.citations_used[i % len(query_result.citations_used)]
-
+        # Handle new result format from knowledge graph integrator
+        for result in query_result.get("results", []):
+            snippet = result.get("snippet", "")
+            title = result.get("title", "")
+            
+            if len(snippet) > 20:  # Reasonable content length
+                # Use the result as a citation source
+                citation_key = result.get("citation_key", f"unknown_{hash(title)}")
+                
                 # Generate in-text citation
                 if citation_key and self.citation_manager:
                     in_text_citation = self.citation_manager.generate_in_text_citation(
                         citation_key, citation_style
                     )
-                    statement = f"{sentence} {in_text_citation}."
+                    statement = f"{snippet} {in_text_citation}."
                 else:
-                    statement = f"{sentence}."
+                    statement = f"{snippet}."
                     citation_key = "unknown"
 
                 facts.append({
                     "statement": statement,
                     "citation_key": citation_key,
-                    "confidence": query_result.confidence,
-                    "strength": "strong" if query_result.confidence > 0.8 else "moderate"
+                    "confidence": result.get("confidence", 0.5),
+                    "strength": "strong" if result.get("confidence", 0.5) > 0.8 else "moderate"
                 })
 
         return facts
@@ -703,7 +726,7 @@ class LiteratureToolsEngine(StandardizedToolEngine):
         neutral_evidence = []
 
         # Analyze search results for evidence type
-        for result in query_result.primary_results:
+        for result in query_result.get("results", []):
             snippet = result.get("snippet", "").lower()
 
             # Simple sentiment analysis for claim support
