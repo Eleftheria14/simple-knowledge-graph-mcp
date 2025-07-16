@@ -315,13 +315,15 @@ class ChromaDBCitationManager:
     
     def generate_bibliography(self, 
                             style: str = "APA",
-                            entity_filter: List[str] = None) -> str:
+                            entity_filter: List[str] = None,
+                            used_only: bool = False) -> str:
         """
         Generate bibliography in specified style.
         
         Args:
             style: Citation style (APA, IEEE, Nature, MLA)
             entity_filter: Only include citations for these entities
+            used_only: Only include citations that have been used/tracked
             
         Returns:
             Formatted bibliography
@@ -338,6 +340,10 @@ class ChromaDBCitationManager:
             citations = list({c.citation_key: c for c in citations}.values())
         else:
             citations = self._get_all_citations()
+        
+        # Filter to used citations only if requested
+        if used_only:
+            citations = [c for c in citations if c.citation_count > 0]
         
         # Sort by author, year, title
         citations.sort(key=lambda c: (c.authors[0] if c.authors else "", c.year or 0, c.title))

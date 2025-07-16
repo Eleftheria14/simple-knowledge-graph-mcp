@@ -533,15 +533,6 @@ def _check_graphrag_imports(verbose: bool = True) -> dict[str, Any]:
         }
 
 
-def validate_environment() -> ValidationResult:
-    """
-    Quick environment validation without verbose output
-    
-    Returns:
-        ValidationResult with status
-    """
-    return check_prerequisites(verbose=False)
-
 
 def get_system_info() -> dict[str, Any]:
     """

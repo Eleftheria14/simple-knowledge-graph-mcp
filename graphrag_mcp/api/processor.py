@@ -29,7 +29,7 @@ from ..ui.status import (
 )
 from ..utils.error_handling import ConfigurationError, ProcessingError, ValidationError
 from ..utils.file_discovery import discover_documents
-from ..utils.prerequisites import check_prerequisites, validate_environment
+from ..utils.prerequisites import check_prerequisites
 
 # Optional Graphiti import
 try:
@@ -182,7 +182,7 @@ class GraphRAGProcessor:
             ValidationResult with status and issues
         """
         try:
-            return validate_environment(verbose=verbose)
+            return check_prerequisites(verbose=verbose)
         except Exception as e:
             return ValidationResult(
                 status="failed",

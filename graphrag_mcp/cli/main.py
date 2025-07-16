@@ -460,7 +460,7 @@ def process(
 
             # Get Graphiti statistics
             try:
-                stats = await graphiti_engine.get_graph_stats()
+                stats = await graphiti_engine.get_knowledge_graph_stats()
                 project_metadata["graphiti_stats"] = stats
                 console.print(f"📊 Knowledge Graph Stats: {stats.get('total_nodes', 0)} nodes, {stats.get('total_edges', 0)} relationships")
             except Exception as e:
@@ -666,12 +666,21 @@ def serve_universal(
         from ..mcp.server_generator import run_universal_server_cli
 
         console.print("🚀 Starting Universal MCP Server...")
-        asyncio.run(run_universal_server_cli(
-            template=template,
-            host=host,
-            port=port,
-            transport=transport
-        ))
+        
+        # Check if we're already in an event loop
+        try:
+            loop = asyncio.get_running_loop()
+            console.print("⚠️ Already running in asyncio event loop")
+            console.print("💡 Try running this command in a fresh terminal or Python process")
+            return
+        except RuntimeError:
+            # No event loop running, safe to use asyncio.run
+            asyncio.run(run_universal_server_cli(
+                template=template,
+                host=host,
+                port=port,
+                transport=transport
+            ))
 
     except KeyboardInterrupt:
         console.print("\n👋 Server stopped by user")
@@ -704,7 +713,7 @@ def status(
         )
         
         # Try a simple test to verify connection
-        test_result = llm_engine.analyze_text_chunk("Test connection", "test_doc")
+        test_result = llm_engine.analyze_document_comprehensive(["Test connection"], "test_doc")
         if test_result:
             console.print("✅ Ollama server: Online")
             console.print(f"✅ LLM model ({config.model.llm_model}): Available")
@@ -1073,7 +1082,7 @@ def validate(
             max_predict=config.model.max_predict
         )
         
-        test_result = llm_engine.analyze_text_chunk("Test connection", "test_doc")
+        test_result = llm_engine.analyze_document_comprehensive(["Test connection"], "test_doc")
         if test_result:
             console.print("✅ Ollama server: Connected and working")
             console.print(f"✅ LLM model ({config.model.llm_model}): Available")

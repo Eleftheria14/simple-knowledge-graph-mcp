@@ -156,14 +156,26 @@ class GraphitiKnowledgeGraph:
                     "metadata": metadata or {}
                 }
 
-                # Add episode to Graphiti
-                await self.graphiti.add_episode(
-                    name=episode_name,
-                    episode_body=json.dumps(episode_body),
-                    source=EpisodeType.json,
-                    source_description=f"{source_description} - Chunk {i+1}/{len(chunks)}",
-                    reference_time=datetime.now()
-                )
+                # Add episode to Graphiti with timeout to prevent infinite loops
+                try:
+                    import asyncio
+                    await asyncio.wait_for(
+                        self.graphiti.add_episode(
+                            name=episode_name,
+                            episode_body=json.dumps(episode_body),
+                            source=EpisodeType.json,
+                            source_description=f"{source_description} - Chunk {i+1}/{len(chunks)}",
+                            reference_time=datetime.now()
+                        ),
+                        timeout=120  # 2 minutes timeout per chunk
+                    )
+                    logger.info(f"✅ Added chunk {i+1}/{len(chunks)} to knowledge graph")
+                except asyncio.TimeoutError:
+                    logger.warning(f"⏰ Timeout adding chunk {i+1}/{len(chunks)} to knowledge graph - skipping")
+                    continue
+                except Exception as e:
+                    logger.error(f"❌ Failed to add chunk {i+1}/{len(chunks)}: {e}")
+                    continue
 
             # Track processed document
             self.processed_documents[document_id] = {
