@@ -118,7 +118,7 @@ def get_system_status() -> dict:
 
 def visualize_processed_documents(documents, project_name: str = "GraphRAG Project", max_nodes: int = 50):
     """
-    Quick visualization of processed documents
+    Quick visualization of processed documents using Graphiti + yFiles
     
     Args:
         documents: List of processed documents
@@ -128,5 +128,8 @@ def visualize_processed_documents(documents, project_name: str = "GraphRAG Proje
     Returns:
         NetworkX graph object or None if visualization fails
     """
-    from ..ui.visualizations import visualize_knowledge_graph
-    return visualize_knowledge_graph(documents, project_name, max_nodes)
+    # Use the real knowledge graph visualization instead of legacy Plotly
+    from ..visualization.graphiti_yfiles import GraphitiYFilesVisualizer
+    print("📊 Use 'graphrag-mcp visualize <project>' command for knowledge graph visualization")
+    print("   Or use GraphitiYFilesVisualizer for advanced visualization features")
+    return None

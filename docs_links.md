@@ -54,6 +54,7 @@
 - [Graphiti - Real-time Knowledge Graphs](https://github.com/getzep/graphiti)
 - [NetworkX Documentation](https://networkx.org/documentation/stable/) - Legacy support only
 - [Pyvis Interactive Networks](https://pyvis.readthedocs.io/en/latest/)
+- [Mermaid Flowchart Syntax](https://docs.mermaidchart.com/mermaid-oss/syntax/flowchart.html)
 
 ## Academic Paper Processing
 - [PyPDF2 Documentation](https://pypdf2.readthedocs.io/en/3.x/)

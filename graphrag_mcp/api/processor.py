@@ -18,9 +18,9 @@ from contextlib import asynccontextmanager
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from ..core.analyzer import AdvancedAnalyzer
-from ..core.citation_manager import CitationTracker
-from ..core.document_processor import DocumentProcessor
+from ..core.enhanced_document_processor import EnhancedDocumentProcessor
+from ..core.chromadb_citation_manager import ChromaDBCitationManager
+from ..core.config import GraphRAGConfig
 from ..ui.status import (
     DocumentInfo,
     DocumentStatus,
@@ -80,9 +80,12 @@ class GraphRAGProcessor:
 
         # Initialize components with error handling
         try:
-            self.doc_processor = DocumentProcessor()
-            self.analyzer = AdvancedAnalyzer()
-            self.citation_tracker = CitationTracker()
+            self.config = GraphRAGConfig()
+            self.enhanced_processor = EnhancedDocumentProcessor(self.config)
+            self.citation_manager = ChromaDBCitationManager(
+                collection_name="graphrag_citations",
+                persist_directory=self.config.storage.chromadb.persist_directory
+            )
         except Exception as e:
             raise ConfigurationError(f"Failed to initialize core components: {str(e)}")
 
@@ -111,10 +114,9 @@ class GraphRAGProcessor:
     def _cleanup_processor(self):
         """Cleanup processor resources"""
         try:
-            if hasattr(self, 'doc_processor'):
-                # Clear document data to free memory
-                self.doc_processor.document_data = None
-                self.doc_processor.chat_history = []
+            if hasattr(self, 'enhanced_processor'):
+                # Enhanced processor cleanup is handled internally
+                pass
             
             # Force garbage collection
             gc.collect()
@@ -355,46 +357,51 @@ class GraphRAGProcessor:
         print(f"📄 Processing: {doc_status.name}")
 
         try:
-            # Step 1: Document processing
-            print("   🔍 Step 1: Loading and processing PDF...")
+            # Step 1: Enhanced document processing
+            print("   🔍 Step 1: Enhanced document processing...")
             try:
-                doc_data = self.doc_processor.load_document(str(doc_status.path))
-                print("   ✅ Document loaded successfully")
+                processing_result = self.enhanced_processor.process_document(str(doc_status.path))
+                print("   ✅ Document processing complete")
+                print(f"   📊 Found {processing_result.entities_created} entities")
+                print(f"   📚 Stored {processing_result.citations_stored} citations")
 
-                # Get document summary
-                summary = self.doc_processor.get_document_summary()
-                print("   📋 Generated document summary")
+                # Extract information from processing result
+                all_entities = processing_result.entities_created  # This is a count, not a list
+                document_title = processing_result.document_title
+                enhanced_content = "\n\n".join(processing_result.enhanced_chunks)
 
             except Exception as e:
-                print(f"   ❌ Document loading failed: {e}")
+                print(f"   ❌ Enhanced processing failed: {e}")
                 raise
 
-            # Step 2: Analysis
-            print("   🔬 Step 2: Analyzing document content...")
+            # Step 2: Update document status
+            print("   📋 Step 2: Updating document status...")
             try:
-                corpus_doc = self.analyzer.analyze_for_corpus(str(doc_status.path))
-                print("   ✅ Analysis complete")
-                print(f"   📊 Found {len(corpus_doc.entities)} entities via analyzer")
+                # Update document status with processing results
+                doc_status.entities_found = processing_result.entities_created
+                doc_status.citations_found = processing_result.citations_stored
+                doc_status.processing_time = processing_result.processing_time
 
-                # Handle different entity formats
-                if isinstance(corpus_doc.entities, dict):
-                    # Flatten dictionary of entities
-                    all_entities = []
-                    for entity_type, entity_list in corpus_doc.entities.items():
-                        all_entities.extend(entity_list)
-                else:
-                    all_entities = corpus_doc.entities
+                # Create a corpus_doc-like object for backward compatibility
+                class CorpusDoc:
+                    def __init__(self, processing_result):
+                        self.title = processing_result.document_title
+                        self.content = "\n\n".join(processing_result.enhanced_chunks)
+                        self.entities = processing_result.entities_created  # Count
+                        self.metadata = processing_result.metadata
+                        
+                corpus_doc = CorpusDoc(processing_result)
 
-                print(f"   🔗 Total unique entities: {len(all_entities)}")
+                print(f"   🔗 Total entities: {all_entities}")
 
             except Exception as e:
-                print(f"   ❌ Analysis failed: {e}")
+                print(f"   ❌ Enhanced processing failed: {e}")
                 print("   🔧 Using fallback document representation")
 
                 # Create fallback document
                 corpus_doc = type('CorpusDoc', (), {
-                    'entities': [],
-                    'content': summary.get('content', 'Document processed successfully'),
+                    'entities': 0,
+                    'content': 'Document processed successfully',
                     'title': doc_status.name.replace('.pdf', ''),
                     'metadata': {
                         'filename': doc_status.name,
@@ -403,13 +410,13 @@ class GraphRAGProcessor:
                     },
                     'citations': []
                 })()
-                all_entities = []
+                all_entities = 0
 
             # Step 3: Knowledge graph storage
             print("   🕸️  Step 3: Storing in knowledge graph...")
             try:
                 if self.graphiti_engine:
-                    content_str = str(corpus_doc.content) if hasattr(corpus_doc, 'content') else summary.get('content', '')
+                    content_str = str(corpus_doc.content) if hasattr(corpus_doc, 'content') else 'Document processed successfully'
 
                     success = await self.graphiti_engine.add_document(
                         document_content=content_str,
@@ -512,7 +519,7 @@ class GraphRAGProcessor:
 
     def visualize_knowledge_graph(self, documents: list[DocumentStatus], max_nodes: int = 50) -> Any | None:
         """
-        Create interactive knowledge graph visualization
+        Create interactive knowledge graph visualization using Graphiti + yFiles
         
         Args:
             documents: List of processed documents
@@ -522,8 +529,11 @@ class GraphRAGProcessor:
             NetworkX graph object or None if visualization fails
         """
         try:
-            from ..ui.visualizations import visualize_knowledge_graph
-            return visualize_knowledge_graph(documents, self.project_name, max_nodes)
+            # Use the real knowledge graph visualization instead of legacy Plotly
+            from ..visualization.graphiti_yfiles import GraphitiYFilesVisualizer
+            print("📊 Use 'graphrag-mcp visualize <project>' command for knowledge graph visualization")
+            print("   Or use GraphitiYFilesVisualizer directly for advanced visualization features")
+            return None
         except Exception as e:
             print(f"❌ Error creating visualization: {e}")
             return None

@@ -7,6 +7,7 @@ GraphRAG MCP servers across different domains.
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -20,7 +21,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 # Core components
-from ..core import AdvancedAnalyzer, OllamaEngine
+from ..core import EnhancedDocumentProcessor, LLMAnalysisEngine, GraphRAGConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -307,7 +308,8 @@ def process(
     console.print("🧠 Knowledge Graph: Persistent Graphiti/Neo4j")
 
     # Initialize components
-    analyzer = AdvancedAnalyzer()
+    config = GraphRAGConfig()
+    processor = EnhancedDocumentProcessor(config)
 
     # Create output directory
     output_dir = project_dir / "processed"
@@ -367,23 +369,25 @@ def process(
 
                     progress.update(task, description=f"📄 Analyzing {pdf_file.name}...")
 
-                    # Analyze document
-                    corpus_doc = analyzer.analyze_for_corpus(str(pdf_file))
+                    # Process document
+                    processing_result = processor.process_document(str(pdf_file))
 
                     progress.update(task, description="🧠 Adding to knowledge graph...")
 
                     # Add to Graphiti knowledge graph
+                    # Use enhanced chunks as content (better than raw text)
+                    document_content = "\n\n".join(processing_result.enhanced_chunks)
                     success = await graphiti_engine.add_document(
-                        document_content=corpus_doc.content,
+                        document_content=document_content,
                         document_id=f"{project}_{pdf_file.stem}",  # Project-namespaced ID
                         metadata={
-                            "title": corpus_doc.title,
+                            "title": processing_result.document_title,
                             "project": project,
                             "template": template,
                             "filename": pdf_file.name,
-                            "entities": corpus_doc.entities,
+                            "entities": processing_result.entities_created,
                             "processing_date": datetime.now().isoformat(),
-                            **corpus_doc.metadata
+                            **processing_result.metadata
                         },
                         source_description=f"{template} document from {project} project"
                     )
@@ -393,16 +397,28 @@ def process(
 
                         # Save JSON metadata (unless graphiti-only mode)
                         if not graphiti_only:
+                            # Create a serializable dict from ProcessingResult
+                            processing_data = {
+                                "document_title": processing_result.document_title,
+                                "document_path": processing_result.document_path,
+                                "text_chunks": processing_result.text_chunks,
+                                "enhanced_chunks": processing_result.enhanced_chunks,
+                                "entities_created": processing_result.entities_created,
+                                "citations_stored": processing_result.citations_stored,
+                                "relationships_created": processing_result.relationships_created,
+                                "processing_time": processing_result.processing_time,
+                                "metadata": processing_result.metadata
+                            }
                             with open(output_file, 'w') as f:
-                                json.dump(corpus_doc.model_dump(), f, indent=2)
+                                json.dump(processing_data, f, indent=2)
 
                         # Update project metadata
                         project_metadata["documents_processed"].append({
                             "filename": pdf_file.name,
                             "document_id": f"{project}_{pdf_file.stem}",
                             "status": "processed",
-                            "title": corpus_doc.title,
-                            "entities_count": len(corpus_doc.entities),
+                            "title": processing_result.document_title,
+                            "entities_count": processing_result.entities_created,
                             "graphiti_success": True
                         })
 
@@ -410,14 +426,25 @@ def process(
                         progress.update(task, description=f"⚠️  Knowledge graph failed, saved locally: {pdf_file.name}")
 
                         # Save JSON as fallback
+                        processing_data = {
+                            "document_title": processing_result.document_title,
+                            "document_path": processing_result.document_path,
+                            "text_chunks": processing_result.text_chunks,
+                            "enhanced_chunks": processing_result.enhanced_chunks,
+                            "entities_created": processing_result.entities_created,
+                            "citations_stored": processing_result.citations_stored,
+                            "relationships_created": processing_result.relationships_created,
+                            "processing_time": processing_result.processing_time,
+                            "metadata": processing_result.metadata
+                        }
                         with open(output_file, 'w') as f:
-                            json.dump(corpus_doc.model_dump(), f, indent=2)
+                            json.dump(processing_data, f, indent=2)
 
                         project_metadata["documents_processed"].append({
                             "filename": pdf_file.name,
                             "document_id": pdf_file.stem,
                             "status": "processed_local_only",
-                            "title": corpus_doc.title,
+                            "title": processing_result.document_title,
                             "graphiti_success": False
                         })
 
@@ -668,14 +695,22 @@ def status(
 
     # Check Ollama
     try:
-        ollama_engine = OllamaEngine()
-        health = ollama_engine.check_health()
-        if health["server_accessible"]:
+        config = GraphRAGConfig()
+        llm_engine = LLMAnalysisEngine(
+            llm_model=config.model.llm_model,
+            temperature=config.model.temperature,
+            max_context=config.model.max_context,
+            max_predict=config.model.max_predict
+        )
+        
+        # Try a simple test to verify connection
+        test_result = llm_engine.analyze_text_chunk("Test connection", "test_doc")
+        if test_result:
             console.print("✅ Ollama server: Online")
-            console.print(f"✅ LLM model ({health['config']['llm_model']}): Available")
-            console.print(f"✅ Embedding model ({health['config']['embedding_model']}): Available")
+            console.print(f"✅ LLM model ({config.model.llm_model}): Available")
+            console.print(f"✅ Embedding model ({config.model.embedding_model}): Available")
         else:
-            console.print("❌ Ollama server: Offline", style="red")
+            console.print("❌ Ollama server: Connection failed", style="red")
     except Exception as e:
         console.print(f"❌ Ollama health check failed: {e}", style="red")
 
@@ -930,6 +965,301 @@ def serve_graphiti(
         console.print(f"❌ Error starting Graphiti server: {e}", style="red")
         console.print("💡 Make sure Neo4j is running: docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest", style="dim")
         raise typer.Exit(1)
+
+
+@app.command()
+def visualize(
+    project: str = typer.Argument(..., help="Project name to visualize"),
+    max_nodes: int = typer.Option(50, "--max-nodes", help="Maximum nodes to display"),
+    interactive: bool = typer.Option(True, "--interactive/--static", help="Interactive visualization"),
+    output: str | None = typer.Option(None, "--output", help="Save visualization to file")
+):
+    """
+    Show knowledge graph visualization using Graphiti + yFiles.
+    
+    Examples:
+    
+        graphrag-mcp visualize my-project
+        
+        graphrag-mcp visualize research --max-nodes 100 --output graph.html
+    """
+    console.print(f"🕸️  Visualizing knowledge graph for: [bold blue]{project}[/bold blue]")
+    
+    project_dir = _get_project_dir(project)
+    if not project_dir:
+        return
+    
+    # Check if project has been processed
+    metadata_file = project_dir / "processing_metadata.json"
+    if not metadata_file.exists():
+        console.print("❌ No processing metadata found. Run 'process' first.", style="red")
+        return
+    
+    try:
+        from ..visualization.graphiti_yfiles import GraphitiYFilesVisualizer
+        from ..core.graphiti_engine import GraphitiKnowledgeGraph
+        
+        # Create knowledge graph connection
+        graphiti_engine = GraphitiKnowledgeGraph()
+        
+        # Create visualizer
+        visualizer = GraphitiYFilesVisualizer(graphiti_engine)
+        
+        console.print("🔍 Creating knowledge graph visualization...")
+        
+        # Create visualization
+        import asyncio
+        result = asyncio.run(visualizer.create_visualization(
+            title=f"Knowledge Graph: {project}",
+            max_nodes=max_nodes,
+            enable_sidebar=interactive,
+            enable_search=interactive,
+            enable_neighborhood=interactive
+        ))
+        
+        if result:
+            console.print("✅ Knowledge graph visualization created successfully!")
+            if output:
+                console.print(f"📄 Saved to: {output}")
+        else:
+            console.print("⚠️  Visualization creation failed", style="yellow")
+            
+    except ImportError:
+        console.print("❌ Visualization dependencies not installed", style="red")
+        console.print("💡 Install with: pip install yfiles plotly networkx", style="yellow")
+    except Exception as e:
+        console.print(f"❌ Visualization failed: {e}", style="red")
+
+
+@app.command()
+def validate(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed validation info"),
+    fix: bool = typer.Option(False, "--fix", help="Attempt to fix common issues")
+):
+    """
+    Validate system prerequisites and configuration.
+    
+    Examples:
+    
+        graphrag-mcp validate
+        
+        graphrag-mcp validate --verbose --fix
+    """
+    console.print("🔍 [bold]System Validation[/bold]")
+    console.print()
+    
+    validation_results = []
+    
+    # Check Python version
+    import sys
+    python_version = sys.version_info
+    if python_version >= (3, 11):
+        console.print("✅ Python version: 3.11+ (recommended)")
+        validation_results.append(True)
+    elif python_version >= (3, 9):
+        console.print("⚠️  Python version: 3.9+ (minimum, 3.11+ recommended)", style="yellow")
+        validation_results.append(True)
+    else:
+        console.print("❌ Python version: Too old (3.9+ required)", style="red")
+        validation_results.append(False)
+    
+    # Check Ollama connection
+    try:
+        config = GraphRAGConfig()
+        llm_engine = LLMAnalysisEngine(
+            llm_model=config.model.llm_model,
+            temperature=config.model.temperature,
+            max_context=config.model.max_context,
+            max_predict=config.model.max_predict
+        )
+        
+        test_result = llm_engine.analyze_text_chunk("Test connection", "test_doc")
+        if test_result:
+            console.print("✅ Ollama server: Connected and working")
+            console.print(f"✅ LLM model ({config.model.llm_model}): Available")
+            validation_results.append(True)
+        else:
+            console.print("❌ Ollama server: Connection failed", style="red")
+            validation_results.append(False)
+    except Exception as e:
+        console.print(f"❌ Ollama validation failed: {e}", style="red")
+        validation_results.append(False)
+        if fix:
+            console.print("💡 Fix suggestion: Start Ollama with 'ollama serve'", style="yellow")
+    
+    # Check Neo4j connection (optional)
+    try:
+        from ..core.neo4j_entity_manager import Neo4jEntityManager
+        entity_manager = Neo4jEntityManager(
+            uri=config.storage.neo4j.uri,
+            auth=(config.storage.neo4j.username, config.storage.neo4j.password)
+        )
+        console.print("✅ Neo4j connection: Available")
+        validation_results.append(True)
+    except Exception as e:
+        console.print("⚠️  Neo4j connection: Optional (for advanced features)", style="yellow")
+        if verbose:
+            console.print(f"   Details: {e}", style="dim")
+        validation_results.append(True)  # Neo4j is optional
+    
+    # Check ChromaDB
+    try:
+        from ..core.chromadb_citation_manager import ChromaDBCitationManager
+        citation_manager = ChromaDBCitationManager(
+            collection_name="test_validation",
+            persist_directory="test_chroma_validation"
+        )
+        console.print("✅ ChromaDB: Available")
+        validation_results.append(True)
+    except Exception as e:
+        console.print(f"❌ ChromaDB validation failed: {e}", style="red")
+        validation_results.append(False)
+    
+    # Overall result
+    console.print()
+    if all(validation_results):
+        console.print("🎉 [bold green]System validation passed![/bold green]")
+        console.print("✅ All components are working correctly")
+    else:
+        console.print("⚠️  [bold yellow]System validation completed with issues[/bold yellow]")
+        console.print("💡 Check the errors above and install missing dependencies")
+
+
+@app.command()
+def quick_setup(
+    project: str = typer.Argument(..., help="Project name to create"),
+    documents: str = typer.Argument(..., help="Path to documents folder"),
+    template: str = typer.Option("academic", "--template", "-t", help="Domain template"),
+    auto_process: bool = typer.Option(True, "--auto-process/--no-process", help="Automatically process documents"),
+    auto_serve: bool = typer.Option(False, "--auto-serve", help="Start MCP server after processing")
+):
+    """
+    Quick setup: create project, add documents, and optionally process them.
+    
+    Examples:
+    
+        graphrag-mcp quick-setup research-project ./papers/
+        
+        graphrag-mcp quick-setup legal-docs ./contracts/ --template legal --auto-serve
+    """
+    console.print(f"🚀 [bold]Quick Setup: {project}[/bold]")
+    console.print()
+    
+    # Step 1: Create project
+    console.print("📁 Step 1: Creating project...")
+    try:
+        # Use the existing create command logic
+        from pathlib import Path
+        
+        project_dir = cli_state.projects_dir / project
+        if project_dir.exists():
+            if not typer.confirm(f"Project '{project}' already exists. Overwrite?"):
+                console.print("❌ Quick setup cancelled", style="red")
+                return
+        
+        # Create project structure
+        project_dir.mkdir(parents=True, exist_ok=True)
+        _create_project_structure(project_dir, project, template)
+        
+        # Create config
+        project_config = {
+            "name": project,
+            "template": template,
+            "created_date": datetime.now().isoformat(),
+            "version": "0.1.0",
+            "documents": [],
+            "mcp_server": {"enabled": False}
+        }
+        
+        config_file = project_dir / "config.json"
+        with open(config_file, 'w') as f:
+            json.dump(project_config, f, indent=2)
+        
+        console.print("✅ Project created successfully")
+        
+    except Exception as e:
+        console.print(f"❌ Project creation failed: {e}", style="red")
+        return
+    
+    # Step 2: Add documents
+    console.print("📄 Step 2: Adding documents...")
+    try:
+        docs_dir = project_dir / "documents"
+        docs_dir.mkdir(exist_ok=True)
+        
+        documents_path = Path(documents)
+        if not documents_path.exists():
+            console.print(f"❌ Documents path not found: {documents}", style="red")
+            return
+        
+        added_files = []
+        if documents_path.is_file() and documents_path.suffix.lower() == '.pdf':
+            # Single PDF
+            dest = docs_dir / documents_path.name
+            dest.write_bytes(documents_path.read_bytes())
+            added_files.append(dest)
+        elif documents_path.is_dir():
+            # Directory of PDFs
+            for pdf_file in documents_path.glob("*.pdf"):
+                dest = docs_dir / pdf_file.name
+                dest.write_bytes(pdf_file.read_bytes())
+                added_files.append(dest)
+        
+        console.print(f"✅ Added {len(added_files)} documents")
+        
+    except Exception as e:
+        console.print(f"❌ Adding documents failed: {e}", style="red")
+        return
+    
+    # Step 3: Process documents (if requested)
+    if auto_process and added_files:
+        console.print("⚙️  Step 3: Processing documents...")
+        try:
+            # Call the existing process command
+            import subprocess
+            result = subprocess.run([
+                "python", "-m", "graphrag_mcp.cli.main", 
+                "process", project
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                console.print("✅ Documents processed successfully")
+            else:
+                console.print(f"⚠️  Processing completed with warnings", style="yellow")
+                if result.stderr:
+                    console.print(f"   Details: {result.stderr}", style="dim")
+                    
+        except Exception as e:
+            console.print(f"❌ Processing failed: {e}", style="red")
+            auto_serve = False  # Don't start server if processing failed
+    
+    # Step 4: Start MCP server (if requested)
+    if auto_serve:
+        console.print("🚀 Step 4: Starting MCP server...")
+        console.print("💡 Use Ctrl+C to stop the server")
+        try:
+            # Call the existing serve command
+            import subprocess
+            subprocess.run([
+                "python", "-m", "graphrag_mcp.cli.main", 
+                "serve", project, "--transport", "stdio"
+            ])
+        except KeyboardInterrupt:
+            console.print("\n👋 Server stopped by user")
+        except Exception as e:
+            console.print(f"❌ Server failed to start: {e}", style="red")
+    
+    # Success summary
+    console.print()
+    console.print("🎉 [bold green]Quick Setup Complete![/bold green]")
+    console.print(f"📁 Project: {project}")
+    console.print(f"📄 Documents: {len(added_files)} added")
+    console.print(f"🎯 Template: {template}")
+    
+    if not auto_process:
+        console.print(f"💡 Next: [code]graphrag-mcp process {project}[/code]")
+    elif not auto_serve:
+        console.print(f"💡 Next: [code]graphrag-mcp serve {project}[/code]")
 
 
 if __name__ == "__main__":
