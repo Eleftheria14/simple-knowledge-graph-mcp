@@ -140,6 +140,70 @@ cat claude_desktop_config.json
 
 ## How it Works
 
+### Enhanced Sequential Processing Architecture
+
+```mermaid
+flowchart TB
+    subgraph PREWORK["📊 ENHANCED SEQUENTIAL PROCESSING (Pre-work)"]
+        direction TB
+        A[📄 PDF Papers] --> B[🔗 LangChain<br/>PDF Loader]
+        B --> C[📝 Text Chunks<br/>1000 chars]
+        
+        C --> E[🦙 llama3.1:8b<br/>LLM Analysis Engine<br/>Sequential Processing]
+        
+        E --> ANALYSIS[📊 Analysis Result<br/>Entities + Citations + Enhanced Chunks]
+        
+        ANALYSIS --> STORE1[💾 Store Citations & Entities<br/>with Provenance Links]
+        
+        STORE1 --> F[📊 ChromaDB<br/>Citation Manager<br/>Persistent Citations]
+        STORE1 --> J[🗄️ Neo4j<br/>Entity Manager<br/>Entities + Citation Links]
+        
+        ANALYSIS --> L[📝 Enhanced Chunks<br/>Entity-Enriched Text]
+        
+        L --> D[🔢 nomic-embed-text<br/>Direct Embedding Service<br/>Context-Aware Embeddings]
+        
+        D --> STORE2[💾 Store Embeddings<br/>in ChromaDB]
+        
+        STORE2 --> F
+        
+        F --> INT[🔗 Knowledge Graph<br/>Integrator<br/>Bidirectional Links]
+        J --> INT
+        
+        I[🐳 Docker<br/>Neo4j Container] --> J
+    end
+    
+    subgraph MCP["🔌 UNIVERSAL MCP SERVER"]
+        direction TB
+        UMCP[⚡ Universal MCP Server<br/>Enhanced Architecture]
+        
+        UMCP --> M[🤖 Claude Desktop<br/>MCP Protocol]
+        M --> N[💬 Chat Tools<br/>ask_knowledge_graph<br/>explore_topic<br/>find_connections<br/>what_do_we_know_about]
+        M --> O[📝 Literature Tools<br/>gather_sources_for_topic<br/>get_facts_with_citations<br/>verify_claim_with_sources<br/>generate_bibliography<br/>track_citations_used]
+        M --> P[🔧 Core Tools<br/>load_document_collection<br/>search_documents<br/>switch_template<br/>server_status]
+    end
+    
+    %% Connections between groups
+    INT --> UMCP
+    
+    %% Styling
+    classDef ollama fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storage fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef claude fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef docker fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef prework fill:#f8f9fa,stroke:#495057,stroke-width:3px
+    classDef mcpgroup fill:#e8f4f8,stroke:#0056b3,stroke-width:3px
+    classDef enhanced fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    
+    class E,D ollama
+    class F,J,K,INT storage
+    class G,L prework
+    class M,N,O,P claude
+    class I docker
+    class PREWORK prework
+    class MCP mcpgroup
+    class UMCP enhanced
+```
+
 ### The Complete Processing Pipeline:
 
 1. **PDF Ingestion** - Extract text from PDFs using LangChain
