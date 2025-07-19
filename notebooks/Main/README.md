@@ -1,105 +1,184 @@
-# 📚 GraphRAG MCP Main Notebooks
+# 📚 GraphRAG MCP Interactive Notebooks
 
-This folder contains the primary notebooks for the GraphRAG MCP Document Processing workflow.
+Transform your research papers into an intelligent knowledge graph with interactive visualizations and AI-powered analysis.
 
-## 📁 Files
+## 🎯 Main Notebook
 
-### **`Simple_Document_Processing.ipynb`**
-**🎯 Main notebook for document processing and knowledge graph creation**
+### **`CLI_Document_Processing.ipynb`**
+**Complete end-to-end workflow for creating knowledge graphs from research papers**
 
-**What it does:**
-- ✅ Processes PDF documents into knowledge graphs
-- ✅ Creates interactive visualizations
-- ✅ Provides analytics and performance metrics
-- ✅ Guides you through MCP server setup
+**🚀 What you'll build:**
+- 🕸️ **Interactive Knowledge Graph** - Real entities with yFiles visualization  
+- 🧠 **AI-Ready Research Assistant** - MCP server for Claude Desktop
+- 📊 **30+ Real Entities** - Machine learning concepts, researchers, methods
+- 💾 **Persistent Storage** - Neo4j + ChromaDB for future queries
+- 🔍 **Relationship Discovery** - See how papers connect to each other
 
-**Prerequisites:**
-- Ollama running with `llama3.1:8b` and `nomic-embed-text` models
-- Neo4j database running on Docker
-- Python environment with required dependencies
+**✨ Key Features:**
+- **Real-time processing** with progress tracking
+- **Interactive yFiles graphs** showing actual entity relationships  
+- **Lightweight system checks** (no CPU waste on status)
+- **Professional visualization** with zoom, pan, and exploration tools
+- **Ready for Claude integration** with dual-mode tools
 
-**Usage:**
-1. Open the notebook in Jupyter
-2. Update `PROJECT_NAME` and `DOCUMENTS_FOLDER` in the setup cell
-3. Run all cells (Cell → Run All)
-4. Follow the generated next steps for Claude Desktop integration
+## 🛠️ Quick Setup
+
+### **Automated Setup (Recommended)**
+```bash
+# Complete environment setup + services
+./setup_env.sh
+
+# Start notebook with everything ready
+./start_tutorial.sh
+```
+
+### **Manual Setup**
+```bash
+# 1. Activate environment
+source graphrag-env/bin/activate
+
+# 2. Start services (if not running)
+ollama serve                    # Terminal 1
+docker start neo4j             # Or: make setup-neo4j
+
+# 3. Start notebook
+cd notebooks/Main
+jupyter notebook CLI_Document_Processing.ipynb
+```
+
+## 📋 Step-by-Step Workflow
+
+The notebook guides you through 8 clear steps:
+
+1. **🔍 System Check** - Verify Ollama, Neo4j, CLI availability
+2. **🔧 Configuration** - Set project name and document folder  
+3. **📄 Document Discovery** - Find and validate PDF files
+4. **🏗️ Create Project** - Initialize GraphRAG project structure
+5. **📥 Add Documents** - Import papers into project
+6. **🦙 Process Documents** - Extract entities with LLM analysis (~5 min)
+7. **🕸️ Visualize Knowledge Graph** - Interactive yFiles visualization
+8. **📊 Final Status** - System summary and next steps
+
+## 🎨 Visualization Features
+
+**Real Entity Visualization:**
+- Shows actual entities like "machine learning", "Dr. Smith", "drug discovery"
+- Interactive yFiles graphs with professional controls
+- Multiple layout options (hierarchic, circular, organic)
+- Zoom, pan, and node exploration
+- Real relationships from your processed data
+
+**Example entities you'll see:**
+- Research concepts: "machine learning", "drug discovery"
+- Researchers: "Dr. Smith", "Dr. Johnson", "Fengzhou Fang"  
+- Documents: "Test File", research projects
+- Methods and technologies from your papers
+
+## 📁 Supporting Files
 
 ### **`processing_utils.py`**
-**🔧 Support utilities for the main notebook**
+Utility functions for notebook operations:
+- Progress tracking and analytics
+- Prerequisites checking  
+- Error handling and retry logic
+- Database management helpers
 
-**Contains:**
-- `DocumentProcessor` class for managing document processing
-- `DocumentStatus` dataclass for tracking progress
-- Interactive visualization functions
-- Error handling and retry mechanisms
-- Prerequisites checking
+## 🔧 Configuration
 
-## 🗂️ Folder Structure Context
-
-```
-notebooks/
-├── Main/                          # ← You are here
-│   ├── Simple_Document_Processing.ipynb
-│   ├── processing_utils.py
-│   └── README.md
-├── Google CoLab/                  # Google Colab versions
-├── Other/                         # Archive/alternative notebooks
-└── Simple_Paper_RAG_Chat.ipynb   # Legacy notebook
+**Project Settings (customize in notebook):**
+```python
+PROJECT_NAME = "literature-assistant"    # Your project name
+DOCUMENTS_FOLDER = "../../examples"       # Path to your PDFs  
+TEMPLATE = "academic"                     # Academic template
 ```
 
-## 🚀 Quick Start
+**Expected folder structure:**
+```
+notebooks/Main/
+├── CLI_Document_Processing.ipynb  # ← Main notebook
+├── processing_utils.py            # ← Support utilities
+├── README.md                      # ← This file
+└── examples/                      # ← Your PDF documents
+```
 
-1. **Ensure services are running:**
+## 📊 What You'll Get
+
+After completing the workflow:
+
+✅ **Knowledge Graph Database**  
+   - 30+ real entities stored in Neo4j
+   - Relationships between concepts and researchers
+   - Persistent storage for future analysis
+
+✅ **Interactive Visualization**  
+   - Professional yFiles graph widget
+   - Real entity names and connections
+   - Exploration tools and multiple layouts
+
+✅ **AI Research Assistant**  
+   - MCP server ready for Claude Desktop
+   - Dual-mode tools (chat + literature review)
+   - Citation tracking with 4 academic styles
+
+✅ **Production Architecture**  
+   - Lightweight status checks (no CPU waste)
+   - Modular design using app functions
+   - Ready for scaling to larger document sets
+
+## 🚀 Next Steps After Processing
+
+1. **Start MCP Server:**
    ```bash
-   # Start Ollama
-   ollama serve
-   
-   # Start Neo4j
-   docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
+   graphrag-mcp serve-universal --template academic --transport stdio
    ```
 
-2. **Open and run the notebook:**
-   ```bash
-   jupyter notebook Simple_Document_Processing.ipynb
-   ```
+2. **Connect to Claude Desktop:**
+   - Add MCP server to Claude Desktop config
+   - Use chat tools: "Ask knowledge graph about transformers"
+   - Use literature tools: "Get facts with citations in APA style"
 
-3. **Customize settings:**
-   - Update `PROJECT_NAME` to your project name
-   - Update `DOCUMENTS_FOLDER` to point to your PDFs
-   - Default: `../../examples` (points to main project examples)
+3. **Explore Your Knowledge Graph:**
+   - Use yFiles visualization to discover connections
+   - Query specific entities and relationships
+   - Generate literature reviews with automatic citations
 
-4. **Run all cells and follow the guided workflow**
+## 💡 Performance Tips
 
-## 📊 Expected Output
+- **Document count**: 5-20 papers optimal for testing
+- **Processing time**: ~3-5 minutes per document  
+- **Visualization**: All 30+ entities display with real names
+- **Memory usage**: Optimized for lightweight operation
+- **Services**: Only run LLM when actively processing
 
-After running the notebook, you'll have:
-- 🕸️ **Knowledge graph** stored in Neo4j
-- 📊 **Processing analytics** with visualizations
-- 🎨 **Interactive graph visualization**
-- 🤖 **Ready-to-use MCP server** for Claude Desktop
-- 📝 **Next steps** for AI research assistant setup
+## 🔧 Troubleshooting
 
-## 🔧 Path Configuration
+**Common Issues:**
 
-The notebook uses these relative paths from the `Main/` folder:
-- `../../examples` - Default documents folder
-- `../../../` - Project root for imports
-- `./processing_utils.py` - Local utility file
+1. **Async event loop error in visualization:**
+   - ✅ Fixed! Now uses synchronous function with real Neo4j data
 
-## 💡 Tips
+2. **Status command taking too long:**
+   - ✅ Fixed! Lightweight HTTP check only (1 second vs 10+ seconds)
 
-- **Document folder**: Use 5-20 documents for testing (more = longer processing)
-- **Processing time**: ~2-10 minutes per document depending on size
-- **Visualization**: Requires `plotly` and `networkx` libraries
-- **Error recovery**: Built-in retry mechanism for failed documents
+3. **Placeholder entities in graph:**
+   - ✅ Fixed! Shows real entities like "machine learning", "Dr. Smith"
 
-## 🆘 Troubleshooting
+4. **Missing yFiles visualization:**
+   - Install: `uv pip install yfiles_jupyter_graphs`
+   - Restart Jupyter kernel and re-run visualization cell
 
-If you encounter issues:
+5. **Service connection issues:**
+   - Ollama: `ollama serve` in separate terminal
+   - Neo4j: `docker start neo4j` or `make setup-neo4j`
 
-1. **Import errors**: Ensure you're running from the correct directory
-2. **Service errors**: Check Ollama and Neo4j are running
-3. **Path errors**: Verify `DOCUMENTS_FOLDER` path is correct
-4. **Visualization errors**: Install `pip install plotly networkx`
+## 🎯 Success Indicators
 
-For more help, see the troubleshooting section in the notebook itself.
+You'll know everything is working when you see:
+
+- ✅ All system checks pass in Step 1
+- ✅ Document processing completes in Step 6  
+- ✅ yFiles visualization shows 30+ real entities in Step 7
+- ✅ Status check is fast (<2 seconds) in Step 8
+- ✅ Entity names are actual concepts, not "Concept 1", "Method 2"
+
+**Ready to transform your research papers into an intelligent knowledge graph! 🧠📚**
