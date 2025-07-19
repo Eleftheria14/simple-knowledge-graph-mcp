@@ -319,8 +319,12 @@ def process(
     async def process_with_graphiti():
         from ..core.graphiti_engine import GraphitiKnowledgeGraph
 
-        # Create project-specific Graphiti instance
-        graphiti_engine = GraphitiKnowledgeGraph()
+        # Create project-specific Graphiti instance with smart timeouts
+        graphiti_engine = GraphitiKnowledgeGraph(
+            base_timeout=120,  # 2 minutes base timeout
+            max_timeout=600,   # 10 minutes max timeout
+            disable_timeouts=False  # Set to True for debugging
+        )
 
         # Initialize Graphiti connection
         console.print("🔌 Connecting to Neo4j/Graphiti...")
@@ -394,6 +398,23 @@ def process(
 
                     if success:
                         progress.update(task, description=f"✅ Added to knowledge graph: {pdf_file.name}")
+                        
+                        # Update project metadata
+                        project_metadata["documents_processed"].append({
+                            "filename": pdf_file.name,
+                            "document_id": f"{project}_{pdf_file.stem}",
+                            "status": "processed",
+                            "title": processing_result.document_title,
+                            "entities_count": processing_result.entities_created,
+                            "graphiti_success": True
+                        })
+
+                    else:
+                        # Check if Graphiti is disabled due to failures
+                        if hasattr(graphiti_engine, 'graphiti_disabled') and graphiti_engine.graphiti_disabled:
+                            progress.update(task, description=f"⚠️ Graphiti disabled - processing without graph: {pdf_file.name}")
+                        else:
+                            progress.update(task, description=f"❌ Failed to add to knowledge graph: {pdf_file.name}")
 
                         # Save JSON metadata (unless graphiti-only mode)
                         if not graphiti_only:
@@ -413,33 +434,6 @@ def process(
                                 json.dump(processing_data, f, indent=2)
 
                         # Update project metadata
-                        project_metadata["documents_processed"].append({
-                            "filename": pdf_file.name,
-                            "document_id": f"{project}_{pdf_file.stem}",
-                            "status": "processed",
-                            "title": processing_result.document_title,
-                            "entities_count": processing_result.entities_created,
-                            "graphiti_success": True
-                        })
-
-                    else:
-                        progress.update(task, description=f"⚠️  Knowledge graph failed, saved locally: {pdf_file.name}")
-
-                        # Save JSON as fallback
-                        processing_data = {
-                            "document_title": processing_result.document_title,
-                            "document_path": processing_result.document_path,
-                            "text_chunks": processing_result.text_chunks,
-                            "enhanced_chunks": processing_result.enhanced_chunks,
-                            "entities_created": processing_result.entities_created,
-                            "citations_stored": processing_result.citations_stored,
-                            "relationships_created": processing_result.relationships_created,
-                            "processing_time": processing_result.processing_time,
-                            "metadata": processing_result.metadata
-                        }
-                        with open(output_file, 'w') as f:
-                            json.dump(processing_data, f, indent=2)
-
                         project_metadata["documents_processed"].append({
                             "filename": pdf_file.name,
                             "document_id": pdf_file.stem,

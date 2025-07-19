@@ -41,6 +41,16 @@ fi
 
 print_status "UV is installed: $(uv --version)"
 
+# Check if Docker is available
+if ! command -v docker &> /dev/null; then
+    print_warning "Docker is not installed. Neo4j will not be started automatically."
+    print_info "To install Docker, visit: https://docs.docker.com/get-docker/"
+    DOCKER_AVAILABLE=false
+else
+    print_status "Docker is available: $(docker --version)"
+    DOCKER_AVAILABLE=true
+fi
+
 # Remove existing virtual environment if it exists
 if [ -d "graphrag-env" ]; then
     print_warning "Removing existing graphrag-env virtual environment..."
@@ -71,10 +81,64 @@ uv pip install -e ".[dev]"
 print_info "Installing additional notebook dependencies..."
 uv pip install tqdm pandas matplotlib plotly networkx seaborn ipywidgets
 
-# Install Graphiti dependencies (skip if not available)
+# Install Graphiti dependencies
 print_info "Installing Graphiti dependencies..."
 uv pip install neo4j || print_warning "Neo4j client installation failed"
-# Note: graphiti-ai may need to be installed separately or from source
+uv pip install graphiti-core || print_warning "Graphiti core installation failed"
+
+# Start Ollama if available
+if command -v ollama &> /dev/null; then
+    print_info "Starting Ollama service..."
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        print_status "Ollama is already running"
+    else
+        print_info "Starting Ollama in background..."
+        ollama serve &
+        sleep 3
+        
+        # Check if Ollama started successfully
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            print_status "Ollama started successfully at http://localhost:11434"
+        else
+            print_warning "Ollama may still be starting up. Check http://localhost:11434 in a few moments."
+        fi
+    fi
+else
+    print_warning "Ollama not found - skipping Ollama startup"
+    print_info "Install Ollama from: https://ollama.ai"
+fi
+
+# Start Neo4j if Docker is available
+if [ "$DOCKER_AVAILABLE" = true ]; then
+    print_info "Starting Neo4j database..."
+    if docker ps -q -f name=neo4j | grep -q .; then
+        print_status "Neo4j container is already running"
+    else
+        # Check if container exists but is stopped
+        if docker ps -a -q -f name=neo4j | grep -q .; then
+            print_info "Starting existing Neo4j container..."
+            docker start neo4j
+        else
+            print_info "Creating and starting new Neo4j container..."
+            docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
+        fi
+        
+        # Wait a moment for Neo4j to start
+        print_info "Waiting for Neo4j to start..."
+        sleep 5
+        
+        # Check if Neo4j is accessible
+        if curl -f -s http://localhost:7474/ > /dev/null 2>&1; then
+            print_status "Neo4j is running and accessible at http://localhost:7474"
+        else
+            print_warning "Neo4j may still be starting up. Check http://localhost:7474 in a few moments."
+        fi
+    fi
+else
+    print_warning "Docker not available - skipping Neo4j startup"
+    print_info "You can manually start Neo4j with:"
+    echo "docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest"
+fi
 
 # Verify key imports
 print_info "Verifying key package imports..."
@@ -84,7 +148,9 @@ print(f'Python path: {sys.executable}')
 
 # Test core GraphRAG MCP imports
 try:
-    from graphrag_mcp.core.document_processor import DocumentProcessor
+    from graphrag_mcp.core.enhanced_document_processor import EnhancedDocumentProcessor
+    from graphrag_mcp.core.llm_analysis_engine import LLMAnalysisEngine
+    from graphrag_mcp.core.config import GraphRAGConfig
     print('✅ GraphRAG MCP core imports: OK')
 except ImportError as e:
     print(f'❌ GraphRAG MCP core imports failed: {e}')
@@ -108,10 +174,10 @@ except ImportError as e:
 
 # Test Graphiti imports (optional)
 try:
-    from graphiti import Graphiti
-    print('✅ Graphiti imports: OK')
+    from graphiti_core import Graphiti
+    print('✅ Graphiti core imports: OK')
 except ImportError as e:
-    print(f'⚠️  Graphiti imports failed (may need separate installation): {e}')
+    print(f'⚠️  Graphiti core imports failed: {e}')
 "
 
 # Create activation script
@@ -138,19 +204,39 @@ echo ""
 echo "🎉 GraphRAG MCP Toolkit is ready!"
 echo "================================="
 echo ""
+
+# Final service status check
+print_info "Final service status:"
+if curl -f -s http://localhost:7474/ > /dev/null 2>&1; then
+    print_status "Neo4j: Running at http://localhost:7474"
+else
+    print_warning "Neo4j: Not accessible (may need manual start)"
+fi
+
+if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+    print_status "Ollama: Running at http://localhost:11434"
+else
+    print_warning "Ollama: Not running (start with: ollama serve)"
+fi
+
+echo ""
 echo "📋 Next steps:"
 echo "1. Activate environment: source graphrag-env/bin/activate"
 echo "   Or use: ./activate_graphrag_env.sh"
 echo ""
-echo "2. Start required services:"
-echo "   • Ollama: ollama serve"
-echo "   • Neo4j: docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest"
+echo "2. Start Jupyter notebook:"
+echo "   cd notebooks/Main && jupyter notebook CLI_Document_Processing.ipynb"
 echo ""
-echo "3. Install Ollama models:"
+echo "3. If services aren't running, restart them:"
+echo "   • Ollama: ollama serve"
+if [ "$DOCKER_AVAILABLE" = true ]; then
+    echo "   • Neo4j: docker start neo4j"
+else
+    echo "   • Neo4j: docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest"
+fi
+echo ""
+echo "4. Install Ollama models (if not already installed):"
 echo "   • ollama pull llama3.1:8b"
 echo "   • ollama pull nomic-embed-text"
-echo ""
-echo "4. Start Jupyter notebook:"
-echo "   cd notebooks/Main && jupyter notebook Simple_Document_Processing.ipynb"
 echo ""
 echo "✨ Happy researching!"

@@ -27,6 +27,48 @@ from ..utils.error_handling import ProcessingError, ValidationError
 logger = logging.getLogger(__name__)
 
 
+def repair_json_response(response: str) -> str:
+    """
+    Repair common JSON formatting issues in LLM responses.
+    
+    Args:
+        response: Raw LLM response text
+        
+    Returns:
+        Cleaned JSON string
+    """
+    # Remove markdown formatting
+    response = response.replace("```json", "").replace("```", "")
+    
+    # Remove any text before the first {
+    start_idx = response.find('{')
+    if start_idx > 0:
+        response = response[start_idx:]
+    
+    # Remove any text after the last }
+    end_idx = response.rfind('}')
+    if end_idx != -1:
+        response = response[:end_idx + 1]
+    
+    # Fix common JSON syntax errors
+    import re
+    
+    # Fix missing commas between objects
+    response = re.sub(r'}\s*{', '}, {', response)
+    
+    # Fix trailing commas before closing brackets/braces
+    response = re.sub(r',\s*}', '}', response)
+    response = re.sub(r',\s*]', ']', response)
+    
+    # Fix single quotes to double quotes
+    response = re.sub(r"'([^']*)':", r'"\1":', response)
+    
+    # Fix common property quote issues
+    response = re.sub(r'(\w+):', r'"\1":', response)
+    
+    return response.strip()
+
+
 @dataclass
 class ExtractedEntity:
     """Entity extracted from text with provenance"""
@@ -128,7 +170,8 @@ class LLMAnalysisEngine:
                 model=llm_model,
                 temperature=temperature,
                 num_ctx=max_context,
-                num_predict=max_predict
+                num_predict=max_predict,
+                keep_alive="1m"  # Standard practice: unload model after 1 minute of inactivity
             )
             logger.info(f"🧠 LLM Analysis Engine initialized with {llm_model}")
         except Exception as e:
@@ -172,9 +215,26 @@ class LLMAnalysisEngine:
         start_time = time.time()
         
         try:
-            # Step 1: Comprehensive analysis of substantial content
-            analysis_content = self._prepare_analysis_content(text_chunks)
-            comprehensive_result = self._run_comprehensive_analysis(analysis_content, document_title)
+            # Step 1: Process chunks individually and aggregate results
+            all_entities = []
+            all_citations = []
+            all_relationships = []
+            
+            for i, chunk in enumerate(text_chunks):
+                logger.info(f"🔄 Processing chunk {i+1}/{len(text_chunks)} ({len(chunk)} characters)")
+                chunk_result = self._run_comprehensive_analysis(chunk, document_title)
+                
+                # Aggregate results from this chunk
+                all_entities.extend(chunk_result.get('entities', []))
+                all_citations.extend(chunk_result.get('citations', []))
+                all_relationships.extend(chunk_result.get('relationships', []))
+            
+            # Combine all results
+            comprehensive_result = {
+                'entities': all_entities,
+                'citations': all_citations,
+                'relationships': all_relationships
+            }
             
             # Step 2: Create enhanced chunks with entity enrichment
             enhanced_chunks = self._create_enhanced_chunks(
@@ -256,57 +316,137 @@ class LLMAnalysisEngine:
         logger.info(f"📝 Prepared {len(content)} characters for analysis")
         return content
     
-    def _run_comprehensive_analysis(self, content: str, document_title: str) -> Dict[str, Any]:
+    def _run_comprehensive_analysis(self, content: str, document_title: str, max_retries: int = 2) -> Dict[str, Any]:
         """
-        Run comprehensive LLM analysis to extract all information.
+        Run comprehensive LLM analysis to extract all information with retry logic.
         
         Args:
             content: Text content to analyze
             document_title: Document title for context
+            max_retries: Maximum number of retry attempts for failed JSON parsing
             
         Returns:
             Comprehensive analysis result
         """
+        import signal
+        import time
+        
         chain = self.comprehensive_analysis_template | self.llm | StrOutputParser()
         
-        try:
-            logger.info("🧠 Running comprehensive LLM analysis...")
-            result = chain.invoke({
-                "content": content,
-                "document_title": document_title
-            })
-            
-            # Parse JSON response
-            json_start = result.find('{')
-            json_end = result.rfind('}') + 1
-            
-            if json_start == -1 or json_end == -1:
-                raise ValueError("No valid JSON found in LLM response")
-            
-            json_str = result[json_start:json_end]
-            analysis_data = json.loads(json_str)
-            
-            # Validate analysis data
-            if not isinstance(analysis_data, dict):
-                raise ValueError("Invalid analysis data format")
-            
-            # Ensure required keys
-            analysis_data.setdefault("entities", [])
-            analysis_data.setdefault("citations", [])
-            analysis_data.setdefault("relationships", [])
-            
-            logger.info("✅ Comprehensive analysis completed successfully")
-            return analysis_data
-            
-        except Exception as e:
-            logger.error(f"❌ Comprehensive analysis failed: {e}")
-            # Return fallback analysis
-            return {
-                "entities": [],
-                "citations": [],
-                "relationships": [],
-                "analysis_error": str(e)
-            }
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    logger.info(f"🔄 Retry attempt {attempt}/{max_retries}")
+                    
+                logger.info("🧠 Running comprehensive LLM analysis...")
+                logger.info(f"   📊 Content length: {len(content):,} characters")
+                logger.info(f"   ⏱️  Timeout: {300} seconds")
+                
+                # Add timeout protection to prevent infinite hanging
+                timeout_seconds = 300  # 5 minutes timeout
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"LLM analysis timed out after {timeout_seconds} seconds")
+                
+                # Set up timeout
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(timeout_seconds)
+                
+                start_time = time.time()
+                
+                try:
+                    # Log progress periodically during analysis
+                    logger.info("🔄 Sending request to Ollama...")
+                    result = chain.invoke({
+                        "content": content,
+                        "document_title": document_title
+                    })
+                    
+                    elapsed_time = time.time() - start_time
+                    logger.info(f"✅ LLM analysis completed in {elapsed_time:.1f}s")
+                    
+                finally:
+                    signal.alarm(0)  # Clear the alarm
+                
+                # Parse JSON response
+                json_start = result.find('{')
+                json_end = result.rfind('}') + 1
+                
+                if json_start == -1 or json_end == -1:
+                    logger.warning("⚠️ No valid JSON found in LLM response, using fallback")
+                    raise ValueError("No valid JSON found in LLM response")
+                
+                json_str = result[json_start:json_end]
+                
+                try:
+                    analysis_data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ JSON parsing failed: {e}")
+                    logger.warning(f"   Raw response: {result[:200]}...")
+                    
+                    # Try to repair the JSON using our repair function
+                    try:
+                        repaired_json = repair_json_response(result)
+                        analysis_data = json.loads(repaired_json)
+                        logger.info("✅ JSON repair successful")
+                    except json.JSONDecodeError:
+                        logger.error("❌ JSON parsing failed after repair, using fallback")
+                        raise ValueError(f"JSON parsing failed: {e}")
+                
+                # Validate analysis data
+                if not isinstance(analysis_data, dict):
+                    raise ValueError("Invalid analysis data format")
+                
+                # Ensure required keys
+                analysis_data.setdefault("entities", [])
+                analysis_data.setdefault("citations", [])
+                analysis_data.setdefault("relationships", [])
+                
+                logger.info("✅ Comprehensive analysis completed successfully")
+                return analysis_data
+                
+            except TimeoutError as e:
+                logger.error(f"⏰ LLM analysis timed out: {e}")
+                # Return fallback analysis for timeout
+                return {
+                    "entities": [],
+                    "citations": [],
+                    "relationships": [],
+                    "analysis_error": f"Analysis timed out after {timeout_seconds} seconds"
+                }
+                
+            except ValueError as e:
+                # JSON parsing failed - try again if we have retries left
+                if attempt < max_retries:
+                    logger.warning(f"🔄 JSON parsing failed, retrying... ({attempt + 1}/{max_retries})")
+                    continue
+                else:
+                    logger.error(f"❌ All retry attempts failed: {e}")
+                    # Return fallback analysis
+                    return {
+                        "entities": [],
+                        "citations": [],
+                        "relationships": [],
+                        "analysis_error": str(e)
+                    }
+                    
+            except Exception as e:
+                logger.error(f"❌ Comprehensive analysis failed: {e}")
+                # Return fallback analysis
+                return {
+                    "entities": [],
+                    "citations": [],
+                    "relationships": [],
+                    "analysis_error": str(e)
+                }
+                
+        # If we get here, all retries failed
+        return {
+            "entities": [],
+            "citations": [],
+            "relationships": [],
+            "analysis_error": "All retry attempts failed"
+        }
     
     def _create_enhanced_chunks(self, 
                               original_chunks: List[str],
@@ -561,7 +701,7 @@ class LLMAnalysisEngine:
         self.processing_stats["average_processing_time"] = total_time / self.processing_stats["total_analyses"]
     
     def _create_comprehensive_template(self) -> ChatPromptTemplate:
-        """Create comprehensive analysis prompt template"""
+        """Create comprehensive analysis prompt template with improved JSON reliability"""
         return ChatPromptTemplate.from_template("""
 You are an expert research analyst. Analyze this document comprehensively and extract ALL important information.
 
@@ -570,13 +710,9 @@ Document: {document_title}
 Content to analyze:
 {content}
 
-Extract the following information in a single JSON response:
+CRITICAL: Return ONLY valid JSON. No explanations, no markdown, no extra text.
 
-1. ENTITIES: All important entities with their types, properties, and confidence scores
-2. CITATIONS: All citations with full metadata and context
-3. RELATIONSHIPS: How entities relate to each other with supporting evidence
-
-Return a JSON object with this EXACT structure:
+Use this EXACT JSON structure:
 {{
   "entities": [
     {{
@@ -615,9 +751,11 @@ Return a JSON object with this EXACT structure:
   ]
 }}
 
-BE THOROUGH AND ACCURATE. Extract ALL entities, citations, and relationships you can identify.
-
-JSON:""")
+RULES:
+- Always use double quotes for strings
+- No trailing commas
+- Valid JSON syntax only
+- Include ALL entities, citations, and relationships you can identify""")
     
     def _create_entity_enhancement_template(self) -> ChatPromptTemplate:
         """Create entity enhancement prompt template"""

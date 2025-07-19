@@ -366,10 +366,32 @@ class EnhancedDocumentProcessor:
             
             # Create bidirectional links using Knowledge Graph Integrator
             logger.info("🔗 Creating bidirectional entity-citation links...")
-            self.kg_integrator.link_entities_to_citations(
-                analysis_result.entities,
-                analysis_result.citations
-            )
+            try:
+                import asyncio
+                
+                # Check if we're already in an event loop
+                try:
+                    current_loop = asyncio.get_running_loop()
+                    # If we're in an event loop, skip the linking for now
+                    # In a production system, you'd want to use asyncio.create_task() instead
+                    logger.info("🔗 Skipping entity-citation links (running in event loop)")
+                except RuntimeError:
+                    # No event loop running, safe to create one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        entity_ids = [entity.entity_id for entity in analysis_result.entities]
+                        citation_keys = [citation.citation_key for citation in analysis_result.citations]
+                        loop.run_until_complete(self.kg_integrator.link_entities_to_citations(
+                            entity_ids,
+                            citation_keys
+                        ))
+                    finally:
+                        loop.close()
+                        
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to create entity-citation links: {e}")
+                # Continue processing even if linking fails
             
             return entities_created, citations_stored, relationships_created
             

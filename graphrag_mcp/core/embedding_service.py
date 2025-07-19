@@ -56,7 +56,10 @@ class EmbeddingService:
         
         # Initialize embedding model
         try:
-            self.embeddings = OllamaEmbeddings(model=embedding_model)
+            self.embeddings = OllamaEmbeddings(
+                model=embedding_model,
+                keep_alive=60  # Standard practice: unload model after 60 seconds of inactivity
+            )
             logger.info(f"🔢 Embedding Service initialized with {embedding_model}")
         except Exception as e:
             raise ProcessingError(f"Failed to initialize embedding model: {e}")

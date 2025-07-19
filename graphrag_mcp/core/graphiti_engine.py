@@ -33,7 +33,10 @@ class GraphitiKnowledgeGraph:
                  neo4j_password: str = "password",
                  ollama_base_url: str = "http://localhost:11434/v1",
                  llm_model: str = "llama3.1:8b",
-                 embedding_model: str = "nomic-embed-text"):
+                 embedding_model: str = "nomic-embed-text",
+                 base_timeout: int = 120,
+                 max_timeout: int = 600,
+                 disable_timeouts: bool = False):
         """
         Initialize Graphiti knowledge graph engine
         
@@ -44,6 +47,9 @@ class GraphitiKnowledgeGraph:
             ollama_base_url: Ollama API base URL
             llm_model: LLM model name for analysis
             embedding_model: Embedding model name
+            base_timeout: Base timeout in seconds for processing each chunk
+            max_timeout: Maximum timeout in seconds for any single chunk
+            disable_timeouts: If True, disable all timeouts (for debugging)
         """
         self.neo4j_uri = neo4j_uri
         self.neo4j_user = neo4j_user
@@ -51,6 +57,9 @@ class GraphitiKnowledgeGraph:
         self.ollama_base_url = ollama_base_url
         self.llm_model = llm_model
         self.embedding_model = embedding_model
+        self.base_timeout = base_timeout
+        self.max_timeout = max_timeout
+        self.disable_timeouts = disable_timeouts
 
         # Initialize Graphiti components
         self.graphiti = None
@@ -66,6 +75,11 @@ class GraphitiKnowledgeGraph:
 
         # Track processed documents
         self.processed_documents = {}
+        
+        # Track failures to implement fallback mechanism
+        self.consecutive_failures = 0
+        self.max_consecutive_failures = 3
+        self.graphiti_disabled = False
 
         logger.info(f"Initialized GraphitiKnowledgeGraph with Neo4j: {neo4j_uri}")
 
@@ -137,13 +151,21 @@ class GraphitiKnowledgeGraph:
             bool: Success status
         """
         try:
+            # Check if Graphiti is disabled due to repeated failures
+            if self.graphiti_disabled:
+                logger.warning("⚠️ Graphiti processing disabled due to repeated failures - skipping document")
+                return False
+
             if not self.graphiti:
                 await self.initialize()
 
             # Split document into chunks for processing
             chunks = self.text_splitter.split_text(document_content)
+            
+            logger.info(f"📄 Processing document {document_id} with {len(chunks)} chunks")
 
             # Process each chunk as an episode
+            chunk_failures = 0
             for i, chunk in enumerate(chunks):
                 episode_name = f"{document_id}_chunk_{i}"
 
@@ -156,35 +178,88 @@ class GraphitiKnowledgeGraph:
                     "metadata": metadata or {}
                 }
 
-                # Add episode to Graphiti with timeout to prevent infinite loops
+                # Add episode to Graphiti with smart timeout to prevent infinite loops
                 try:
                     import asyncio
-                    await asyncio.wait_for(
-                        self.graphiti.add_episode(
+                    import signal
+                    import time
+                    
+                    start_time = time.time()
+                    
+                    if self.disable_timeouts:
+                        # No timeout - for debugging
+                        logger.info(f"🕐 Processing chunk {i+1}/{len(chunks)} (no timeout)")
+                        await self.graphiti.add_episode(
                             name=episode_name,
                             episode_body=json.dumps(episode_body),
                             source=EpisodeType.json,
                             source_description=f"{source_description} - Chunk {i+1}/{len(chunks)}",
                             reference_time=datetime.now()
-                        ),
-                        timeout=120  # 2 minutes timeout per chunk
-                    )
-                    logger.info(f"✅ Added chunk {i+1}/{len(chunks)} to knowledge graph")
-                except asyncio.TimeoutError:
+                        )
+                        elapsed = time.time() - start_time
+                        logger.info(f"✅ Added chunk {i+1}/{len(chunks)} to knowledge graph in {elapsed:.1f}s")
+                        
+                    else:
+                        # Smart timeout based on content length and chunk index
+                        content_length = len(chunk)
+                        content_timeout = max(60, content_length // 50)  # 60 seconds + 1 second per 50 chars
+                        chunk_timeout = min(self.max_timeout, self.base_timeout + content_timeout)
+                        
+                        logger.info(f"🕐 Processing chunk {i+1}/{len(chunks)} (timeout: {chunk_timeout}s)")
+                        
+                        # Set up timeout with signal handler
+                        def timeout_handler(signum, frame):
+                            raise TimeoutError(f"Graphiti add_episode timed out for chunk {i+1}/{len(chunks)} after {chunk_timeout}s")
+                        
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(chunk_timeout)
+                        
+                        try:
+                            await asyncio.wait_for(
+                                self.graphiti.add_episode(
+                                    name=episode_name,
+                                    episode_body=json.dumps(episode_body),
+                                    source=EpisodeType.json,
+                                    source_description=f"{source_description} - Chunk {i+1}/{len(chunks)}",
+                                    reference_time=datetime.now()
+                                ),
+                                timeout=chunk_timeout - 5  # asyncio timeout slightly less than signal timeout
+                            )
+                            elapsed = time.time() - start_time
+                            logger.info(f"✅ Added chunk {i+1}/{len(chunks)} to knowledge graph in {elapsed:.1f}s")
+                        finally:
+                            signal.alarm(0)  # Clear the alarm
+                        
+                except (asyncio.TimeoutError, TimeoutError):
                     logger.warning(f"⏰ Timeout adding chunk {i+1}/{len(chunks)} to knowledge graph - skipping")
+                    chunk_failures += 1
                     continue
                 except Exception as e:
                     logger.error(f"❌ Failed to add chunk {i+1}/{len(chunks)}: {e}")
+                    chunk_failures += 1
                     continue
+
+            # Check if too many chunks failed
+            if chunk_failures > len(chunks) * 0.5:  # More than 50% failed
+                self.consecutive_failures += 1
+                logger.warning(f"⚠️ High failure rate for document {document_id}: {chunk_failures}/{len(chunks)} chunks failed")
+                
+                if self.consecutive_failures >= self.max_consecutive_failures:
+                    logger.error(f"❌ Disabling Graphiti processing after {self.consecutive_failures} consecutive failures")
+                    self.graphiti_disabled = True
+                    return False
+            else:
+                self.consecutive_failures = 0  # Reset on success
 
             # Track processed document
             self.processed_documents[document_id] = {
                 "chunks": len(chunks),
+                "chunk_failures": chunk_failures,
                 "metadata": metadata,
                 "processed_at": datetime.now().isoformat()
             }
 
-            logger.info(f"✅ Added document {document_id} with {len(chunks)} chunks")
+            logger.info(f"✅ Added document {document_id} with {len(chunks)} chunks ({chunk_failures} failures)")
             return True
 
         except Exception as e:
