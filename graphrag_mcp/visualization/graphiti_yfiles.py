@@ -597,36 +597,93 @@ def display_project_knowledge_graph(project_name: str, max_nodes: int = 20):
             print("❌ No processed documents found")
             return None
         
-        # Create NetworkX graph with real data
+        # Create NetworkX graph with real data from Neo4j
         G = nx.Graph()
         
-        # Add document and entity nodes
-        for doc_info in documents[:5]:  # Limit to first 5 docs
-            doc_id = doc_info['document_id']
+        # Try to get real entities from Neo4j
+        try:
+            from neo4j import GraphDatabase
             
-            # Add document node
-            G.add_node(f"doc_{doc_id}", 
-                      label=doc_info.get('title', doc_id)[:30],
-                      type='document',
-                      color='#2E86C1',
-                      size=30)
+            driver = GraphDatabase.driver('bolt://localhost:7687', auth=('neo4j', 'password'))
             
-            # Add entity nodes based on entity count
-            entities_count = doc_info.get('entities_count', 0)
-            for i in range(min(entities_count, 8)):  # Show up to 8 entities per doc
-                entity_types = ['Concept', 'Method', 'Result', 'Technology']
-                entity_type = entity_types[i % len(entity_types)]
-                entity_id = f"entity_{doc_id}_{i}"
+            with driver.session() as session:
+                # Get real entities and their relationships
+                result = session.run("""
+                    MATCH (e:Entity)
+                    RETURN e.name as name, e.summary as summary, e.uuid as id
+                    LIMIT 15
+                """)
                 
-                G.add_node(entity_id,
-                          label=f"{entity_type} {i+1}",
-                          type='entity', 
+                entities = [record for record in result]
+                
+                # Get relationships between entities
+                result = session.run("""
+                    MATCH (e1:Entity)-[r:RELATES_TO]->(e2:Entity)
+                    RETURN e1.name as source, e2.name as target, r.name as relationship
+                    LIMIT 20
+                """)
+                
+                relationships = [record for record in result]
+            
+            driver.close()
+            
+            # Add real entity nodes
+            for entity in entities:
+                entity_name = entity['name'] if entity['name'] else f"Entity_{entity['id'][:8]}"
+                summary = entity['summary'][:50] + "..." if entity['summary'] and len(entity['summary']) > 50 else entity['summary']
+                
+                G.add_node(entity_name,
+                          label=entity_name[:25],
+                          type='entity',
+                          summary=summary or "No summary available",
                           color='#E74C3C',
                           size=20)
+            
+            # Add real relationships  
+            for rel in relationships:
+                if rel['source'] and rel['target'] and rel['source'] in G.nodes and rel['target'] in G.nodes:
+                    G.add_edge(rel['source'], rel['target'],
+                              relationship=rel['relationship'] or 'relates_to')
+            
+            # Add document nodes from metadata
+            for doc_info in documents[:2]:  # Add a few document nodes
+                doc_id = doc_info['document_id']
+                doc_title = doc_info.get('title', doc_id)
                 
-                # Connect entity to document
-                G.add_edge(f"doc_{doc_id}", entity_id,
-                          relationship='contains')
+                G.add_node(doc_title,
+                          label=doc_title[:30],
+                          type='document',
+                          color='#2E86C1',
+                          size=30)
+                
+                # Connect documents to related entities (simplified)
+                entity_nodes = [n for n in G.nodes if G.nodes[n].get('type') == 'entity']
+                for entity in entity_nodes[:5]:  # Connect to first few entities
+                    G.add_edge(doc_title, entity, relationship='contains')
+                    
+        except Exception as e:
+            print(f"⚠️ Could not connect to Neo4j, using placeholder data: {e}")
+            
+            # Fallback to document-based visualization
+            for doc_info in documents[:2]:
+                doc_id = doc_info['document_id']
+                doc_title = doc_info.get('title', doc_id)
+                
+                G.add_node(doc_title,
+                          label=doc_title[:30],
+                          type='document',
+                          color='#2E86C1',
+                          size=30)
+                
+                # Add a few placeholder entities
+                for i in range(min(5, doc_info.get('entities_count', 5))):
+                    entity_id = f"Entity_{i+1}"
+                    G.add_node(entity_id,
+                              label=entity_id,
+                              type='entity',
+                              color='#E74C3C',
+                              size=20)
+                    G.add_edge(doc_title, entity_id, relationship='contains')
         
         # Create yFiles widget
         widget = GraphWidget(graph=G)
