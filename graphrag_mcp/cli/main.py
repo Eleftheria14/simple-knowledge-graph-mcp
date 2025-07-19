@@ -696,26 +696,19 @@ def status(
     # System health
     console.print("🔧 [bold]System Health[/bold]")
 
-    # Check Ollama
+    # Check Ollama (lightweight connection test only)
     try:
-        config = GraphRAGConfig()
-        llm_engine = LLMAnalysisEngine(
-            llm_model=config.model.llm_model,
-            temperature=config.model.temperature,
-            max_context=config.model.max_context,
-            max_predict=config.model.max_predict
-        )
-        
-        # Try a simple test to verify connection
-        test_result = llm_engine.analyze_document_comprehensive(["Test connection"], "test_doc")
-        if test_result:
+        import httpx
+        response = httpx.get("http://localhost:11434/api/tags", timeout=5)
+        if response.status_code == 200:
             console.print("✅ Ollama server: Online")
-            console.print(f"✅ LLM model ({config.model.llm_model}): Available")
-            console.print(f"✅ Embedding model ({config.model.embedding_model}): Available")
+            # Don't initialize LLM unless needed - this is just a status check
+            console.print("✅ LLM services: Available (not active)")
         else:
             console.print("❌ Ollama server: Connection failed", style="red")
     except Exception as e:
-        console.print(f"❌ Ollama health check failed: {e}", style="red")
+        console.print(f"⚠️ Ollama connection check failed: {e}", style="yellow")
+        console.print("💡 Ollama not required for viewing processed data", style="blue")
 
     console.print()
 
