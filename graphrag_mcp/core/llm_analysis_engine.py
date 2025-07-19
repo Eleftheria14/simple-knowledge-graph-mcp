@@ -20,9 +20,10 @@ from datetime import datetime
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
 
 from ..utils.error_handling import ProcessingError, ValidationError
+from .config import ModelConfig
+from .llm_factory import LLMFactory, validate_provider_config
 
 logger = logging.getLogger(__name__)
 
@@ -37,33 +38,44 @@ def repair_json_response(response: str) -> str:
     Returns:
         Cleaned JSON string
     """
-    # Remove markdown formatting
-    response = response.replace("```json", "").replace("```", "")
-    
-    # Remove any text before the first {
-    start_idx = response.find('{')
-    if start_idx > 0:
-        response = response[start_idx:]
-    
-    # Remove any text after the last }
-    end_idx = response.rfind('}')
-    if end_idx != -1:
-        response = response[:end_idx + 1]
-    
-    # Fix common JSON syntax errors
     import re
     
-    # Fix missing commas between objects
-    response = re.sub(r'}\s*{', '}, {', response)
+    # Remove all markdown formatting (including ```json and ```)
+    response = re.sub(r'```json\s*', '', response)
+    response = re.sub(r'```\s*', '', response)
     
+    # Remove any explanatory text before JSON
+    response = re.sub(r'^.*?(?=\{)', '', response, flags=re.DOTALL)
+    
+    # Find the JSON object boundaries more carefully
+    start_idx = response.find('{')
+    if start_idx == -1:
+        return '{"entities": [], "citations": [], "relationships": []}'
+    
+    # Count braces to find the proper end
+    brace_count = 0
+    end_idx = start_idx
+    for i in range(start_idx, len(response)):
+        if response[i] == '{':
+            brace_count += 1
+        elif response[i] == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                end_idx = i
+                break
+    
+    # Extract just the JSON part
+    response = response[start_idx:end_idx + 1]
+    
+    # Fix common JSON syntax errors
     # Fix trailing commas before closing brackets/braces
     response = re.sub(r',\s*}', '}', response)
     response = re.sub(r',\s*]', ']', response)
     
-    # Fix single quotes to double quotes
-    response = re.sub(r"'([^']*)':", r'"\1":', response)
+    # Fix missing commas between objects
+    response = re.sub(r'}\s*{', '}, {', response)
     
-    # Fix common property quote issues
+    # Fix unquoted property names
     response = re.sub(r'(\w+):', r'"\1":', response)
     
     return response.strip()
@@ -145,35 +157,31 @@ class LLMAnalysisEngine:
     in a coordinated manner for maximum accuracy.
     """
     
-    def __init__(self, 
-                 llm_model: str = "llama3.1:8b",
-                 temperature: float = 0.1,
-                 max_context: int = 32768,
-                 max_predict: int = 4096):
+    def __init__(self, config: ModelConfig = None):
         """
-        Initialize LLM analysis engine.
+        Initialize LLM analysis engine with flexible provider support.
         
         Args:
-            llm_model: Ollama model identifier
-            temperature: LLM temperature setting
-            max_context: Maximum context length
-            max_predict: Maximum prediction length
+            config: Model configuration. If None, uses default Ollama config.
         """
-        self.llm_model = llm_model
-        self.temperature = temperature
-        self.max_context = max_context
-        self.max_predict = max_predict
+        # Use default config if none provided
+        if config is None:
+            config = ModelConfig()
         
-        # Initialize LLM
+        self.config = config
+        
+        # Validate configuration
+        is_valid, error_msg = validate_provider_config(config)
+        if not is_valid:
+            raise ProcessingError(f"Invalid provider configuration: {error_msg}")
+        
+        # Initialize LLM using factory
         try:
-            self.llm = ChatOllama(
-                model=llm_model,
-                temperature=temperature,
-                num_ctx=max_context,
-                num_predict=max_predict,
-                keep_alive="1m"  # Standard practice: unload model after 1 minute of inactivity
-            )
-            logger.info(f"🧠 LLM Analysis Engine initialized with {llm_model}")
+            self.llm = LLMFactory.create_llm(config)
+            logger.info(f"🧠 LLM Analysis Engine initialized")
+            logger.info(f"   🔌 Provider: {config.provider}")
+            logger.info(f"   📝 Model: {config.llm_model}")
+            logger.info(f"   🌡️  Temperature: {config.temperature}")
         except Exception as e:
             raise ProcessingError(f"Failed to initialize LLM: {e}")
         
@@ -194,14 +202,14 @@ class LLMAnalysisEngine:
         }
     
     def analyze_document_comprehensive(self, 
-                                     text_chunks: List[str],
+                                     optimal_chunks: List[str],
                                      document_title: str = "",
                                      document_path: str = "") -> AnalysisResult:
         """
-        Perform comprehensive analysis of document chunks.
+        Perform comprehensive analysis of optimal-sized chunks.
         
         Args:
-            text_chunks: List of text chunks to analyze
+            optimal_chunks: List of optimal-sized chunks (no batching needed)
             document_title: Document title for context
             document_path: Document path for provenance
             
@@ -210,18 +218,19 @@ class LLMAnalysisEngine:
         """
         logger.info(f"🔍 Starting comprehensive document analysis")
         logger.info(f"   📄 Document: {document_title}")
-        logger.info(f"   📊 Chunks: {len(text_chunks)}")
+        logger.info(f"   📊 Optimal chunks: {len(optimal_chunks)}")
         
         start_time = time.time()
         
         try:
-            # Step 1: Process chunks individually and aggregate results
             all_entities = []
             all_citations = []
             all_relationships = []
             
-            for i, chunk in enumerate(text_chunks):
-                logger.info(f"🔄 Processing chunk {i+1}/{len(text_chunks)} ({len(chunk)} characters)")
+            # Process each optimal chunk directly (no batching needed!)
+            for i, chunk in enumerate(optimal_chunks):
+                chunk_size = len(chunk)
+                logger.info(f"🔄 Processing optimal chunk {i+1}/{len(optimal_chunks)} ({chunk_size:,} characters)")
                 chunk_result = self._run_comprehensive_analysis(chunk, document_title)
                 
                 # Aggregate results from this chunk
@@ -238,7 +247,7 @@ class LLMAnalysisEngine:
             
             # Step 2: Create enhanced chunks with entity enrichment
             enhanced_chunks = self._create_enhanced_chunks(
-                text_chunks, 
+                optimal_chunks, 
                 comprehensive_result['entities'],
                 comprehensive_result['citations'],
                 comprehensive_result['relationships']
@@ -259,17 +268,18 @@ class LLMAnalysisEngine:
                 enhanced_chunks=enhanced_chunks,
                 processing_stats={
                     "processing_time": processing_time,
-                    "chunks_analyzed": len(text_chunks),
+                    "chunks_analyzed": len(optimal_chunks),
                     "entities_extracted": len(entities),
                     "citations_extracted": len(citations),
                     "relationships_extracted": len(relationships),
                     "enhanced_chunks_created": len(enhanced_chunks),
-                    "analysis_method": "comprehensive_sequential"
+                    "analysis_method": "optimal_chunks_direct"
                 },
                 analysis_metadata={
                     "document_title": document_title,
                     "document_path": document_path,
-                    "llm_model": self.llm_model,
+                    "provider": self.config.provider,
+                    "llm_model": self.config.llm_model,
                     "analysis_timestamp": datetime.now().isoformat()
                 }
             )
@@ -289,6 +299,53 @@ class LLMAnalysisEngine:
             logger.error(f"❌ Comprehensive analysis failed: {e}")
             self.processing_stats["failed_analyses"] += 1
             raise ProcessingError(f"Analysis failed: {e}")
+    
+    def _create_large_batches(self, text_chunks: List[str]) -> List[str]:
+        """
+        Create large batches that utilize the full context window efficiently.
+        
+        Based on scaling tests:
+        - llama3.1:8b context: 131K tokens ≈ 400K characters  
+        - Reserve 7K tokens for output ≈ 20K characters
+        - Max input per batch: 370K characters
+        
+        Args:
+            text_chunks: Original small chunks
+            
+        Returns:
+            List of large batch strings
+        """
+        MAX_BATCH_SIZE = 370_000  # characters, leaving room for JSON output
+        
+        batches = []
+        current_batch = ""
+        
+        for chunk in text_chunks:
+            # Check if adding this chunk would exceed limit
+            if len(current_batch) + len(chunk) + 10 > MAX_BATCH_SIZE:  # +10 for separator
+                if current_batch:
+                    batches.append(current_batch.strip())
+                current_batch = chunk
+            else:
+                if current_batch:
+                    current_batch += "\n\n" + chunk
+                else:
+                    current_batch = chunk
+        
+        # Add final batch
+        if current_batch:
+            batches.append(current_batch.strip())
+        
+        # Log batch statistics
+        total_chars = sum(len(batch) for batch in batches)
+        avg_batch_size = total_chars / len(batches) if batches else 0
+        
+        logger.info(f"📦 Batch creation complete:")
+        logger.info(f"   📊 {len(text_chunks)} chunks → {len(batches)} batches")
+        logger.info(f"   📏 Average batch size: {avg_batch_size:,.0f} characters")
+        logger.info(f"   🎯 Expected speedup: {len(text_chunks)/len(batches):.1f}x")
+        
+        return batches
     
     def _prepare_analysis_content(self, text_chunks: List[str]) -> str:
         """
@@ -340,10 +397,16 @@ class LLMAnalysisEngine:
                     
                 logger.info("🧠 Running comprehensive LLM analysis...")
                 logger.info(f"   📊 Content length: {len(content):,} characters")
-                logger.info(f"   ⏱️  Timeout: {300} seconds")
                 
-                # Add timeout protection to prevent infinite hanging
-                timeout_seconds = 300  # 5 minutes timeout
+                # Dynamic timeout based on content size (from scaling tests)
+                if len(content) < 5000:
+                    timeout_seconds = 30      # Small content: 30s
+                elif len(content) < 50000:
+                    timeout_seconds = 60      # Medium content: 60s  
+                else:
+                    timeout_seconds = 180     # Large content: 180s (3 min)
+                
+                logger.info(f"   ⏱️  Timeout: {timeout_seconds} seconds")
                 
                 def timeout_handler(signum, frame):
                     raise TimeoutError(f"LLM analysis timed out after {timeout_seconds} seconds")
@@ -701,61 +764,66 @@ class LLMAnalysisEngine:
         self.processing_stats["average_processing_time"] = total_time / self.processing_stats["total_analyses"]
     
     def _create_comprehensive_template(self) -> ChatPromptTemplate:
-        """Create comprehensive analysis prompt template with improved JSON reliability"""
-        return ChatPromptTemplate.from_template("""
-You are an expert research analyst. Analyze this document comprehensively and extract ALL important information.
+        """Create analysis prompt template using configuration"""
+        # Get the prompt from configuration, with fallback to default
+        prompt_template = getattr(self.config, 'extraction', None)
+        if prompt_template and hasattr(prompt_template, 'entity_extraction_prompt'):
+            template_text = prompt_template.entity_extraction_prompt
+        else:
+            # Fallback to improved default prompt
+            template_text = """TASK: Extract entities and citations from this academic document.
 
-Document: {document_title}
+FOCUS ON:
+- Authors and researchers (extract ALL names)
+- Key concepts, theories, and frameworks  
+- Methods, algorithms, and techniques
+- Technologies, software, and tools
+- Organizations and institutions
+- Chemical compounds and materials
+- Datasets and measurements
 
-Content to analyze:
-{content}
+EXTRACT 20-40 entities for comprehensive literature review.
 
-CRITICAL: Return ONLY valid JSON. No explanations, no markdown, no extra text.
+CONTENT: {content}
 
-Use this EXACT JSON structure:
+Return ONLY this JSON:
+
 {{
   "entities": [
     {{
-      "id": "unique_entity_id",
-      "type": "author|organization|concept|method|technology|dataset|metric|location|publication|other",
-      "name": "Entity name",
-      "properties": {{"key": "value"}},
-      "confidence": 0.95,
-      "context": "Context where entity was found"
+      "id": "author_1",
+      "name": "John Smith",
+      "type": "person"
+    }},
+    {{
+      "id": "concept_1",
+      "name": "machine learning",
+      "type": "concept"
+    }},
+    {{
+      "id": "method_1",
+      "name": "gradient descent",
+      "type": "method"
     }}
   ],
   "citations": [
     {{
-      "key": "unique_citation_key",
-      "text": "Exact citation text as it appears",
-      "title": "Paper title if identifiable",
-      "authors": ["Author names"],
+      "text": "Smith et al. (2023)",
+      "authors": ["John Smith", "Jane Doe"],
       "year": 2023,
-      "journal": "Journal name",
-      "doi": "DOI if available",
-      "url": "URL if available",
-      "type": "inline|reference|footnote",
-      "context": "Surrounding text for context",
-      "confidence": 0.9
+      "title": "Paper Title"
     }}
   ],
   "relationships": [
     {{
-      "source": "source_entity_id",
-      "target": "target_entity_id",
-      "type": "uses|improves|implements|collaborates_with|cites|builds_on|evaluates|compares_to",
-      "confidence": 0.85,
-      "context": "Context explaining the relationship",
-      "properties": {{"key": "value"}}
+      "source": "author_1",
+      "target": "concept_1", 
+      "type": "researches"
     }}
   ]
-}}
-
-RULES:
-- Always use double quotes for strings
-- No trailing commas
-- Valid JSON syntax only
-- Include ALL entities, citations, and relationships you can identify""")
+}}"""
+        
+        return ChatPromptTemplate.from_template(template_text)
     
     def _create_entity_enhancement_template(self) -> ChatPromptTemplate:
         """Create entity enhancement prompt template"""
@@ -785,9 +853,10 @@ JSON:""")
         return {
             **self.processing_stats,
             "model_info": {
-                "llm_model": self.llm_model,
-                "temperature": self.temperature,
-                "max_context": self.max_context,
-                "max_predict": self.max_predict
+                "provider": self.config.provider,
+                "llm_model": self.config.llm_model,
+                "temperature": self.config.temperature,
+                "max_context": self.config.max_context,
+                "max_predict": self.config.max_predict
             }
         }

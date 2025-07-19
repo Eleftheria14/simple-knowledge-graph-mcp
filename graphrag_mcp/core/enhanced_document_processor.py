@@ -72,17 +72,19 @@ class EnhancedDocumentProcessor:
         Args:
             config: Configuration object with all settings
         """
-        self.config = config or GraphRAGConfig()
+        # Load configuration from environment variables if none provided
+        self.config = config or GraphRAGConfig.from_env()
+        
+        logger.info(f"🔧 Configuration loaded:")
+        logger.info(f"   📝 Prompt mode: {'Custom' if hasattr(self.config.extraction, 'entity_extraction_prompt') else 'Default'}")
+        logger.info(f"   🎯 Target entities: {self.config.extraction.min_entities_expected}-{self.config.extraction.max_entities_expected}")
+        logger.info(f"   ⚡ Performance mode: {'Mac-optimized' if self.config.performance.enable_mac_optimizations else 'Standard'}")
         
         # Initialize core components
         self._initialize_components()
         
-        # Text splitter for initial chunking
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.config.processing.chunk_size,
-            chunk_overlap=self.config.processing.chunk_overlap,
-            separators=["\\n\\n", "\\n", ". ", " ", ""]
-        )
+        # Optimal chunker for context-window sized chunks
+        self.optimal_chunker = self._create_optimal_chunker()
         
         # Processing statistics
         self.processing_stats = {
@@ -104,12 +106,7 @@ class EnhancedDocumentProcessor:
         """Initialize all core components with configuration"""
         try:
             # LLM Analysis Engine
-            self.llm_engine = LLMAnalysisEngine(
-                llm_model=self.config.model.llm_model,
-                temperature=self.config.model.temperature,
-                max_context=self.config.model.max_context,
-                max_predict=self.config.model.max_predict
-            )
+            self.llm_engine = LLMAnalysisEngine(config=self.config.model)
             
             # Embedding Service
             self.embedding_service = EmbeddingService(
@@ -142,6 +139,25 @@ class EnhancedDocumentProcessor:
             logger.error(f"❌ Component initialization failed: {e}")
             raise ProcessingError(f"Failed to initialize components: {e}")
     
+    def _create_optimal_chunker(self):
+        """Create chunker optimized for LLM context window using configuration"""
+        # Use configuration values for chunking parameters
+        chunk_size = self.config.processing.optimal_chunk_size
+        chunk_overlap = self.config.processing.chunk_overlap
+        separators = self.config.processing.chunk_separators
+        
+        logger.info(f"📏 Chunker configuration:")
+        logger.info(f"   📊 Chunk size: {chunk_size:,} characters")
+        logger.info(f"   🔄 Overlap: {chunk_overlap:,} characters")
+        logger.info(f"   ✂️  Separators: {separators}")
+        
+        return RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=separators,
+            length_function=len
+        )
+    
     def process_document(self, pdf_path: str) -> ProcessingResult:
         """
         Process document with sequential architecture.
@@ -156,13 +172,13 @@ class EnhancedDocumentProcessor:
         start_time = time.time()
         
         try:
-            # Step 1: Load PDF and create initial chunks
-            document_title, text_chunks = self._load_and_chunk_document(pdf_path)
+            # Step 1: Load PDF and create optimal chunks
+            document_title, optimal_chunks = self._load_and_chunk_document(pdf_path)
             
-            # Step 2: Comprehensive LLM analysis
+            # Step 2: Comprehensive LLM analysis (no batching needed!)
             logger.info("🧠 Performing comprehensive LLM analysis...")
             analysis_result = self.llm_engine.analyze_document_comprehensive(
-                text_chunks=text_chunks,
+                optimal_chunks=optimal_chunks,
                 document_title=document_title,
                 document_path=pdf_path
             )
@@ -173,11 +189,10 @@ class EnhancedDocumentProcessor:
                 analysis_result, pdf_path
             )
             
-            # Step 4: Generate context-aware embeddings
-            logger.info("🔢 Generating context-aware embeddings...")
-            enhanced_chunks = [chunk.enhanced_text for chunk in analysis_result.enhanced_chunks]
+            # Step 4: Generate embeddings for optimal chunks
+            logger.info("🔢 Generating embeddings for optimal chunks...")
             embedding_result = self.embedding_service.generate_context_aware_embeddings(
-                enhanced_chunks,
+                optimal_chunks,
                 metadata={"document_path": pdf_path, "document_title": document_title}
             )
             
@@ -187,10 +202,11 @@ class EnhancedDocumentProcessor:
             
             # Step 6: Create processing result
             processing_time = time.time() - start_time
+            enhanced_chunks = [chunk.enhanced_text for chunk in analysis_result.enhanced_chunks]
             result = ProcessingResult(
                 document_title=document_title,
                 document_path=pdf_path,
-                text_chunks=text_chunks,
+                text_chunks=optimal_chunks,  # Now these ARE the optimal chunks
                 enhanced_chunks=enhanced_chunks,
                 embeddings=embedding_result.embeddings,
                 entities_created=entities_created,
@@ -199,10 +215,10 @@ class EnhancedDocumentProcessor:
                 processing_time=processing_time,
                 analysis_result=analysis_result,
                 metadata={
-                    "processing_mode": "sequential_enhanced",
+                    "processing_mode": "optimal_chunks_direct",
                     "llm_model": self.config.model.llm_model,
                     "embedding_model": self.config.model.embedding_model,
-                    "chunk_count": len(text_chunks),
+                    "optimal_chunk_count": len(optimal_chunks),
                     "enhanced_chunk_count": len(enhanced_chunks),
                     "embedding_dimension": embedding_result.embeddings.shape[1] if embedding_result.embeddings.ndim > 1 else 0
                 }
@@ -211,13 +227,17 @@ class EnhancedDocumentProcessor:
             # Update statistics
             self._update_processing_stats(result)
             
-            logger.info(f"✅ Enhanced document processing completed in {processing_time:.2f}s")
+            # Check entity count quality
+            self._check_entity_extraction_quality(entities_created, len(optimal_chunks))
+            
+            logger.info(f"✅ Optimal chunk processing completed in {processing_time:.2f}s")
             logger.info(f"   📄 Document: {document_title}")
-            logger.info(f"   📊 Chunks: {len(text_chunks)} → {len(enhanced_chunks)} enhanced")
+            logger.info(f"   📊 Optimal chunks: {len(optimal_chunks)} (enhanced: {len(enhanced_chunks)})")
             logger.info(f"   👥 Entities: {entities_created}")
             logger.info(f"   📚 Citations: {citations_stored}")
             logger.info(f"   🔗 Relationships: {relationships_created}")
             logger.info(f"   🔢 Embeddings: {embedding_result.embeddings.shape}")
+            logger.info(f"   🚀 Optimization: No small chunk batching needed!")
             
             return result
             
@@ -228,13 +248,13 @@ class EnhancedDocumentProcessor:
     
     def _load_and_chunk_document(self, pdf_path: str) -> Tuple[str, List[str]]:
         """
-        Load PDF and create initial text chunks.
+        Load PDF and create optimal chunks sized for LLM context window.
         
         Args:
             pdf_path: Path to PDF file
             
         Returns:
-            Tuple of (document_title, text_chunks)
+            Tuple of (document_title, optimal_chunks)
         """
         # Validate file
         path = Path(pdf_path)
@@ -261,14 +281,19 @@ class EnhancedDocumentProcessor:
         # Extract title
         document_title = self._extract_document_title(full_text, path.name)
         
-        # Create chunks
-        text_chunks = self.text_splitter.split_text(full_text)
+        # Create optimal chunks sized for context window
+        optimal_chunks = self.optimal_chunker.split_text(full_text)
         
-        if not text_chunks:
+        if not optimal_chunks:
             raise ProcessingError(f"Text splitting produced no chunks: {pdf_path}")
         
-        logger.info(f"📝 Extracted {len(text_chunks)} chunks from {len(full_text):,} characters")
-        return document_title, text_chunks
+        # Log the dramatic improvement
+        chunk_sizes = [len(chunk) for chunk in optimal_chunks]
+        logger.info(f"📝 Created {len(optimal_chunks)} optimal chunks from {len(full_text):,} characters")
+        logger.info(f"📊 Chunk sizes: {chunk_sizes}")
+        logger.info(f"🎯 Optimization: Would have been ~{len(full_text)//1000} small chunks → {len(optimal_chunks)} optimal chunks")
+        
+        return document_title, optimal_chunks
     
     def _extract_document_title(self, text: str, filename: str) -> str:
         """Extract document title from text"""
@@ -412,6 +437,23 @@ class EnhancedDocumentProcessor:
         # separately or create a more sophisticated storage strategy
         logger.info("📊 Embeddings stored via ChromaDB citation manager")
     
+    def _check_entity_extraction_quality(self, entities_created: int, chunk_count: int):
+        """Check if entity extraction meets quality expectations"""
+        if not self.config.performance.enable_entity_count_warnings:
+            return
+            
+        min_expected = self.config.extraction.min_entities_expected
+        max_expected = self.config.extraction.max_entities_expected
+        
+        if entities_created < min_expected:
+            logger.warning(f"⚠️ Low entity count: {entities_created} < {min_expected} expected")
+            logger.warning(f"💡 Try adjusting ENTITY_EXTRACTION_PROMPT or MIN_ENTITIES_EXPECTED in .env")
+            logger.warning(f"🔧 Current prompt targets: {min_expected}-{max_expected} entities")
+        elif entities_created > max_expected:
+            logger.info(f"🎉 High entity extraction: {entities_created} entities (above {max_expected} target)")
+        else:
+            logger.info(f"✅ Good entity extraction: {entities_created} entities (target: {min_expected}-{max_expected})")
+
     def _update_processing_stats(self, result: ProcessingResult):
         """Update processing statistics"""
         self.processing_stats["documents_processed"] += 1
