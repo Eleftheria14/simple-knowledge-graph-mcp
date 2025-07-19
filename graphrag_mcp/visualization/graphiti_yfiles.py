@@ -611,8 +611,8 @@ def display_project_knowledge_graph(project_name: str, max_nodes: int = 20):
                 result = session.run("""
                     MATCH (e:Entity)
                     RETURN e.name as name, e.summary as summary, e.uuid as id
-                    LIMIT 15
-                """)
+                    LIMIT $max_nodes
+                """, max_nodes=max_nodes)
                 
                 entities = [record for record in result]
                 
@@ -620,8 +620,8 @@ def display_project_knowledge_graph(project_name: str, max_nodes: int = 20):
                 result = session.run("""
                     MATCH (e1:Entity)-[r:RELATES_TO]->(e2:Entity)
                     RETURN e1.name as source, e2.name as target, r.name as relationship
-                    LIMIT 20
-                """)
+                    LIMIT $max_relationships
+                """, max_relationships=max_nodes * 2)
                 
                 relationships = [record for record in result]
             
