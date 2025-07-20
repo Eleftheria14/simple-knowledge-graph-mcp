@@ -25,6 +25,24 @@ uv run python <command>
 ./scripts/stop_services.sh
 ```
 
+### n8n Workflow Automation
+```bash
+# Start n8n for batch processing workflows
+./scripts/n8n_manager.sh start
+
+# Check n8n status
+./scripts/n8n_manager.sh status
+
+# View n8n logs
+./scripts/n8n_manager.sh logs
+
+# Stop n8n
+./scripts/n8n_manager.sh stop
+
+# Access n8n web interface at http://localhost:5678
+# Login: admin / password123
+```
+
 ### MCP Server Operations
 ```bash
 # Start HTTP MCP server (easy GUI setup)
