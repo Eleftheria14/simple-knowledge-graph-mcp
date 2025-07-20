@@ -18,21 +18,19 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Check if virtual environment exists and activate it
-if [ -d "venv" ]; then
-    echo "🔧 Activating virtual environment..."
-    source venv/bin/activate
-else
-    echo "❌ Virtual environment not found. Using system Python..."
-fi
+# Use UV environment for proper Python path
+echo "🔧 Using UV environment..."
 
 # Clear Neo4j database
 echo "🗑️  Clearing Neo4j database..."
 if curl -f http://localhost:7474/ > /dev/null 2>&1; then
-    python3 -c "
+    uv run python -c "
+import sys
+sys.path.insert(0, 'src')
+import config
 from neo4j import GraphDatabase
 try:
-    driver = GraphDatabase.driver('bolt://localhost:7687', auth=('neo4j', 'password'))
+    driver = GraphDatabase.driver(config.NEO4J_URI, auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD))
     with driver.session() as session:
         # Delete all nodes and relationships
         session.run('MATCH (n) DETACH DELETE n')
@@ -61,6 +59,8 @@ fi
 # Clear ChromaDB database
 echo "🗑️  Clearing ChromaDB database..."
 if [ -d "chroma_db" ]; then
+    # Fix permissions before removal to handle read-only issues
+    chmod -R u+w chroma_db 2>/dev/null || true
     rm -rf chroma_db
     echo "   ✅ ChromaDB directory removed"
 else
@@ -72,10 +72,13 @@ echo "🧪 Verifying databases are empty..."
 
 # Test Neo4j
 if curl -f http://localhost:7474/ > /dev/null 2>&1; then
-    python3 -c "
+    uv run python -c "
+import sys
+sys.path.insert(0, 'src')
+import config
 from neo4j import GraphDatabase
 try:
-    driver = GraphDatabase.driver('bolt://localhost:7687', auth=('neo4j', 'password'))
+    driver = GraphDatabase.driver(config.NEO4J_URI, auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD))
     with driver.session() as session:
         result = session.run('MATCH (n) RETURN count(n) as node_count')
         count = result.single()['node_count']
@@ -90,7 +93,7 @@ except Exception as e:
 fi
 
 # Test ChromaDB
-python3 -c "
+uv run python -c "
 import chromadb
 from chromadb.config import Settings
 try:

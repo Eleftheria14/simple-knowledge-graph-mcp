@@ -28,11 +28,20 @@ def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query:
             Combined results with entities, text passages, and citations
         """
         try:
+            # Get fresh collection reference for debug info
+            from storage.chroma.client import get_shared_chromadb_client
+            fresh_client, fresh_collection = get_shared_chromadb_client()
+            
             results = {
                 "query": query,
                 "entities": [],
                 "text_results": [],
-                "success": True
+                "success": True,
+                "debug_info": {
+                    "query_collection_id": fresh_collection.id,
+                    "query_collection_name": fresh_collection.name,
+                    "query_client_id": id(fresh_client)
+                }
             }
             
             # Search entities in Neo4j
@@ -47,6 +56,10 @@ def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query:
             
             # Search text content in ChromaDB
             if include_text:
+                # Debug: Show collection info at start of query
+                print(f"🔍 query_knowledge_graph using collection ID: {chromadb_query.collection.id}")
+                print(f"🔍 Collection name: {chromadb_query.collection.name}")
+                
                 text_results = chromadb_query.query_similar_text(query, limit)
                 results["text_results"] = text_results
             

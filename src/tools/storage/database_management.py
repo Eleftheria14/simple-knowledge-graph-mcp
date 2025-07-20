@@ -23,12 +23,12 @@ def register_management_tools(mcp: FastMCP, neo4j_storage: Neo4jStorage, chromad
             # Clear ChromaDB
             chromadb_storage.clear_collection()
             
-            # Clear Neo4j (would need to implement this method)
-            # For now, just return success
+            # Clear Neo4j
+            neo4j_storage.clear_database()
             
             return {
                 "success": True,
-                "message": "Knowledge graph cleared successfully",
+                "message": "Knowledge graph cleared successfully (Neo4j + ChromaDB)",
                 "timestamp": datetime.now().isoformat()
             }
             

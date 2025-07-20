@@ -1,23 +1,16 @@
 """ChromaDB storage manager for text and citations."""
 from typing import List, Dict, Any
-import chromadb
-from chromadb.config import Settings
-import config
 from storage.embedding import EmbeddingService
+from .client import get_shared_chromadb_client
 
 class ChromaDBStorage:
     """Handle text storage operations in ChromaDB with embeddings."""
     
     def __init__(self):
-        """Initialize ChromaDB and embedding service."""
-        self.client = chromadb.PersistentClient(
-            path=config.CHROMADB_PATH,
-            settings=Settings(anonymized_telemetry=False)
-        )
-        self.collection = self.client.get_or_create_collection(
-            name=config.CHROMADB_COLLECTION
-        )
+        """Initialize ChromaDB using shared client and embedding service."""
+        self.client, self.collection = get_shared_chromadb_client()
         self.embedding_service = EmbeddingService()
+        print(f"📝 ChromaDBStorage initialized with collection ID: {self.collection.id}")
     
     
     def store_vectors(
@@ -48,7 +41,15 @@ class ChromaDBStorage:
     
     def clear_collection(self):
         """Clear all data from the collection."""
+        import config
+        from .client import reset_shared_client
+        
+        # Delete the collection
         self.client.delete_collection(config.CHROMADB_COLLECTION)
-        self.collection = self.client.get_or_create_collection(
-            name=config.CHROMADB_COLLECTION
-        )
+        
+        # Reset the shared client to force recreation
+        reset_shared_client()
+        
+        # Get fresh client and collection
+        from .client import get_shared_chromadb_client
+        self.client, self.collection = get_shared_chromadb_client()

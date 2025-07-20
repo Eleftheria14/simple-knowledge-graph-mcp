@@ -1,6 +1,32 @@
 # Prerequisites and Requirements
 
-## System Requirements
+## 🚀 Quick Install (Most Users)
+
+**macOS:**
+```bash
+# Install via Homebrew (easiest)
+brew install python@3.11 docker
+# Download Claude Desktop from https://claude.ai/download
+```
+
+**Windows:**
+```bash
+# Install via winget
+winget install Python.Python.3.11 Docker.DockerDesktop
+# Download Claude Desktop from https://claude.ai/download
+```
+
+**Ubuntu/Linux:**
+```bash
+sudo apt update && sudo apt install python3.11 docker.io
+# Download Claude Desktop from https://claude.ai/download
+```
+
+**Total Download:** ~2.5GB | **Setup Time:** ~15-20 minutes
+
+---
+
+## Detailed System Requirements
 
 ### Operating System
 - **macOS**: 10.15+ (Catalina or newer)

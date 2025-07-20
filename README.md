@@ -1,10 +1,20 @@
 # Simple Knowledge Graph MCP
 
-Turn your documents into a queryable knowledge graph using any MCP-compatible LLM client with zero API setup.
+Turn your documents into a queryable knowledge graph using Claude Desktop with zero API setup.
+
+## 🚀 Quick Start
+
+**Want to get started immediately?** → [Follow the Getting Started Guide](GETTING_STARTED.md)
+
+**Prerequisites:** Python 3.11+, Docker, Claude Desktop → [Full Requirements](PREREQUISITES.md)
+
+**Need help?** → [Troubleshooting Guide](TROUBLESHOOTING.md) | [Examples](EXAMPLES.md)
 
 ## What This Does
 
-This is a **Model Context Protocol (MCP) server** that transforms documents into an intelligent, searchable knowledge base. It provides any MCP-compatible client (Claude Desktop, ChatGPT Desktop, etc.) with 5 specialized tools to extract, store, and query information from your documents using a dual-database system.
+This is a **Model Context Protocol (MCP) server** that transforms documents into an intelligent, searchable knowledge base. It provides Claude Desktop with 8+ specialized tools to extract, store, and query information from your documents using a dual-database system.
+
+**Perfect for:** Researchers, students, and professionals who work with large collections of documents and want to unlock hidden connections in their knowledge base.
 
 ### Core Architecture
 - **Neo4j Graph Database**: Stores entities (people, concepts, technologies) and their relationships
@@ -182,13 +192,19 @@ More documents → Richer connections → Smarter answers
 - **Concept evolution tracked**: Shows how ideas develop over time
 - **Knowledge gaps identified**: Highlights areas needing more research
 
-## The 5 MCP Tools Available to Claude
+## The 8+ MCP Tools Available to Claude
 
+**Core Knowledge Graph Tools:**
 1. **`store_entities`** - Extract and store entities/relationships in Neo4j graph database
 2. **`store_vectors`** - Store any content as vectors in ChromaDB (entities, text chunks, concepts, etc.)
 3. **`query_knowledge_graph`** - Search both databases for comprehensive answers
 4. **`generate_literature_review`** - Format results with proper citations (APA, IEEE, Nature, MLA)
 5. **`clear_knowledge_graph`** - Reset all data for fresh start
+
+**Text Processing Tools:**
+6. **`generate_systematic_chunks`** - Automatically chunk papers for complete coverage
+7. **`estimate_chunking_requirements`** - Plan optimal chunking strategy
+8. **`validate_text_coverage`** - Verify research-grade text coverage
 
 ## Real-World Example Workflow
 
@@ -295,13 +311,15 @@ tools/
 │   ├── entity_storage.py      # store_entities MCP tool
 │   ├── text_storage.py        # store_vectors MCP tool
 │   └── database_management.py # clear_knowledge_graph MCP tool
-└── query/           # Data retrieval tools
-    ├── knowledge_search.py     # query_knowledge_graph MCP tool
-    └── literature_generation.py # generate_literature_review MCP tool
+├── query/           # Data retrieval tools
+│   ├── knowledge_search.py     # query_knowledge_graph MCP tool
+│   └── literature_generation.py # generate_literature_review MCP tool
+└── processing/      # Text processing tools
+    └── text_processing.py      # systematic chunking and coverage tools
 ```
 
 ### Server Layer (`src/server/`)
-- **`main.py`** - FastMCP server that registers all 5 tools and handles Claude Desktop communication
+- **`main.py`** - FastMCP server that registers all 8+ tools and handles Claude Desktop communication
 
 ## Local-First Privacy Design
 
@@ -310,6 +328,7 @@ tools/
 - **Local databases** - Neo4j via Docker, ChromaDB as local files  
 - **Zero API keys required** - Complete offline operation capability
 - **Your data stays yours** - Everything processed and stored locally
+- **Production-ready** - Recently enhanced with bug fixes and stability improvements
 
 ## Quick Start
 
@@ -321,7 +340,7 @@ tools/
 ### Installation
 ```bash
 # 1. Clone repository
-git clone <repository-url>
+git clone https://github.com/Eleftheria14/simple-knowledge-graph-mcp.git
 cd simple-knowledge-graph-mcp
 
 # 2. Complete setup (installs UV, Python 3.11, dependencies)
@@ -336,48 +355,84 @@ cd simple-knowledge-graph-mcp
 
 ### Configure Your MCP Client
 
-#### For Claude Desktop & ChatGPT Desktop (Easy GUI Setup)
+#### For Claude Desktop (Recommended Method)
+Create the configuration file at the correct location:
+
+**macOS:**
 ```bash
-# Start HTTP server
-./scripts/start_http_server.sh
-```
-
-Then in Claude Desktop or ChatGPT Desktop:
-- Settings → Connectors → Add custom connector
-- **Name**: `Knowledge Graph`
-- **URL**: `http://localhost:3001`
-- Click "Add" and restart the application
-
-#### For Advanced Users (JSON Configuration)
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-```json
+# Create the configuration file
+cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
 {
   "mcpServers": {
     "knowledge-graph": {
       "command": "uv",
-      "args": ["run", "python", "/full/path/to/project/src/server/main.py"]
+      "args": [
+        "run",
+        "python",
+        "-c",
+        "import sys; sys.path.insert(0, '/Users/YOUR_USERNAME/path/to/project/src'); from server.main import mcp; mcp.run()"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/YOUR_USERNAME/path/to/project/src"
+      }
     }
   }
 }
 ```
 
-#### For Other MCP Clients  
-Both Claude Desktop and ChatGPT Desktop support MCP connectors via GUI setup. Other MCP-compatible clients should work similarly with the HTTP server URL `http://localhost:3001`.
+**Alternative (Simpler)**: Use the provided startup script:
+```json
+{
+  "mcpServers": {
+    "knowledge-graph": {
+      "command": "/Users/YOUR_USERNAME/path/to/project/scripts/start_mcp_for_claude.sh",
+      "args": []
+    }
+  }
+}
+EOF
+```
+
+**Replace `/Users/YOUR_USERNAME/path/to/project/` with your actual project path.**
+
+**Windows:**
+```bash
+# Create the configuration file at %APPDATA%\Claude\claude_desktop_config.json
+# Use the same JSON structure but with Windows paths
+```
+
+After creating the config file:
+1. **Restart Claude Desktop** completely (quit and reopen)
+2. **Look for the MCP indicator** (⚡ slider icon) in the bottom left of the input box
+3. **Test the connection** by asking: "What MCP tools do you have available?"
+
+#### For Other MCP Clients (Alternative HTTP Method)
+If using other MCP clients that support HTTP connections:
+```bash
+# Start HTTP server
+./scripts/start_http_server.sh
+# Then connect to http://localhost:3001
+```
 
 ### Start Using
+
 ```bash
-# Option 1: HTTP server (for GUI setup)
-./scripts/start_http_server.sh
+# 1. Ensure services are running
+./scripts/start_services.sh
 
-# Option 2: STDIO server (for JSON setup)  
-./scripts/start_mcp_server.sh
+# 2. Check everything is working
+./scripts/check_status.sh
 
-# In your MCP client (Claude Desktop, ChatGPT Desktop, etc.):
-# 1. Upload PDFs to project
-# 2. "Extract entities and relationships from these documents"  
-# 3. "Store the key text passages"
-# 4. "What does my knowledge graph say about [topic]?"
+# 3. Configure Claude Desktop (see above section)
+# 4. Restart Claude Desktop
 ```
+
+**In Claude Desktop:**
+1. **Upload PDFs** to your Claude project
+2. **Extract entities**: "Extract entities and relationships from these documents"  
+3. **Store content**: "Store the key text passages from these documents"
+4. **Query knowledge**: "What does my knowledge graph say about [topic]?"
+5. **Generate reviews**: "Generate a literature review on [topic]"
 
 That's it! Your personal research assistant is ready to help you build and query knowledge graphs from any collection of documents.
 

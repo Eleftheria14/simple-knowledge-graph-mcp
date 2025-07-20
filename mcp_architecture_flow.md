@@ -3,39 +3,46 @@
 ```mermaid
 flowchart TD
     subgraph clients["🖥️ LLM Clients"]
-        A[Claude Desktop]
-        B[ChatGPT Desktop]
-        C[Other MCP Clients]
+        A[Claude Desktop<br/>STDIO Transport]
+        B[ChatGPT Desktop<br/>HTTP Transport]
+        C[Other MCP Clients<br/>Various Transports]
     end
     
     subgraph comm["📡 MCP Communication"]
         D[MCP Protocol]
-        E[FastMCP Server]
+        E[FastMCP Server<br/>Multi-Transport]
     end
     
     subgraph tools["🛠️ MCP Tools"]
-        F[store_entities]
-        G[store_vectors]
-        H[query_knowledge_graph]
-        I[generate_literature_review]
-        J[clear_knowledge_graph]
+        subgraph core_tools["Core Knowledge Graph Tools"]
+            F[store_entities]
+            G[store_vectors]
+            H[query_knowledge_graph]
+            I[generate_literature_review]
+            J[clear_knowledge_graph]
+        end
+        subgraph text_tools["Text Processing Tools"]
+            K[generate_systematic_chunks]
+            L[estimate_chunking_requirements]
+            M[validate_text_coverage]
+        end
     end
     
     subgraph storage["💾 Storage Layer"]
-        K[Neo4j Storage]
-        L[ChromaDB Storage]
-        M[Neo4j Query]
-        N[ChromaDB Query]
+        N[Neo4j Storage]
+        O[ChromaDB Storage]
+        P[Neo4j Query]
+        Q[ChromaDB Query]
     end
     
     subgraph databases["🗄️ Databases"]
-        O@{shape: database, label: "Neo4j Graph DB"}
-        P@{shape: database, label: "ChromaDB Vector DB"}
+        R@{shape: database, label: "Neo4j Graph DB"}
+        S@{shape: database, label: "ChromaDB Vector DB"}
     end
     
     subgraph embedding["🧠 Local AI"]
-        Q[sentence-transformers]
-        R[Local Embeddings]
+        T[sentence-transformers]
+        U[Local Embeddings]
     end
     
     A --> D
@@ -49,24 +56,30 @@ flowchart TD
     E --> H
     E --> I
     E --> J
+    E --> K
+    E --> L
+    E --> M
     
-    F --> K
-    G --> L
-    H --> M
-    H --> N
-    I --> M
-    I --> N
-    J --> K
-    J --> L
-    
+    F --> N
+    G --> O
+    H --> P
+    H --> Q
+    I --> P
+    I --> Q
+    J --> N
+    J --> O
     K --> O
-    L --> P
+    L --> O
     M --> O
-    N --> P
     
-    L --> Q
-    N --> Q
-    Q --> R
+    N --> R
+    O --> S
+    P --> R
+    Q --> S
+    
+    O --> T
+    Q --> T
+    T --> U
 ```
 
 ## Data Flow Examples
@@ -106,7 +119,39 @@ sequenceDiagram
     MCP->>LLM: JSON response with stats
 ```
 
-### 3. Knowledge Query Flow
+### 3. Text Processing Flow
+```mermaid
+sequenceDiagram
+    participant LLM as LLM Client
+    participant MCP as MCP Server
+    participant TextProc as Text Processing Tools
+    participant Chroma as ChromaDB Storage
+    participant DB as ChromaDB Database
+    
+    LLM->>MCP: estimate_chunking_requirements(paper_text)
+    MCP->>TextProc: Analyze text structure and word count
+    TextProc->>MCP: Chunking recommendations and estimates
+    MCP->>LLM: Optimization suggestions
+    
+    LLM->>MCP: generate_systematic_chunks(paper_text, settings)
+    MCP->>TextProc: Create overlapping chunks with section detection
+    TextProc->>MCP: Systematic chunks with metadata
+    MCP->>LLM: Chunks ready for storage
+    
+    LLM->>MCP: validate_text_coverage(original_text, chunks)
+    MCP->>TextProc: Calculate coverage statistics
+    TextProc->>MCP: Coverage report and quality assessment
+    MCP->>LLM: Validation results
+    
+    LLM->>MCP: store_vectors(chunks, doc_info)
+    MCP->>Chroma: Store validated chunks
+    Chroma->>DB: INSERT chunks with embeddings
+    DB->>Chroma: Success confirmation
+    Chroma->>MCP: Storage complete
+    MCP->>LLM: All chunks stored successfully
+```
+
+### 4. Knowledge Query Flow
 ```mermaid
 sequenceDiagram
     participant LLM as LLM Client
@@ -135,3 +180,23 @@ sequenceDiagram
     ChromaQ->>MCP: Text results + citations
     MCP->>LLM: Combined JSON response
 ```
+
+## Connection Methods
+
+### Claude Desktop (STDIO Transport)
+- **Configuration**: `claude_desktop_config.json` file
+- **Transport**: STDIO (Standard Input/Output)
+- **Setup**: No manual server startup required
+- **How it works**: Claude Desktop launches the server automatically
+
+### Other MCP Clients (HTTP Transport)
+- **Configuration**: Manual HTTP server startup
+- **Transport**: HTTP on localhost:3001
+- **Setup**: Run `./scripts/start_http_server.sh`
+- **How it works**: Client connects to running HTTP server
+
+### Why Different Transports?
+- **STDIO**: More secure, no network exposure, automatically managed
+- **HTTP**: More flexible, easier for development, works across networks
+
+Both methods use the same MCP protocol and provide identical functionality.

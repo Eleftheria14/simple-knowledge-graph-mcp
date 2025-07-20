@@ -1,8 +1,20 @@
 # MCP Tools Reference for Claude Desktop
 
-This document describes the 5 MCP tools available to Claude Desktop when connected to the Simple Knowledge Graph MCP server.
+This document describes the 8+ MCP tools available to Claude Desktop when connected to the Simple Knowledge Graph MCP server.
 
-## Overview
+## 🎯 For End Users
+
+**You don't need to understand these technical details!** Just ask Claude things like:
+- "Extract entities from this document"
+- "Store the key information from these papers"  
+- "What does my knowledge graph say about transformers?"
+- "Generate a literature review on machine learning"
+- "Chunk this paper systematically for complete coverage"
+- "Estimate how many chunks I need for this document"
+
+Claude will use these tools automatically. This reference is for developers who want to understand what's happening under the hood.
+
+## Technical Overview
 
 These tools enable Claude to build and query knowledge graphs from documents. All tools operate on two local databases:
 - **Neo4j**: Graph database for entities and relationships
@@ -327,20 +339,199 @@ None - this tool takes no parameters.
 ### Warning
 This permanently deletes ALL stored data and cannot be undone.
 
+## Tool 6: `generate_systematic_chunks`
+
+### Purpose
+Generate systematic chunks for complete paper coverage with automatic section detection and overlap management.
+
+### Parameters
+```json
+{
+  "paper_text": "Full paper text to chunk",
+  "paper_title": "Research Paper Title",
+  "chunk_size": 300,
+  "overlap": 75
+}
+```
+
+### Parameter Details
+- **paper_text**: Complete text of the paper to be chunked
+- **paper_title**: Title for chunk naming (default: "Research Paper")
+- **chunk_size**: Target words per chunk (200-400 recommended, default: 300)
+- **overlap**: Overlap words between chunks (50-100 recommended, default: 75)
+
+### Example Usage
+```json
+{
+  "paper_text": "Abstract: This paper presents a novel approach...[full paper text]",
+  "paper_title": "Attention Is All You Need",
+  "chunk_size": 300,
+  "overlap": 75
+}
+```
+
+### Return Value
+```json
+{
+  "success": true,
+  "message": "Generated 25 systematic chunks with good coverage",
+  "chunks": [
+    {
+      "id": "attention_paper_chunk_001",
+      "content": "Abstract: This paper presents a novel...",
+      "type": "text_chunk",
+      "properties": {
+        "section": "abstract",
+        "word_count": 287,
+        "chunk_sequence": 1,
+        "overlap_with_previous": false,
+        "page": 1
+      }
+    }
+  ],
+  "statistics": {
+    "total_chunks": 25,
+    "total_words": 7500,
+    "average_chunk_size": 300,
+    "sections_covered": ["abstract", "introduction", "methods", "results", "conclusion"],
+    "coverage_report": {
+      "coverage_status": "good",
+      "coverage_ratio": "96%"
+    }
+  },
+  "ready_for_vector_storage": true
+}
+```
+
+## Tool 7: `estimate_chunking_requirements`
+
+### Purpose
+Estimate chunking requirements for a paper to plan optimal processing strategy.
+
+### Parameters
+```json
+{
+  "paper_text": "Full paper text to analyze"
+}
+```
+
+### Example Usage
+```json
+{
+  "paper_text": "Abstract: This paper presents a novel approach...[full paper text]"
+}
+```
+
+### Return Value
+```json
+{
+  "success": true,
+  "estimates": {
+    "total_words": 7500,
+    "estimated_chunks": 25,
+    "estimated_processing_time": "2-3 minutes",
+    "recommended_chunk_size": 300,
+    "sections_detected": ["abstract", "introduction", "methods", "results", "conclusion"]
+  },
+  "recommendations": [
+    "Medium paper - systematic chunking with 200-300 word chunks",
+    "Target: 25 chunks for 95%+ coverage"
+  ],
+  "suggested_chunk_size": 300,
+  "suggested_overlap": 75,
+  "research_standards": {
+    "minimum_coverage": "85%",
+    "excellent_coverage": "95%",
+    "systematic_chunking": "Required for research databases"
+  }
+}
+```
+
+## Tool 8: `validate_text_coverage`
+
+### Purpose
+Validate how well chunks cover the original paper for research integrity.
+
+### Parameters
+```json
+{
+  "original_text": "Full original paper text",
+  "stored_chunks": [
+    {
+      "content": "Chunk text content",
+      "properties": {"word_count": 295}
+    }
+  ]
+}
+```
+
+### Example Usage
+```json
+{
+  "original_text": "Abstract: This paper presents...[full original text]",
+  "stored_chunks": [
+    {
+      "content": "Abstract: This paper presents a novel approach...",
+      "properties": {"word_count": 287}
+    },
+    {
+      "content": "Introduction: Recent advances in machine learning...",
+      "properties": {"word_count": 312}
+    }
+  ]
+}
+```
+
+### Return Value
+```json
+{
+  "success": true,
+  "coverage_report": {
+    "coverage_ratio": "94%",
+    "status": "good",
+    "meets_research_standards": true
+  },
+  "statistics": {
+    "original_words": 7500,
+    "stored_words": 7050,
+    "total_chunks": 25
+  },
+  "message": "Coverage: 94% (✅ Good)"
+}
+
 ## Usage Patterns for Claude
 
 ### Document Processing Workflow
+
+**Basic Workflow:**
 1. **Extract entities**: Use `store_entities` with extracted entities and relationships
 2. **Store vectors**: Use `store_vectors` for any content (entities, text chunks, concepts, etc.)
 3. **Query**: Use `query_knowledge_graph` to find information
 4. **Generate reviews**: Use `generate_literature_review` for formatted output
 
+**Advanced Text Processing Workflow:**
+1. **Plan chunking**: Use `estimate_chunking_requirements` to analyze paper structure
+2. **Generate chunks**: Use `generate_systematic_chunks` for complete coverage
+3. **Validate coverage**: Use `validate_text_coverage` to ensure research standards
+4. **Store chunks**: Use `store_vectors` to store the systematic chunks
+5. **Query and review**: Use `query_knowledge_graph` and `generate_literature_review`
+
 ### Batch Processing
 ```json
-// Process multiple documents
+// Process multiple documents with systematic chunking
 foreach document {
+  // Optional: Plan chunking strategy
+  estimate_chunking_requirements(paper_text)
+  
+  // Generate systematic chunks
+  chunks = generate_systematic_chunks(paper_text, paper_title, 300, 75)
+  
+  // Validate coverage
+  validate_text_coverage(paper_text, chunks)
+  
+  // Store entities and systematic chunks
   store_entities(extracted_entities, extracted_relationships, document_info)
-  store_vectors(entities_and_text_as_vectors, document_info)
+  store_vectors(chunks, document_info)
 }
 
 // Query the complete knowledge base
@@ -380,6 +571,12 @@ All tools return a `success` field. When `success: false`:
 - Choose appropriate citation style for target audience
 - Include summary for overview statistics
 - Use reasonable max_sources limit for readability
+
+#### Text Processing
+- Use `estimate_chunking_requirements` before processing to plan strategy
+- Generate systematic chunks with appropriate size (200-400 words)
+- Validate coverage to ensure research-grade quality (85%+ coverage)
+- Use overlapping chunks (50-100 words) for better context preservation
 
 ## Data Models Reference
 

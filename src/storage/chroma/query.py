@@ -1,23 +1,16 @@
 """ChromaDB query manager for semantic search and retrieval."""
 from typing import List, Dict, Any
-import chromadb
-from chromadb.config import Settings
-import config
 from storage.embedding import EmbeddingService
+from .client import get_shared_chromadb_client
 
 class ChromaDBQuery:
     """Handle query operations in ChromaDB with semantic search."""
     
     def __init__(self):
-        """Initialize ChromaDB and embedding service."""
-        self.client = chromadb.PersistentClient(
-            path=config.CHROMADB_PATH,
-            settings=Settings(anonymized_telemetry=False)
-        )
-        self.collection = self.client.get_or_create_collection(
-            name=config.CHROMADB_COLLECTION
-        )
+        """Initialize ChromaDB using shared client and embedding service."""
+        self.client, self.collection = get_shared_chromadb_client()
         self.embedding_service = EmbeddingService()
+        print(f"🔍 ChromaDBQuery initialized with collection ID: {self.collection.id}")
     
     def query_similar_text(
         self, 
@@ -26,11 +19,14 @@ class ChromaDBQuery:
         include_metadata: bool = True
     ) -> List[Dict[str, Any]]:
         """Query similar text using semantic search."""
+        # Get fresh collection reference to avoid stale cache
+        _, collection = get_shared_chromadb_client()
+        
         # Generate query embedding
         query_embedding = self.embedding_service.encode_text(query)
         
         # Search ChromaDB
-        results = self.collection.query(
+        results = collection.query(
             query_embeddings=[query_embedding.tolist()],
             n_results=n_results,
             include=["documents", "metadatas", "distances"] if include_metadata else ["documents"]

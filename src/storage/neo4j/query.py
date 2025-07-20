@@ -18,15 +18,15 @@ class Neo4jQuery:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (e:Entity)
-                WHERE toLower(e.name) CONTAINS toLower($query) 
-                   OR toLower(e.type) CONTAINS toLower($query)
+                WHERE toLower(e.name) CONTAINS toLower($search_query) 
+                   OR toLower(e.type) CONTAINS toLower($search_query)
                 OPTIONAL MATCH (e)-[:MENTIONED_IN]->(d:Document)
                 RETURN e.id as id, e.name as name, e.type as type, 
                        e.properties as properties, e.confidence as confidence,
                        collect(d.title) as documents
                 ORDER BY e.confidence DESC
                 LIMIT $limit
-            """, query=query, limit=limit)
+            """, search_query=query, limit=limit)
             
             return [dict(record) for record in result]
     

@@ -6,6 +6,7 @@ from fastmcp import FastMCP
 from pydantic import BaseModel
 
 from storage.chroma import ChromaDBStorage
+# from utils.coverage_validation import check_coverage_before_storage
 
 # Data models
 
@@ -14,12 +15,16 @@ class DocumentInfo(BaseModel):
     
     Example:
     {"title": "Machine Learning Review", "type": "research_paper", 
-     "path": "/papers/ml_review.pdf"}
+     "path": "/papers/ml_review.pdf", "doi": "10.xxx/xxx"}
     """
     title: str  # Document title or filename
     type: str = "document"  # Document type: research_paper, book, article, etc.
     id: str = None  # Optional unique document ID (auto-generated if not provided)
     path: str = None  # Optional file path or URL
+    doi: str = None  # Digital Object Identifier for academic papers
+    journal: str = None  # Journal name for academic papers
+    year: int = None  # Publication year
+    citation_preview: str = None  # Formatted citation preview
 
 class VectorData(BaseModel):
     """Represents any type of data to be stored as vectors in ChromaDB.
@@ -40,8 +45,8 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
     
     @mcp.tool()
     def store_vectors(
-        vectors: List[VectorData],
-        document_info: DocumentInfo
+        vectors: List[Dict[str, Any]],
+        document_info: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Store any type of content as vectors in ChromaDB.
@@ -54,26 +59,52 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
             Success status and counts of stored vectors
         """
         try:
+            # Debug: Show collection info at start of storage
+            print(f"🔧 store_vectors using collection ID: {chromadb_storage.collection.id}")
+            print(f"🔧 Collection name: {chromadb_storage.collection.name}")
+            
+            # Validate input data format
+            if not vectors:
+                return {"success": False, "error": "No vectors provided", "message": "Vector list is empty"}
+            
             # Generate document ID if not provided
-            if not document_info.id:
-                document_info.id = str(uuid.uuid4())
+            doc_id = document_info.get('id') or str(uuid.uuid4())
             
-            # Prepare content for embedding
-            contents = [vector.content for vector in vectors]
-            vector_ids = [f"{document_info.id}_{vector.id}" for vector in vectors]
-            
-            # Prepare metadata
+            # Validate and prepare content for embedding
+            contents = []
+            vector_ids = []
             metadatas = []
-            for vector in vectors:
+            
+            for i, vector in enumerate(vectors):
+                if not isinstance(vector, dict):
+                    return {"success": False, "error": f"Vector {i} is not a dict: {type(vector)}", "message": "Invalid vector format"}
+                
+                # Ensure required fields exist
+                if 'id' not in vector or not vector['id']:
+                    return {"success": False, "error": f"Vector {i} missing or null 'id' field: {vector}", "message": "Vector ID required"}
+                
+                if 'content' not in vector or not vector['content']:
+                    return {"success": False, "error": f"Vector {i} missing 'content' field: {vector}", "message": "Vector content required"}
+                
+                contents.append(vector['content'])
+                vector_ids.append(f"{doc_id}_{vector['id']}")
+                
+                # Prepare metadata with enhanced citation info
                 metadata = {
-                    "document_id": document_info.id,
-                    "document_title": document_info.title,
-                    "document_type": document_info.type,
-                    "vector_type": vector.type,
-                    "vector_id": vector.id,
+                    "document_id": doc_id,
+                    "document_title": document_info.get('title', 'Untitled Document'),
+                    "document_type": document_info.get('type', 'document'),
+                    "vector_type": vector.get('type', 'unknown'),
+                    "vector_id": vector['id'],
                     "stored_at": datetime.now().isoformat(),
-                    **vector.properties
+                    **vector.get('properties', {})
                 }
+                
+                # Add citation metadata if available
+                for field in ['doi', 'journal', 'year', 'citation_preview']:
+                    if field in document_info and document_info[field] is not None:
+                        metadata[field] = document_info[field]
+                    
                 metadatas.append(metadata)
             
             # Store in ChromaDB with embeddings
@@ -83,12 +114,27 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
                 metadatas
             )
             
-            return {
+            # Prepare response
+            vector_types = set(v.get('type', 'unknown') for v in vectors)
+            response = {
                 "success": True,
-                "message": f"Stored {result['vectors_stored']} vectors of types: {set(v.type for v in vectors)}",
+                "message": f"Stored {result['vectors_stored']} vectors of types: {vector_types}",
                 "document_id": result["document_id"],
+                "debug_info": {
+                    "collection_id": chromadb_storage.collection.id,
+                    "collection_name": chromadb_storage.collection.name,
+                    "client_id": id(chromadb_storage.client)
+                },
                 **result
             }
+            
+            # Add basic quality note
+            if len(vectors) >= 20:
+                response["message"] += " ✅ Good chunk quantity for comprehensive coverage."
+            elif len(vectors) < 10:
+                response["message"] += " ⚠️ NOTICE: Low chunk count - ensure complete paper coverage."
+            
+            return response
             
         except Exception as e:
             return {

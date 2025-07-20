@@ -28,6 +28,7 @@ from tools.storage.text_storage import register_text_tools
 from tools.storage.database_management import register_management_tools
 from tools.query.knowledge_search import register_search_tools
 from tools.query.literature_generation import register_literature_tools
+from tools.processing.text_processing import register_text_processing_tools
 
 # Initialize MCP server
 mcp = FastMCP("Knowledge Graph Research Assistant")
@@ -44,6 +45,7 @@ register_text_tools(mcp, chromadb_storage)
 register_management_tools(mcp, neo4j_storage, chromadb_storage)
 register_search_tools(mcp, neo4j_query, chromadb_query)
 register_literature_tools(mcp, neo4j_query, chromadb_query)
+register_text_processing_tools(mcp)
 
 
 if __name__ == "__main__":
