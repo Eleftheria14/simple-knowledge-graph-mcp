@@ -1,0 +1,1 @@
+"""Storage layer for Simple Knowledge Graph MCP."""

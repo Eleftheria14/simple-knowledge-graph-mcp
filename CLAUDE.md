@@ -6,582 +6,221 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Environment Setup
 ```bash
-# Modern Python 3.11+ environment (RECOMMENDED)
-source graphrag-env/bin/activate
+# Modern UV-based setup (RECOMMENDED - Python 3.11+)
+./scripts/setup.sh
 
-# Legacy environments (for compatibility)
-source graphiti-env/bin/activate  # Older setup
-source langchain-env/bin/activate  # Legacy setup
-
-# Install dependencies with UV (faster)
-uv pip install -r requirements.txt
-
-# Complete environment setup (creates graphrag-env)
-./setup_env.sh  # Creates Python 3.11 environment with all dependencies
-
-# Development setup with all tools
-make install-dev
-make dev  # Complete development environment setup
+# Activate UV environment for manual commands
+uv run python <command>
 ```
 
-### Build System Commands (Makefile)
+### Service Management
 ```bash
-# Installation
-make install          # Production install
-make install-dev      # Development install with all dependencies
+# Start required services (Neo4j)
+./scripts/start_services.sh
 
-# Code Quality
-make lint            # Run ruff, black, mypy
-make format          # Format code with black, ruff, isort
-make check-format    # Check formatting without changes
-make type-check      # Run mypy type checking
-make security        # Run bandit and safety checks
-make pre-commit      # Run all pre-commit hooks
-make quality         # Run all quality checks (lint + type-check + security)
+# Check system status and connections
+./scripts/check_status.sh
 
-# Testing
-make test            # Run tests with coverage
-make test-quick      # Quick test run without coverage
-
-# Single test commands
-uv run pytest tests/test_specific.py -v              # Run specific test file
-uv run pytest tests/test_specific.py::test_func -v  # Run specific test function
-uv run pytest tests/ -k "test_pattern" -v           # Run tests matching pattern
-uv run pytest tests/ -m "unit" -v                   # Run tests with specific marker
-
-# Environment Setup
-make setup-ollama    # Install Ollama models (llama3.1:8b, nomic-embed-text)
-make setup-neo4j     # Start Neo4j Docker container
-make clear-db        # Clear all ChromaDB databases
-make tutorial        # Start tutorial system (same as ./start_tutorial.sh)
-
-# Documentation & Build
-make docs            # Build documentation with mkdocs
-make docs-serve      # Serve documentation locally
-make build           # Build package with uv
-make publish         # Publish to PyPI
-make publish-test    # Publish to test PyPI
-make clean           # Clean build artifacts
-
-# Development Workflow
-make dev             # Complete development setup (install-dev + pre-commit-install)
-make ci              # Simulate CI pipeline (clean + install-dev + quality + test)
+# Stop all services
+./scripts/stop_services.sh
 ```
 
-### Quick Start Scripts (NEW)
+### MCP Server Operations
 ```bash
-# Notebook Processing (RECOMMENDED)
-./start_tutorial.sh     # Complete setup + launches Jupyter notebook
-./start_tutorial.sh --start-ollama  # Also starts Ollama in background
+# Start HTTP MCP server (easy GUI setup)
+./scripts/start_http_server.sh
 
-# Services Only
-./start_services.sh                 # Start Ollama + Neo4j services only
+# Start STDIO MCP server (advanced JSON config)
+./scripts/start_mcp_server.sh
 
-# Environment
-./activate_graphrag_env.sh          # Activate Python environment
-./setup_env.sh                      # Create fresh environment
-./clear_chromadb.sh                 # Clear all databases
+# Test specific components
+uv run python -c "import sys; sys.path.insert(0, 'src'); from server.main import mcp; print('✅ Server imports work')"
+
+# Manual server startup (for development)
+cd src && uv run python server/main.py
+cd src && uv run python server/main.py --http  # HTTP mode
 ```
 
-### CLI Commands (graphrag-mcp)
+### Database Management
 ```bash
-# Primary MCP Server Commands
-graphrag-mcp serve-universal --template academic --transport stdio  # Universal MCP server
-python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
+# Clear all data (fresh start)
+./scripts/clear_databases.sh
 
-# Template Management
-graphrag-mcp templates --list              # List available templates
-graphrag-mcp templates --info academic     # Get template details
-
-# Status & Health
-graphrag-mcp status                        # System status
-curl -s http://localhost:11434/api/tags    # Check Ollama status
-curl -f http://localhost:7474/             # Check Neo4j status
-
-# Testing Core Components (NEW)
-python3 test_core_components.py           # Test citation manager and query engine
-python3 -c "from graphrag_mcp.core.citation_manager import CitationTracker; print('✅ Citation manager ready')"
-python3 -c "from graphrag_mcp.mcp.chat_tools import ChatToolsEngine; print('✅ Chat tools ready')"
-python3 -c "from graphrag_mcp.mcp.literature_tools import LiteratureToolsEngine; print('✅ Literature tools ready')"
-
-# Notebook Workflow (Interactive Document Processing)
-# RECOMMENDED: Use the automated startup script
-./start_tutorial.sh  # Complete setup + launches notebook
-
-# OR: Manual setup
-./start_services.sh  # Start Ollama + Neo4j services only
-cd notebooks/Main
-source ../../graphrag-env/bin/activate
-python -c "from processing_utils import check_prerequisites; check_prerequisites()"  # Check prerequisites
-jupyter notebook Simple_Document_Processing.ipynb  # Interactive processing workflow
+# Test database connections
+uv run python -c "from neo4j import GraphDatabase; import chromadb; print('✅ DB libraries work')"
 ```
 
-### Required Services Setup
+### Testing and Validation
 ```bash
-# Ollama Setup (Required)
-ollama pull llama3.1:8b
-ollama pull nomic-embed-text
-ollama serve
+# Test import structure
+cd src && uv run python -c "
+from storage.neo4j import Neo4jStorage, Neo4jQuery
+from storage.chroma import ChromaDBStorage, ChromaDBQuery  
+from tools.storage.entity_storage import register_entity_tools
+from server.main import mcp
+print('✅ All imports successful')
+"
 
-# Verify Ollama is running
-curl -s http://localhost:11434/api/tags
-
-# Neo4j Setup (Optional - for Graphiti persistence)
-docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
-
-# Verify Neo4j is running
-curl -f http://localhost:7474/
-# Access Neo4j Browser: http://localhost:7474 (neo4j/password)
-# Note: System works without Neo4j but with reduced persistence capabilities
-```
-
-### MCP Integration Testing
-```bash
-# Claude Desktop Configuration Example
-# Add to ~/.config/claude-desktop/config.json:
-{
-  "mcpServers": {
-    "graphrag-research": {
-      "command": "python3",
-      "args": ["-m", "graphrag_mcp.cli.main", "serve-universal", "--template", "academic", "--transport", "stdio"],
-      "cwd": "/path/to/project"
-    }
-  }
-}
-
-# Test MCP server manually
-python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
-
-# Database Reset
-./clear_chromadb.sh
+# Test MCP tools registration
+cd src && uv run python -c "from server.main import mcp; print(f'MCP server has {len(mcp._tools)} tools registered')"
 ```
 
 ## System Architecture
 
-### Dual-Mode GraphRAG MCP Toolkit
-This is a **production-ready GraphRAG MCP Toolkit** that enables Claude to both **chat conversationally** about research content AND **write literature reviews with automatic citations**:
+### Dual-Mode Knowledge Graph MCP System
+This is a **modular FastMCP server** that provides 5 core tools for building and querying knowledge graphs from documents. The system uses two complementary storage backends:
 
-- **Dual-Mode Design**: Conversational chat tools + formal literature review tools
-- **Universal MCP Server**: Single FastMCP server with 10+ domain-specific tools
-- **Citation Management**: Comprehensive citation tracking with 4 academic styles (APA, IEEE, Nature, MLA)
-- **Local Processing**: All document analysis via Ollama (privacy-first, no external APIs)
-- **Template System**: Domain-specific configurations (academic template with extensible architecture)
+- **Neo4j**: Graph database for entities, relationships, and semantic connections
+- **ChromaDB**: Vector database for any content with local embeddings (sentence-transformers)
 
-### Core Architecture: Dual-Mode Tool System
+### Core MCP Tools Available
+1. `store_entities` - Store entities and relationships in Neo4j graph database
+2. `store_vectors` - Store any content as vectors with embeddings in ChromaDB
+3. `query_knowledge_graph` - Query both databases for comprehensive research results
+4. `generate_literature_review` - Format results for academic writing with citations
+5. `clear_knowledge_graph` - Clear all data from both databases
 
-#### Chat Tools (Conversational Mode)
-Located in `graphrag_mcp/mcp/chat_tools.py`:
-- `ask_knowledge_graph` - Natural Q&A with conversational responses
-- `explore_topic` - Structured topic exploration with multiple scopes
-- `find_connections` - Discover relationships between concepts
-- `what_do_we_know_about` - Comprehensive knowledge summaries
+### Modular Architecture Pattern
 
-#### Literature Review Tools (Formal Writing Mode)
-Located in `graphrag_mcp/mcp/literature_tools.py`:
-- `gather_sources_for_topic` - Source gathering and organization
-- `get_facts_with_citations` - Citation-ready factual statements
-- `verify_claim_with_sources` - Evidence-based claim verification
-- `get_topic_outline` - Structured literature review outlines
-- `track_citations_used` - Citation usage management
-- `generate_bibliography` - Multi-style bibliography generation
-
-### Modern Component Architecture
-
-#### Core Package Structure (`graphrag_mcp/`)
+#### Storage Layer (`src/storage/`)
 ```
-graphrag_mcp/
-├── cli/                       # Typer-based CLI with rich output
-│   └── main.py               # Entry point: graphrag-mcp command
-├── core/                     # Domain-agnostic processing engine
-│   ├── analyzer.py           # AdvancedAnalyzer for enhanced document analysis
-│   ├── chat_engine.py        # ChatEngine for RAG + Graph queries
-│   ├── citation_manager.py   # NEW: Comprehensive citation tracking system
-│   ├── document_processor.py # PDF processing and text chunking
-│   ├── graphiti_engine.py    # Graphiti integration for knowledge graphs
-│   ├── ollama_engine.py      # Local LLM integration layer
-│   └── query_engine.py       # NEW: Enhanced NLP query processing
-├── mcp/                      # MCP server generation
-│   ├── chat_tools.py         # NEW: Conversational research exploration tools
-│   ├── graphiti_server.py    # Graphiti-powered MCP server
-│   ├── literature_tools.py   # NEW: Formal academic writing tools
-│   └── server_generator.py   # Updated: FastMCP server with dual-mode tools
-├── templates/                # Domain-specific configurations
-│   ├── academic.py           # Updated: Literature review template with 10 tools
-│   └── base.py               # Base template class
-└── visualization/            # Graph visualization
-    └── graphiti_yfiles.py    # yFiles professional graphs
-
-notebooks/
-├── Main/                     # Primary notebook workflow
-│   ├── Simple_Document_Processing.ipynb  # Interactive document processing
-│   ├── processing_utils.py   # Notebook utilities with progress tracking
-│   └── README.md            # Notebook documentation
-├── Google CoLab/            # Google Colab versions
-└── Other/                   # Archive/alternative notebooks
+storage/
+├── neo4j/           # Graph database operations
+│   ├── storage.py   # Entity and relationship storage
+│   └── query.py     # Graph queries and traversal
+├── chroma/          # Vector database operations  
+│   ├── storage.py   # Text storage with embeddings
+│   └── query.py     # Semantic search and retrieval
+└── embedding/       # Local embedding generation
+    └── service.py   # sentence-transformers integration
 ```
 
-### MCP Server Data Flow (Updated)
+#### Tools Layer (`src/tools/`)
 ```
-Documents → Processing → Knowledge Graph → Dual-Mode MCP Tools → Claude Integration
-    ↓            ↓             ↓                    ↓                    ↓
-  PDF/Text → Entities → Graphiti/Neo4j → Chat + Literature Tools → Research Assistant
-                                              ↓
-                                    Citation Tracking System
-                                         (APA/IEEE/Nature/MLA)
-```
-
-### Interactive Notebook Workflow (NEW)
-```
-PDF Documents → Notebook Interface → Progress Tracking → Analytics → MCP Server Setup
-     ↓               ↓                     ↓               ↓             ↓
-   Discovery → Processing Utils → Real-time Progress → Visualization → Claude Integration
-                     ↓                                      ↓
-              Concurrent Processing                  Interactive Graphs
-              Error Handling & Retry               Knowledge Graph Display
+tools/
+├── storage/         # Data persistence tools
+│   ├── entity_storage.py      # register_entity_tools()
+│   ├── text_storage.py        # register_text_tools()  
+│   └── database_management.py # register_management_tools()
+└── query/           # Data retrieval tools
+    ├── knowledge_search.py     # register_search_tools()
+    └── literature_generation.py # register_literature_tools()
 ```
 
-**Key MCP Tools Provided (Updated):**
+#### Server Layer (`src/server/`)
+- `main.py` - FastMCP server orchestration and tool registration
 
-*Core Tools:*
-- `list_templates` - Available domain templates
-- `switch_template` - Change domain focus  
-- `load_document_collection` - Process document sets
-- `search_documents` - Semantic search across corpus
+#### Configuration (`src/config/`)
+- `settings.py` - Environment variables and database configuration
 
-*Chat Tools (Conversational):*
-- `ask_knowledge_graph` - Natural Q&A with research content
-- `explore_topic` - Topic exploration with different detail levels
-- `find_connections` - Discover concept relationships
-- `what_do_we_know_about` - Comprehensive knowledge overviews
-
-*Literature Review Tools (Formal):*
-- `gather_sources_for_topic` - Organize sources for writing
-- `get_facts_with_citations` - Citation-ready statements
-- `verify_claim_with_sources` - Evidence-based verification
-- `get_topic_outline` - Literature review structure
-- `track_citations_used` - Citation management
-- `generate_bibliography` - Multi-style bibliography
-
-*Legacy Tools:*
-- `query_papers` - Basic paper search
-- `research_gaps` - Gap identification
-- `methodology_overview` - Method comparison
-- `author_analysis` - Collaboration networks
-- `concept_evolution` - Concept tracking
-
-### Key Implementation Patterns
-
-#### Dual-Mode MCP Integration
-The system provides **two complementary interfaces** for Claude:
-
-1. **Conversational Mode**: Natural exploration and discovery
-   - Claude asks questions like "What do we know about transformer architectures?"
-   - Tools return conversational responses with follow-up suggestions
-   - Focus on exploration and understanding
-
-2. **Literature Review Mode**: Formal academic writing with citations
-   - Claude requests "Get facts about transformers with citations for my background section"
-   - Tools return formatted statements with proper citations
-   - Focus on accuracy and academic standards
-
-#### Citation Management Integration
-All tools share a central `CitationTracker` that:
-- Automatically tracks which papers are referenced
-- Maintains citation usage context and confidence scores
-- Supports 4 academic citation styles (APA, IEEE, Nature, MLA)
-- Generates in-text citations and bibliographies on demand
-
-#### Template Development Pattern (Updated)
+### Tool Registration Pattern
+Each tool module follows this pattern:
 ```python
-# Creating new domain templates with dual-mode tools
-class NewDomainTemplate(BaseTemplate):
-    def get_mcp_tools(self) -> List[MCPToolConfig]:
-        return [
-            # Chat tools for exploration
-            MCPToolConfig(
-                name="ask_domain_question",
-                description="Natural questions about domain content",
-                implementation="conversational_query"
-            ),
-            # Literature tools for formal writing
-            MCPToolConfig(
-                name="get_domain_facts_with_citations",
-                description="Citation-ready domain facts",
-                implementation="cited_facts"
-            )
-        ]
+def register_*_tools(mcp: FastMCP, *managers):
+    @mcp.tool()
+    def tool_name(params) -> Dict[str, Any]:
+        # Tool implementation
+        pass
 ```
 
-## Key Implementation Details
+The main server imports and registers all tools:
+```python
+# Initialize storage managers
+neo4j_storage = Neo4jStorage()
+chromadb_storage = ChromaDBStorage()
 
-### Critical Architecture Principles
-
-#### Dual-Mode Tool Design
-When adding new tools, always implement both modes:
-- **Chat Tools**: Conversational, exploratory, with follow-up suggestions
-- **Literature Tools**: Formal, citation-ready, academic-style responses
-- **Shared State**: Both modes share the same CitationTracker instance
-
-#### Citation-First Development
-All literature tools must:
-- Integrate with `CitationTracker` for automatic citation tracking
-- Support multiple academic styles (APA, IEEE, Nature, MLA)
-- Track usage context and confidence scores
-- Generate properly formatted in-text citations
-
-#### Template-Based Extension
-When adding new domain templates:
-- Extend `BaseTemplate` with domain-specific configurations
-- Define entity schemas as "guidance" rather than constraints
-- Register tools in both chat and literature categories
-- Include relationship schemas for knowledge graph construction
-
-### Modern Development Stack (Updated)
-- **Framework**: Python 3.11+, FastMCP, Typer, Pydantic
-- **LLM Integration**: Ollama (llama3.1:8b, nomic-embed-text) for local privacy
-- **Knowledge Graphs**: Graphiti with Neo4j persistence
-- **Vector Storage**: ChromaDB for semantic search
-- **Citation Management**: Custom citation tracking system with 4 academic styles
-- **Code Quality**: Black, Ruff, MyPy, Pre-commit hooks
-- **Testing**: Pytest with comprehensive integration tests
-- **Documentation**: MkDocs with Material theme
-
-### Database Management
-```bash
-# Clear all ChromaDB databases (fresh start)
-./clear_chromadb.sh
-
-# Database locations:
-# - chroma_graph_db/          # Main GraphRAG database
-# - tutorial/chroma_*_db/     # Tutorial databases  
-# - notebooks/chroma_db/      # Notebook databases
+# Register tools from modules
+register_entity_tools(mcp, neo4j_storage)
+register_text_tools(mcp, chromadb_storage)
 ```
 
-### Development Workflow (Updated)
-```bash
-# Setup development environment
-make dev              # Install dependencies + pre-commit hooks
+### Import Structure Requirements
+**Critical**: All imports within `src/` use absolute imports from the package root:
+```python
+# Correct
+from storage.neo4j import Neo4jStorage
+from tools.storage.entity_storage import register_entity_tools
+import config
 
-# Test core components (NEW)
-python3 test_core_components.py  # Comprehensive integration tests
-
-# Development cycle
-make format           # Format code (black, ruff, isort)
-make lint            # Check code quality (ruff, black, mypy)
-make type-check      # Type checking (mypy)
-make test            # Run tests with coverage
-make pre-commit      # Run all pre-commit hooks
-
-# Quality assurance
-make quality         # Run lint + type-check + security
-make ci              # Full CI simulation
+# Incorrect (relative imports cause issues)
+from ..storage.neo4j import Neo4jStorage
+from ...tools.storage.entity_storage import register_entity_tools
 ```
+
+### Database Integration Pattern
+The system uses separate storage and query classes for each database:
+
+**Neo4j Pattern**:
+- `Neo4jStorage` - Handles entity and relationship persistence
+- `Neo4jQuery` - Handles graph queries and relationship traversal
+
+**ChromaDB Pattern**:
+- `ChromaDBStorage` - Handles text storage with automatic embedding generation
+- `ChromaDBQuery` - Handles semantic search and citation retrieval
+
+Both share the `EmbeddingService` for consistent vector generation.
+
+### Entity Extraction Philosophy
+The system uses **flexible, AI-driven entity extraction** rather than rigid schemas:
+
+1. **Claude determines relevance** - No fixed entity types or constraints
+2. **Adaptive to document types** - Works across domains (chemistry, CS, biology, etc.)
+3. **Confidence scoring** - All entities and relationships include confidence metrics
+4. **Contextual relationships** - Relationships include source context for verification
+
+See `src/prompts/entity_extraction.md` for detailed guidance patterns.
+
+### Development Workflow
+1. **Code changes**: Work within the `src/` directory structure
+2. **Test imports**: Use `uv run python` from project root with `sys.path.insert(0, 'src')`
+3. **Server testing**: Always test from `src/` directory: `cd src && uv run python server/main.py`
+4. **Production deployment**: Use `./scripts/start_mcp_server.sh` which handles paths correctly
+
+### Configuration Management
+- Environment variables in `.env` (created from `.env.example`)
+- Database URIs configurable via `NEO4J_URI`, `CHROMADB_PATH`
+- Embedding model configurable via `EMBEDDING_MODEL`
+- Citation styles: APA, IEEE, Nature, MLA (in `config.CITATION_STYLES`)
+
+### Local-First Design
+- **No external API dependencies** - All LLM processing via Claude Desktop/ChatGPT
+- **Local embeddings** - sentence-transformers for privacy
+- **Local databases** - Neo4j via Docker, ChromaDB as files
+- **Zero API keys required** - Complete offline operation capability
 
 ## Common Development Patterns
 
-### Interactive Document Processing (Notebook Workflow)
-```python
-# Using the notebook processing utilities
-from processing_utils import NotebookDocumentProcessor, check_prerequisites
+### Adding New MCP Tools
+1. Create tool function in appropriate module (`tools/storage/` or `tools/query/`)
+2. Follow the `register_*_tools(mcp, *managers)` pattern
+3. Import and register in `src/server/main.py`
+4. Use absolute imports within `src/`
 
-# Check system prerequisites
-status = check_prerequisites()
-if status["status"] == "failed":
-    print("Fix these issues:", status["issues"])
+### Database Manager Development
+1. Separate storage and query operations into different classes
+2. Share common dependencies (like `EmbeddingService`) between related classes
+3. Use dependency injection pattern in tool registration
 
-# Initialize processor
-processor = NotebookDocumentProcessor(project_name="my-research")
-
-# Discover documents
-documents = processor.discover_documents("../../examples")
-
-# Process with progress tracking
-import asyncio
-results = await processor.process_documents(documents)
-
-# Show analytics and visualization
-processor.show_analytics(documents)
-processor.visualize_knowledge_graph(documents)
-```
-
-### Working with Citation Management
-```python
-# Citation tracking workflow
-from graphrag_mcp.core.citation_manager import CitationTracker
-
-citation_manager = CitationTracker()
-
-# Add citations from document processing
-citation_key = citation_manager.add_citation(
-    title="Attention Is All You Need",
-    authors=["Vaswani", "Shazeer"],
-    year=2017,
-    journal="NIPS"
-)
-
-# Track usage in tools
-citation_manager.track_citation(citation_key, "Used in transformer explanation")
-
-# Generate bibliography
-bibliography = citation_manager.generate_bibliography(style="APA", used_only=True)
-```
-
-### Adding New Dual-Mode Tools
-1. **Chat Tool**: Add to `graphrag_mcp/mcp/chat_tools.py`
-   - Focus on conversational responses
-   - Include follow-up suggestions
-   - Return exploration-oriented results
-
-2. **Literature Tool**: Add to `graphrag_mcp/mcp/literature_tools.py`
-   - Integrate with citation manager
-   - Return formal, citation-ready content
-   - Support different academic styles
-
-3. **Template Integration**: Update `graphrag_mcp/templates/academic.py`
-   - Add tool definitions to appropriate category
-   - Define parameters and implementation mappings
-
-4. **Server Registration**: Update `graphrag_mcp/mcp/server_generator.py`
-   - Add tool registration logic
-   - Connect to appropriate tool engine
-
-### MCP Server Development (Updated)
-```python
-# Example dual-mode MCP server usage
-from graphrag_mcp.mcp.server_generator import UniversalMCPServer
-
-# Create server with integrated citation management
-server = UniversalMCPServer()
-
-# Citation manager is shared across all tools
-assert server.chat_tools.citation_manager is server.literature_tools.citation_manager
-assert server.chat_tools.citation_manager is server.citation_manager
-```
-
-### Error Handling and Debugging
+### Testing New Components
 ```bash
-# Common debugging commands
-curl -s http://localhost:11434/api/tags || echo "Start ollama: ollama serve"
-curl -f http://localhost:7474/ || echo "Start Neo4j: make setup-neo4j"
+# Test individual storage components
+cd src && uv run python -c "from storage.neo4j import Neo4jStorage; print('Neo4j ready')"
 
-# Test core components
-python3 test_core_components.py
+# Test tool registration
+cd src && uv run python -c "from tools.storage.entity_storage import register_entity_tools; print('Tools ready')"
 
-# Database reset for conflicts
-./clear_chromadb.sh
-
-# Python environment issues
-source graphrag-env/bin/activate  # Use recommended environment
-uv pip install -r requirements.txt
-
-# Pre-commit hook issues
-make pre-commit-install
-
-# Environment setup issues
-./setup_env.sh  # Recreate complete environment
+# Test full server
+./scripts/start_mcp_server.sh
 ```
 
-### Common Development Pitfalls
+## Project Context
 
-#### MCP Tool Registration
-- Tools must be registered in both `server_generator.py` and template configurations
-- Parameter schemas must match between tool definition and implementation
-- FastMCP context (`ctx: Context`) should be included in all tool functions
+This is a **production-ready MCP toolkit** for building knowledge graphs from documents using Claude Desktop or ChatGPT. The system enables researchers to:
 
-#### Citation Management
-- Never create separate CitationTracker instances - use the shared one
-- Always call `track_citation()` when a tool references a paper
-- Use `get_citation_key()` for consistent citation key generation
+1. Upload PDFs to Claude Projects
+2. Extract entities and relationships via natural language
+3. Store everything in a dual-database system (graph + vector)
+4. Query the knowledge base for research insights
+5. Generate formatted literature reviews with citations
 
-#### Async/Await Patterns
-- All MCP tools must be async functions
-- Use `await` for all database and LLM operations
-- Implement proper error handling with try/except blocks
-
-#### Testing Strategy
-- Run `test_core_components.py` before committing changes
-- Test both chat and literature tools in isolation
-- Verify citation tracking across tool interactions
-- Check MCP server startup with `serve-universal` command
-
-## Project Context and Vision
-
-### Current Status: Dual-Mode Research Assistant
-This is a **production-ready dual-mode GraphRAG MCP Toolkit** that enables Claude to both explore research content conversationally AND write formal literature reviews with automatic citations. The system represents a major advancement from basic document search to sophisticated research assistance.
-
-### Primary Use Case: Comprehensive Research Workflows
-Enable Claude to support complete research workflows:
-
-1. **Exploration Phase**: Use chat tools to explore topics, find connections, understand the landscape
-2. **Writing Phase**: Use literature review tools to gather sources, verify claims, generate citations
-3. **Citation Management**: Automatic tracking and formatting throughout both phases
-
-### Key Innovations (Updated)
-1. **Dual-Mode Architecture**: First MCP toolkit with both conversational and formal writing modes
-2. **Integrated Citation Management**: Automatic citation tracking with 4 academic styles
-3. **Enhanced Query Processing**: NLP-based intent classification and entity extraction
-4. **Template-Based Architecture**: Universal system supports any professional domain
-5. **Local Privacy-First**: All processing via Ollama, no external API dependencies
-6. **Production MCP Integration**: Seamless connection to Claude Desktop and other AI assistants
-
-### Development Philosophy
-- **Dual-Mode Design**: Support both exploration and formal writing workflows
-- **Citation-First**: Proper academic attribution built into every tool
-- **Local Privacy**: All processing local via Ollama
-- **Community-Driven**: Open-source with contribution-friendly architecture
-- **Production-Ready**: Comprehensive testing, documentation, and deployment tools
-- **Research-Grounded**: Built on proven academic research foundations
-
-### Performance Characteristics (Updated)
-- **Setup Time**: <30 minutes from install to working dual-mode MCP server
-- **Processing Speed**: 2-10 minutes per document with modern hardware
-- **Query Response**: <3 seconds for both chat and literature queries
-- **Citation Accuracy**: >95% citation extraction and formatting accuracy
-- **Tool Count**: 10+ MCP tools across chat and literature review modes
-- **Citation Styles**: 4 academic styles with proper formatting
-
-### Sample Data for Testing
-- **Academic Papers**: `examples/d4sc03921a.pdf`, `examples/d3dd00113j.pdf`
-- **Integration Tests**: `test_core_components.py` with real-world research scenarios
-- **Tutorial Materials**: `tutorial/` with 5-part learning system
-- **Test Data**: `tests/` with comprehensive integration testing
-
-### Latest Implementation Achievement
-The recent major implementation added:
-- **10 new MCP tools** organized in chat and literature review categories
-- **Comprehensive citation management** with 4 academic citation styles
-- **Enhanced query engine** with NLP processing and intent classification
-- **Real-world validation** through comprehensive integration testing
-- **Production-ready architecture** with shared state management across all tools
-
-This represents the transformation from a research prototype to a production-ready dual-mode research assistant that can both chat about research content and write formal literature reviews with perfect citations.
-
-## Essential Development Reminders
-
-### Before Starting Development
-1. **Environment**: Always use `source graphrag-env/bin/activate` (Python 3.11+)
-2. **Services**: Ensure Ollama is running (`ollama serve`)
-3. **Dependencies**: Run `uv pip install -r requirements.txt` if needed
-4. **Core Test**: Run `python3 test_core_components.py` to verify system health
-
-### During Development
-1. **Dual-Mode Principle**: Every research feature should have both chat and literature tools
-2. **Citation Integration**: All literature tools must integrate with `CitationTracker`
-3. **Template Architecture**: Use the academic template as the reference implementation
-4. **Testing**: Test individual components before integration
-
-### Before Committing
-1. **Quality Checks**: Run `make quality` (lint + type-check + security)
-2. **Tests**: Run `make test` with full coverage
-3. **Integration**: Test MCP server with `serve-universal` command
-4. **Documentation**: Update docstrings and type hints
-
-### MCP Integration Testing
-```bash
-# Always test MCP server before deployment
-python3 -m graphrag_mcp.cli.main serve-universal --template academic --transport stdio
-
-# Test with sample queries in Claude Desktop
-# Chat mode: "ask_knowledge_graph: What are the main research themes?"
-# Literature mode: "get_facts_with_citations: about attention mechanisms in APA style"
-```
+The architecture emphasizes **simplicity, modularity, and local privacy** while providing powerful research capabilities through the MCP protocol integration with AI assistants.

@@ -1,372 +1,395 @@
-# GraphRAG MCP Toolkit
+# Simple Knowledge Graph MCP
 
-> **🚀 Turn your research papers into an intelligent AI assistant in under 1 hour**
-> 
-> Transform your collection of PDFs into a personalized research assistant that understands your specific field and helps you write literature reviews with automatic citations.
+Turn your documents into a queryable knowledge graph using any MCP-compatible LLM client with zero API setup.
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+## What This Does
 
-## What is this?
+This is a **Model Context Protocol (MCP) server** that transforms documents into an intelligent, searchable knowledge base. It provides any MCP-compatible client (Claude Desktop, ChatGPT Desktop, etc.) with 5 specialized tools to extract, store, and query information from your documents using a dual-database system.
 
-**GraphRAG MCP Toolkit** transforms your collection of research papers (PDFs) into an intelligent AI assistant. Unlike generic AI that doesn't understand your specific field, this creates a personalized research assistant that:
+### Core Architecture
+- **Neo4j Graph Database**: Stores entities (people, concepts, technologies) and their relationships
+- **ChromaDB Vector Database**: Stores text chunks with local embeddings for semantic search
+- **FastMCP Server**: Orchestrates 5 tools that any MCP client can use
+- **Local Processing**: No external APIs - everything runs on your machine
 
-- **Understands your domain**: Learns the terminology, concepts, and relationships from your papers
-- **Chats naturally**: Ask questions like "What are the main themes in transformer research?"
-- **Writes literature reviews**: Generate formal academic text with proper citations
-- **Tracks citations**: Automatically manages references in APA, IEEE, Nature, and MLA formats
-- **Runs locally**: Your data never leaves your computer - complete privacy
-- **Integrates with Claude**: Uses Model Context Protocol (MCP) to extend Claude Desktop with your research
-
-## Three Ways to Use It
-
-### 1. 🖥️ Command Line Interface (CLI)
-**Perfect for**: Most users, automation, scripting
-
-```bash
-# One-command setup
-graphrag-mcp quick-setup my-research ./papers/ --auto-serve
-
-# Or step-by-step
-graphrag-mcp create my-research --template academic
-graphrag-mcp add-documents my-research ./papers/ --recursive
-graphrag-mcp process my-research
-graphrag-mcp serve my-research --transport stdio
-```
-
-📖 **[Complete CLI Reference →](docs/CLI_REFERENCE.md)**
-
-### 2. 🐍 Python API
-**Perfect for**: Developers, custom integrations, notebooks
-
-```python
-from graphrag_mcp.api import quick_setup, quick_process
-
-# One-line setup
-processor = quick_setup("my-research", "./papers/", template="academic")
-
-# One-line processing
-processor = await quick_process("my-research", "./papers/", template="academic")
-```
-
-📖 **[Complete API Reference →](docs/API_REFERENCE.md)**
-
-### 3. 🔧 MCP Tools (for Claude Desktop)
-**Perfect for**: Claude Desktop users, AI-assisted research
-
-```python
-# Chat tools (conversational)
-ask_knowledge_graph("What are the main themes in transformer research?")
-explore_topic("attention mechanisms", scope="detailed")
-
-# Literature tools (formal writing)
-get_facts_with_citations("transformer architecture", style="APA")
-generate_bibliography(style="APA", used_only=True)
-```
-
-📖 **[Complete MCP Tools Reference →](docs/MCP_TOOLS.md)**
-
-## Quick Start
-
-### Step 1: Install
-
-```bash
-# Clone the repository
-git clone https://github.com/your-org/graphrag-mcp-toolkit.git
-cd graphrag-mcp-toolkit
-
-# Set up environment (creates Python environment + installs dependencies)
-./setup_env.sh
-```
-
-### Step 2: Install Dependencies
-
-```bash
-# Install Ollama (for local AI)
-brew install ollama  # Mac
-# or download from https://ollama.com for other platforms
-
-# Install Docker (for Neo4j - optional)
-# Download from https://docker.com
-
-# Start services
-make setup-ollama    # Downloads AI models (~4GB)
-make setup-neo4j     # Starts Neo4j container (optional)
-```
-
-### Step 3: Process Your Papers
-
-```bash
-# Quick setup (easiest way)
-graphrag-mcp quick-setup my-research ./papers/ --auto-serve
-
-# This will:
-# 1. Create a new project
-# 2. Add your PDF files
-# 3. Process them into a knowledge graph
-# 4. Start the MCP server
-```
-
-### Step 4: Connect to Claude Desktop
-
-```bash
-# The system auto-generates Claude Desktop configuration
-cat claude_desktop_config.json
-
-# Copy this to your Claude Desktop settings
-# (~/.config/claude-desktop/config.json)
-```
-
-**Then restart Claude Desktop** and look for the 🔌 icon to confirm connection.
-
-## Real Example
-
-**Before:** You have 30 papers on "machine learning for drug discovery" scattered across your computer. Writing a literature review means manually reading each paper, taking notes, and trying to remember which paper said what.
-
-**After:** You upload all 30 papers to this system. Now you can:
-
-### Chat with Your Research:
-- **You:** "What are the main approaches to using transformers in drug discovery?"
-- **Claude:** "Based on your papers, there are three main approaches: 1) Molecular property prediction using ChemFormer (Chen et al. 2023), 2) Drug-target interaction modeling with MolTrans (Kumar et al. 2024), and 3) Virtual screening using attention mechanisms (Torres et al. 2023)..."
-
-### Generate Literature Review Text:
-- **You:** "Write a paragraph about transformer architectures in drug discovery with citations in APA format"
-- **Claude:** "Transformer architectures have emerged as a powerful approach to molecular property prediction. Chen et al. (2023) developed ChemFormer, which combines graph neural networks with transformer attention mechanisms to achieve 94% accuracy on molecular solubility prediction tasks..."
-
-### Track Citations:
-- **You:** "Have I used the Chen paper too much in my writing?"
-- **Claude:** "You've cited Chen et al. (2023) 8 times across your literature review. This is within acceptable limits for a foundational paper, but you might want to balance with other recent work..."
-
-## How it Works
-
-### Enhanced Sequential Processing Architecture
+## MCP Architecture Flow
 
 ```mermaid
 flowchart TB
-    subgraph PREWORK["📊 ENHANCED SEQUENTIAL PROCESSING (Pre-work)"]
-        direction TB
-        A[📄 PDF Papers] --> B[🔗 LangChain<br/>PDF Loader]
-        B --> C[📝 Text Chunks<br/>1000 chars]
-        
-        C --> E[🦙 llama3.1:8b<br/>LLM Analysis Engine<br/>Sequential Processing]
-        
-        E --> ANALYSIS[📊 Analysis Result<br/>Entities + Citations + Enhanced Chunks]
-        
-        ANALYSIS --> STORE1[💾 Store Citations & Entities<br/>with Provenance Links]
-        
-        STORE1 --> F[📊 ChromaDB<br/>Citation Manager<br/>Persistent Citations]
-        STORE1 --> J[🗄️ Neo4j<br/>Entity Manager<br/>Entities + Citation Links]
-        
-        ANALYSIS --> L[📝 Enhanced Chunks<br/>Entity-Enriched Text]
-        
-        L --> D[🔢 nomic-embed-text<br/>Direct Embedding Service<br/>Context-Aware Embeddings]
-        
-        D --> STORE2[💾 Store Embeddings<br/>in ChromaDB]
-        
-        STORE2 --> F
-        
-        F --> INT[🔗 Knowledge Graph<br/>Integrator<br/>Bidirectional Links]
-        J --> INT
-        
-        I[🐳 Docker<br/>Neo4j Container] --> J
+    subgraph clients["🖥️ LLM Clients"]
+        A[Claude Desktop]
+        B[ChatGPT Desktop] 
+        C[Other MCP Clients]
     end
     
-    subgraph MCP["🔌 UNIVERSAL MCP SERVER"]
-        direction TB
-        UMCP[⚡ Universal MCP Server<br/>Enhanced Architecture]
-        
-        UMCP --> M[🤖 Claude Desktop<br/>MCP Protocol]
-        M --> N[💬 Chat Tools<br/>ask_knowledge_graph<br/>explore_topic<br/>find_connections<br/>what_do_we_know_about]
-        M --> O[📝 Literature Tools<br/>gather_sources_for_topic<br/>get_facts_with_citations<br/>verify_claim_with_sources<br/>generate_bibliography<br/>track_citations_used]
-        M --> P[🔧 Core Tools<br/>load_document_collection<br/>search_documents<br/>switch_template<br/>server_status]
+    subgraph mcp["📡 MCP Server"]
+        E[FastMCP Server]
     end
     
-    %% Connections between groups
-    INT --> UMCP
+    subgraph storage_flow["📥 STORAGE WORKFLOW"]
+        direction TB
+        F[store_entities<br/>Extract & Store Entities]
+        G[store_vectors<br/>Store Vector Content]
+        
+        subgraph entity_pipeline["Entity Pipeline"]
+            F1[Entities + Relationships] --> F2[Neo4j Graph Store]
+        end
+        
+        subgraph text_pipeline["Text Pipeline"] 
+            G1[Text Chunks] --> G2[Local Embeddings] --> G3[ChromaDB Vector Store]
+        end
+        
+        F --> F1
+        G --> G1
+    end
+    
+    subgraph databases["🗄️ Knowledge Stores"]
+        direction LR
+        NEO@{shape: database, label: "Neo4j<br/>Entity Graph<br/>Relationships"}
+        CHROMA@{shape: database, label: "ChromaDB<br/>Vector Store<br/>Text + Embeddings"}
+    end
+    
+    subgraph query_flow["🔍 QUERYING WORKFLOW"]
+        direction TB
+        H[query_knowledge_graph<br/>Search Both Stores]
+        I[generate_literature_review<br/>Format Results]
+        
+        subgraph graphrag["GraphRAG Pipeline"]
+            H1[Graph Traversal<br/>Neo4j] 
+            H2[Vector Search<br/>ChromaDB]
+            H3[Combine Results]
+        end
+        
+        H --> H1
+        H --> H2
+        H1 --> H3
+        H2 --> H3
+        H3 --> I
+    end
+    
+    %% Client connections
+    A --> E
+    B --> E  
+    C --> E
+    
+    %% Storage flow
+    E --> F
+    E --> G
+    F2 --> NEO
+    G3 --> CHROMA
+    
+    %% Query flow
+    E --> H
+    E --> I
+    NEO --> H1
+    CHROMA --> H2
     
     %% Styling
-    classDef ollama fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef storage fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    classDef claude fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    classDef docker fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
-    classDef prework fill:#f8f9fa,stroke:#495057,stroke-width:3px
-    classDef mcpgroup fill:#e8f4f8,stroke:#0056b3,stroke-width:3px
-    classDef enhanced fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    classDef storageBox fill:#e1f5fe
+    classDef queryBox fill:#f3e5f5
+    classDef dbBox fill:#fff3e0
     
-    class E,D ollama
-    class F,J,K,INT storage
-    class G,L prework
-    class M,N,O,P claude
-    class I docker
-    class PREWORK prework
-    class MCP mcpgroup
-    class UMCP enhanced
+    class storage_flow,entity_pipeline,text_pipeline storageBox
+    class query_flow,graphrag queryBox
+    class databases,NEO,CHROMA dbBox
 ```
 
-### The Complete Processing Pipeline:
+### How Data Flows Through the System
 
-1. **PDF Ingestion** - Extract text from PDFs using LangChain
-2. **Text Processing** - Split into manageable chunks with context preservation
-3. **LLM Analysis** - Ollama (llama3.1:8b) extracts entities, relationships, and citations
-4. **Content Enhancement** - Text chunks enriched with entity metadata
-5. **Context-Aware Embeddings** - nomic-embed-text generates vectors from enhanced chunks
-6. **Knowledge Graph Construction** - Graphiti builds real-time knowledge graphs in Neo4j
-7. **Citation Storage** - Citations stored in ChromaDB with full context tracking
-8. **MCP Server Generation** - FastMCP server provides tools for Claude Desktop
+**📥 Storage Workflow:**
+1. **LLM extracts entities** → `store_entities` → Neo4j Graph (entities + relationships)
+2. **LLM extracts content** → `store_vectors` → Local embeddings → ChromaDB Vector Store
 
-## System Requirements
+**🔍 Query Workflow (GraphRAG):**
+1. **LLM asks question** → `query_knowledge_graph` 
+2. **Parallel search**: Neo4j graph traversal + ChromaDB vector similarity
+3. **Combine results** → Return comprehensive answer with citations
+4. **Optional**: `generate_literature_review` formats results for academic writing
 
-### Hardware Requirements
-- **CPU**: Modern multi-core processor (Intel i5/AMD Ryzen 5 or better)
-- **RAM**: 16GB minimum, 32GB recommended for large collections
-- **Storage**: 10GB free space for models and dependencies
-- **GPU**: Optional but recommended (NVIDIA GPU with 8GB+ VRAM or Apple Silicon)
+**🗄️ Dual Knowledge Stores:**
+- **Neo4j**: Entities, relationships, graph connections
+- **ChromaDB**: Text chunks, embeddings, semantic search
 
-### Software Requirements
-- **Operating System**: macOS 10.15+, Ubuntu 18.04+, Windows 10+
-- **Python**: 3.11 or higher
-- **Docker**: For Neo4j database (optional but recommended)
-- **Ollama**: For local AI models
-- **Claude Desktop**: For MCP integration
+## Step-by-Step: How It Works
 
-## Core Features
+### 1. Document Upload & Processing
+```
+You → Upload PDFs to LLM Client (Claude Desktop, ChatGPT, etc.)
+LLM → Uses MCP tools to extract structured data
+```
 
-### 🚀 **Sequential Processing Architecture**
-- **Step-by-Step Processing**: PDF → Analysis → Enhanced Chunks → Embeddings → Storage
-- **Accuracy-First Design**: Each step builds on the previous for maximum precision
-- **Persistent Citation Storage** in ChromaDB with cross-session continuity
-- **Knowledge Graph Integration** with bidirectional entity-citation links
+**What the LLM extracts:**
+- **Entities**: People, concepts, technologies, organizations with properties
+- **Relationships**: How entities connect (e.g., "Hinton developed backpropagation")
+- **Text chunks**: Important passages with full citation information
+- **Metadata**: Document provenance, confidence scores, context
 
-### 🔗 **Citation Management**
-- **4 Academic Styles** (APA, IEEE, Nature, MLA) with automatic formatting
-- **Citation Provenance Tracking** linking every citation to source entities
-- **Usage Analytics** preventing over-citation and ensuring balance
-- **Semantic Citation Search** finding relevant citations by content
+### 2. Intelligent Storage
+```
+Entities + Relationships → Neo4j Graph Database
+Text + Citations → ChromaDB with local embeddings
+```
 
-### 🔒 **Privacy-First Architecture**
-- **100% local processing** with Ollama (no external API calls)
-- **Your data stays on your machine**
-- **Secure storage** with Docker isolation
+**Example data stored:**
+```json
+// Neo4j Entity
+{
+  "id": "hinton_2006",
+  "name": "Geoffrey Hinton", 
+  "type": "person",
+  "properties": {"affiliation": "University of Toronto"},
+  "confidence": 0.95
+}
 
-### 🛠️ **Three User Interfaces**
-- **CLI**: 11 commands for complete project management
-- **Python API**: Developer-friendly integration
-- **MCP Tools**: 10+ tools for Claude Desktop integration
+// Neo4j Relationship  
+{
+  "source": "hinton_2006",
+  "target": "backprop_concept",
+  "type": "developed",
+  "context": "Hinton pioneered backpropagation algorithms in the 1980s"
+}
 
-## Available MCP Tools
+// ChromaDB Text Chunk
+{
+  "text": "Deep learning networks require careful initialization...",
+  "embedding": [0.1, -0.3, 0.8, ...],
+  "citation": {"authors": ["Hinton, G."], "year": 2006, "title": "..."}
+}
+```
 
-When you connect this system to Claude Desktop, Claude gains access to specialized research tools:
+### 3. Intelligent Querying
+```
+You → Ask LLM questions in natural language
+LLM → Uses MCP tools to search both databases simultaneously
+LLM → Returns comprehensive answers with citations
+```
 
-### 🗣️ Chat Tools (Conversational Mode)
-- `ask_knowledge_graph` - Natural Q&A with your research content
-- `explore_topic` - Deep dive into specific topics
-- `find_connections` - Discover relationships between concepts
-- `what_do_we_know_about` - Comprehensive knowledge summaries
+**Query types supported:**
+- **Entity searches**: "Who are the key researchers in transformer architectures?"
+- **Relationship mapping**: "How do GANs relate to diffusion models?"
+- **Semantic searches**: "What papers discuss attention mechanisms?" (finds content even with different terminology)
+- **Cross-document analysis**: "What are the contradictions between these papers?"
+- **Literature reviews**: "Generate a review of deep learning optimization methods"
 
-### 📝 Literature Review Tools (Formal Writing Mode)
-- `gather_sources_for_topic` - Organize relevant papers for topics
-- `get_facts_with_citations` - Get citation-ready statements
-- `verify_claim_with_sources` - Evidence-based verification
-- `generate_bibliography` - Create formatted bibliographies
+### 4. Knowledge Graph Growth
+```
+More documents → Richer connections → Smarter answers
+```
 
-### 🔍 Analysis Tools
-- `search_documents` - Semantic search across your corpus
-- `research_gaps` - Identify unexplored areas
-- `methodology_overview` - Compare research approaches
-- `concept_evolution` - Track how ideas develop over time
+**As you add documents:**
+- **Cross-references emerge**: System identifies when papers cite each other
+- **Research networks form**: Maps collaborations between authors
+- **Concept evolution tracked**: Shows how ideas develop over time
+- **Knowledge gaps identified**: Highlights areas needing more research
 
-## Documentation
+## The 5 MCP Tools Available to Claude
 
-### 📖 Essential Documentation
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - Complete command-line interface documentation
-- **[API Reference](docs/API_REFERENCE.md)** - Python API documentation for developers
-- **[MCP Tools Reference](docs/MCP_TOOLS.md)** - All MCP tools for Claude Desktop integration
+1. **`store_entities`** - Extract and store entities/relationships in Neo4j graph database
+2. **`store_vectors`** - Store any content as vectors in ChromaDB (entities, text chunks, concepts, etc.)
+3. **`query_knowledge_graph`** - Search both databases for comprehensive answers
+4. **`generate_literature_review`** - Format results with proper citations (APA, IEEE, Nature, MLA)
+5. **`clear_knowledge_graph`** - Reset all data for fresh start
 
-### 🚀 System Architecture
-The toolkit uses a **sequential processing architecture** with three main components:
-1. **Enhanced Document Processor** - Sequential processing with LLM analysis
-2. **ChromaDB Citation Manager** - Persistent citation tracking with 4 academic styles
-3. **Neo4j Entity Manager** - Knowledge graph storage with entity relationships
+## Real-World Example Workflow
 
-## Development
+### Scenario: Building an AI Research Knowledge Base
 
-### Environment Setup
+**Step 1: Batch Upload**
 ```bash
-# Complete development environment
-make dev
-
-# Individual components
-make install-dev      # Development dependencies
-make setup-ollama     # Install AI models
-make setup-neo4j      # Start Neo4j container
+# Upload 20 AI research papers to Claude Desktop project
+- attention_is_all_you_need.pdf
+- bert_paper.pdf  
+- gpt3_paper.pdf
+- ... (17 more papers)
 ```
 
-### Code Quality
+**Step 2: Knowledge Extraction**
+```
+You: "Extract entities and relationships from all these AI papers"
+
+Claude: *Uses store_entities tool*
+- Extracts 500+ entities (researchers, concepts, architectures)
+- Maps 1000+ relationships between them
+- Stores everything in Neo4j with confidence scores
+
+You: "Store the key text passages and citations"
+
+Claude: *Uses store_vectors tool*  
+- Stores 2000+ text chunks with embeddings
+- Preserves full bibliographic information
+- Enables semantic search across all content
+```
+
+**Step 3: Intelligent Analysis**
+```
+You: "What are the main innovations in transformer architectures?"
+
+Claude: *Uses query_knowledge_graph tool*
+- Searches Neo4j for transformer-related entities
+- Finds semantic matches in ChromaDB text
+- Returns: Attention mechanisms, positional encoding, multi-head attention
+- Includes citations from Vaswani et al., Devlin et al., Radford et al.
+
+You: "Generate a literature review on attention mechanisms"
+
+Claude: *Uses generate_literature_review tool*
+- Organizes findings by themes
+- Formats with proper academic citations
+- Includes summary statistics and research trends
+```
+
+**Step 4: Advanced Queries**
+```
+You: "Which researchers have collaborated across multiple papers?"
+
+Claude: Maps collaboration networks from stored relationships
+
+You: "What are the contradictions between different optimization approaches?"
+
+Claude: Finds conflicting claims across papers using semantic search
+
+You: "Show me the evolution of language model architectures from 2017-2023"
+
+Claude: Traces concept development through temporal analysis
+```
+
+## Key Benefits
+
+### For Researchers
+- **Literature review automation**: Generate comprehensive reviews with proper citations
+- **Cross-paper analysis**: Find connections your manual reading might miss
+- **Research gap identification**: Discover unexplored areas in your field
+- **Collaboration mapping**: Identify potential research partners
+
+### For Students  
+- **Study aid creation**: Build comprehensive knowledge bases from course materials
+- **Citation management**: Automatic extraction and formatting of references
+- **Concept mapping**: Understand how ideas connect across different sources
+- **Exam preparation**: Query your knowledge base for comprehensive review
+
+### For Professionals
+- **Industry analysis**: Track trends across company reports and market research
+- **Competitive intelligence**: Map relationships between companies and technologies
+- **Knowledge management**: Build searchable repositories of internal documents
+- **Decision support**: Query historical data for informed decision-making
+
+## Technical Architecture
+
+### Storage Layer (`src/storage/`)
+```
+storage/
+├── neo4j/           # Graph database operations
+│   ├── storage.py   # Entity and relationship persistence
+│   └── query.py     # Graph traversal and relationship mapping
+├── chroma/          # Vector database operations  
+│   ├── storage.py   # Text storage with local embeddings
+│   └── query.py     # Semantic search and similarity matching
+└── embedding/       # Local embedding generation
+    └── service.py   # sentence-transformers integration (no external APIs)
+```
+
+### Tools Layer (`src/tools/`)
+```
+tools/
+├── storage/         # Data persistence tools
+│   ├── entity_storage.py      # store_entities MCP tool
+│   ├── text_storage.py        # store_vectors MCP tool
+│   └── database_management.py # clear_knowledge_graph MCP tool
+└── query/           # Data retrieval tools
+    ├── knowledge_search.py     # query_knowledge_graph MCP tool
+    └── literature_generation.py # generate_literature_review MCP tool
+```
+
+### Server Layer (`src/server/`)
+- **`main.py`** - FastMCP server that registers all 5 tools and handles Claude Desktop communication
+
+## Local-First Privacy Design
+
+- **No external API dependencies** - All LLM processing via Claude Desktop
+- **Local embeddings** - Uses sentence-transformers for complete privacy
+- **Local databases** - Neo4j via Docker, ChromaDB as local files  
+- **Zero API keys required** - Complete offline operation capability
+- **Your data stays yours** - Everything processed and stored locally
+
+## Quick Start
+
+### Prerequisites
+- Python 3.11+ (required for FastMCP)
+- Docker (for Neo4j database)
+- MCP-compatible LLM client (Claude Desktop, ChatGPT Desktop, etc.)
+
+### Installation
 ```bash
-make lint            # Run ruff, black, mypy
-make format          # Format code
-make type-check      # Type checking
-make quality         # All quality checks
+# 1. Clone repository
+git clone <repository-url>
+cd simple-knowledge-graph-mcp
+
+# 2. Complete setup (installs UV, Python 3.11, dependencies)
+./scripts/setup.sh
+
+# 3. Start Neo4j database
+./scripts/start_services.sh
+
+# 4. Verify everything works
+./scripts/check_status.sh
 ```
 
-### Testing
+### Configure Your MCP Client
+
+#### For Claude Desktop & ChatGPT Desktop (Easy GUI Setup)
 ```bash
-make test            # Run all tests with coverage
+# Start HTTP server
+./scripts/start_http_server.sh
 ```
 
-## Troubleshooting
+Then in Claude Desktop or ChatGPT Desktop:
+- Settings → Connectors → Add custom connector
+- **Name**: `Knowledge Graph`
+- **URL**: `http://localhost:3001`
+- Click "Add" and restart the application
 
-### Common Issues
-1. **"Command not found"**: `pip install --upgrade graphrag-mcp-toolkit`
-2. **"Ollama not accessible"**: `ollama serve` in separate terminal
-3. **"Processing failed"**: `graphrag-mcp validate --verbose --fix`
-4. **"Neo4j connection failed"**: Optional - system works without Neo4j
+#### For Advanced Users (JSON Configuration)
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "knowledge-graph": {
+      "command": "uv",
+      "args": ["run", "python", "/full/path/to/project/src/server/main.py"]
+    }
+  }
+}
+```
 
-### Getting Help
+#### For Other MCP Clients  
+Both Claude Desktop and ChatGPT Desktop support MCP connectors via GUI setup. Other MCP-compatible clients should work similarly with the HTTP server URL `http://localhost:3001`.
+
+### Start Using
 ```bash
-# System validation
-graphrag-mcp validate --verbose
+# Option 1: HTTP server (for GUI setup)
+./scripts/start_http_server.sh
 
-# Check system status
-graphrag-mcp status
+# Option 2: STDIO server (for JSON setup)  
+./scripts/start_mcp_server.sh
 
-# Get command help
-graphrag-mcp --help
+# In your MCP client (Claude Desktop, ChatGPT Desktop, etc.):
+# 1. Upload PDFs to project
+# 2. "Extract entities and relationships from these documents"  
+# 3. "Store the key text passages"
+# 4. "What does my knowledge graph say about [topic]?"
 ```
 
-### Documentation Links
-- **[CLI Troubleshooting](docs/CLI_REFERENCE.md#troubleshooting)** - Complete CLI troubleshooting guide
-- **[API Troubleshooting](docs/API_REFERENCE.md#troubleshooting)** - Python API debugging
-- **[MCP Tools Issues](docs/MCP_TOOLS.md#troubleshooting)** - Claude Desktop integration help
+That's it! Your personal research assistant is ready to help you build and query knowledge graphs from any collection of documents.
 
-## Contributing
+## What Makes This Different
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Unlike traditional document management or search tools, this system:
 
-### Development Setup
-```bash
-git clone https://github.com/your-org/graphrag-mcp-toolkit.git
-cd graphrag-mcp-toolkit
-make dev
-make test
-```
+1. **Understands relationships** - Maps how concepts, people, and ideas connect
+2. **Grows smarter over time** - Each document enhances the knowledge graph
+3. **Speaks your language** - Natural language queries, no complex syntax
+4. **Preserves context** - Maintains full provenance and citation information
+5. **Works offline** - Complete privacy with local processing
+6. **Integrates with Claude** - Seamless experience within Claude Desktop
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## What's Next?
-
-1. **Load your documents** with `graphrag-mcp quick-setup my-research ./papers/`
-2. **Connect to Claude Desktop** using the MCP server
-3. **Explore your research** with conversational tools
-4. **Write literature reviews** with automatic citations
-
-Ready to transform your documents into an intelligent research assistant? Start with the **[Quick Start](#quick-start)** guide above!
-
----
-
-**Transform your documents into intelligent research assistants with GraphRAG MCP Toolkit!** 🚀
-
-For support, questions, or contributions, please see our [complete documentation](docs/) or open an issue on GitHub.
+Perfect for anyone who works with large collections of documents and wants to unlock the hidden connections within their knowledge base.
