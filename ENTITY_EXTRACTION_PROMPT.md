@@ -1,34 +1,23 @@
 # EXTRACT ENTITIES FROM ACADEMIC DOCUMENTS FOR RESEARCH KNOWLEDGE BASE
 
 ## What You're Building
-You're helping create a research knowledge base that combines two technologies:
-- **Graph Database (Neo4j)**: Stores entities (people, concepts, methods) and their relationships as a connected network
-- **Vector Database (ChromaDB)**: Stores text passages with embeddings for semantic search
+You're helping create a research literature knowledge base that combines two technologies:
+- **Graph Database (Neo4j)**: Stores entities and their relationships as a connected network for querying
+- **Vector Database (ChromaDB)**: Stores text passages with embeddings for semantic search and querying
 
-Together, these form a "GraphRAG" system - a knowledge graph enhanced with retrieval-augmented generation capabilities. Researchers will use this to:
-- Write literature reviews by querying connections across multiple papers
-- Discover how concepts evolved over time
-- Find contradictions between studies
-- Identify research gaps and collaboration networks
+
 
 ## Your Task
-You have two tools that store data in these databases. Read the documents in the project folder and extract:
-1. **Entities**: Important concepts, methods, people, findings that researchers would reference
-2. **Relationships**: How entities connect (e.g., "transformer architecture uses self-attention")  
-3. **Vector content**: Any content to store as vectors (text chunks, concepts, methods, findings)
+You have two tools that store data in these databases. Read the pdf documents in the project folder and extract:
+1. **Entities**: Scientific concepts,technologies, topics, ideas, tools, methods, people, findings that researchers would reference, and anyhting you deem worthy of looking up and connecting
+2. **Relationships**: How entities connect within the field or paper, or in the world, or any other logival connection 
+3. **Vector content**: All the content of the paper is to be stored as vectors for querying later via semantic search
 
-<document>
-{{document_content}}
-</document>
-
-## Why This Matters
-- **Entities in Neo4j** enable relationship queries: "What methods build on transformers?"
-- **Text in ChromaDB** enables semantic search: "Find all discussions of attention mechanisms"
-- **Together** they answer complex questions: "How did attention mechanisms evolve across different architectures?"
+## IMPORTANT: You must store the ENTIRE text corpus from the paper verbatim in the vector store
 
 ## Step-by-Step Process
 
-### Step 0: Extract Complete Citation (FIRST - MANDATORY)
+### Step 0: Extract Complete Citation 
 
 **CRITICAL**: For EVERY academic paper, you MUST create a complete citation entity BEFORE extracting any concepts.
 
@@ -51,9 +40,6 @@ You have two tools that store data in these databases. Read the documents in the
     "received_date": "YYYY-MM-DD",
     "accepted_date": "YYYY-MM-DD", 
     "published_date": "YYYY-MM-DD",
-    "funding": "funding sources from acknowledgments",
-    "open_access": "true/false",
-    "impact_factor": "if known",
     "citation_preview": "Author et al. (2025). Title. Journal, vol(issue), pages."
   }
 }
@@ -76,11 +62,11 @@ Every extracted entity must link back to the citation:
 
 ### Step 1: Identify Entities
 Look for:
-- **Scientific concepts**: theories, phenomena, principles (e.g., "backpropagation", "attention mechanism")
-- **Methods/Techniques**: algorithms, procedures, approaches (e.g., "BERT model", "gradient descent")
-- **Findings/Results**: discoveries, outcomes, metrics (e.g., "92% accuracy", "2.0 BLEU improvement")
+- **Scientific concepts**: theories, phenomena, principles, anything worthy as you see fit
+- **Methods/Techniques**: algorithms, procedures, approaches, anything worthy as you see fit
+- **Findings/Results**: discoveries, outcomes, metrics, anything worthy as you see fit
 - **People**: Researchers, authors when they made specific contributions
-- **Technologies**: Software, tools, systems (e.g., "TensorFlow", "transformer architecture")
+- **Technologies**: Software, tools, systems, anything worthy as you see fit
 
 Create descriptive IDs like "transformer_architecture_2017" not "concept_1"
 
@@ -107,34 +93,17 @@ Include context - the sentence fragment that proves this relationship exists.
   - Good: "BERT improved upon the original transformer architecture by introducing bidirectional pre-training"
   - Poor: "BERT is better than transformers"
 
-### Step 3: Extract Complete Text Coverage (CRITICAL)
+### Step 3: Store ALL the Paper Text
 
-**🚨 MANDATORY: Store 100% of paper content, not cherry-picked highlights**
+**Don't be selective - store the complete paper verbatim.**
 
-Systematic chunking is REQUIRED for complete semantic search capabilities:
-
-**Systematic Chunking Requirements:**
-- **Chunk Size**: 200-400 words per chunk (optimal for search)
-- **Overlap**: 50-100 words between adjacent chunks for continuity
-- **Coverage**: Every paragraph must be included systematically
-- **Target**: 40-60 chunks per typical research paper
-- **Exclusions**: Only skip references list and acknowledgments
-
-**Sequential Processing Rules:**
-1. **Page-by-page**: Process paper sequentially from start to finish
-2. **Section preservation**: Keep chunks within logical sections when possible
-3. **Overlap strategy**: End each chunk mid-sentence, start next chunk 2-3 sentences before
-4. **No gaps**: Every sentence must appear in at least one chunk
-
-**Section Coverage Requirements:**
-- ✅ **Abstract**: Complete text as first chunk
-- ✅ **Introduction**: All background and motivation
-- ✅ **Methods**: Every procedural detail
-- ✅ **Results**: All findings, figures, tables
-- ✅ **Discussion**: Complete analysis and interpretation
-- ✅ **Conclusion**: All summary points
-- ✅ **Figure captions**: Each as separate chunk with section context
-- ✅ **Table data**: Summaries as separate chunks
+Use store_vectors to save large sections of text (300-500 words each). Include:
+- The complete abstract
+- All introduction paragraphs  
+- All methodology sections
+- All results and findings
+- All discussion points
+- The complete conclusion
 
 ### Step 4: Call the Tools
 
@@ -252,13 +221,6 @@ store_vectors({
 })
 ```
 
-**Coverage Validation:**
-For a typical 12-page research paper, you should generate:
-- **40-60 systematic chunks** covering 95%+ of content
-- **Sequential chunk IDs** (page1_chunk1, page1_chunk2, etc.)
-- **Section tracking** for all major paper sections
-- **Overlap preservation** between adjacent chunks
-
 ## Quality Guidelines
 
 ### Citation Quality Requirements
@@ -324,19 +286,6 @@ Use consistent property names across entity types:
 - Add properties indicating conflict: `{"contradicts": "smith_2020_claim", "evidence_strength": "weak"}`
 - Include context showing the contradiction
 
-## Common Mistakes to Avoid
-❌ **CRITICAL**: Not creating complete citation entity first
-❌ **CRITICAL**: Missing DOI, journal, or author information
-❌ **CRITICAL**: Incomplete author lists (only listing first author)
-❌ Generic IDs like "person_1" or "concept_23"
-❌ Relationships without supporting context
-❌ Missing confidence scores
-❌ Extracting only famous names - include all scientifically relevant entities
-❌ Ignoring methods, metrics, and findings in favor of just people
-❌ Using inconsistent property names across similar entities
-❌ Creating relationships to non-existent entity IDs
-❌ Not linking extracted concepts back to the publication citation
-
 ## Example of Good Extraction
 
 From text: "BERT (Devlin et al., 2018) improved upon the original transformer architecture by introducing bidirectional pre-training, achieving state-of-the-art results on eleven NLP tasks."
@@ -366,27 +315,3 @@ From text: "BERT (Devlin et al., 2018) improved upon the original transformer ar
 - ✅ **Complete coverage**: All sections systematically chunked  
 - ✅ **Searchable depth**: Can find ANY concept mentioned in paper
 - ✅ **Research integrity**: Comprehensive, not selective extraction
-
-## MANDATORY EXTRACTION ORDER
-
-1. **FIRST**: Create complete citation entity with all bibliographic metadata
-2. **SECOND**: Extract concepts, methods, findings, people
-3. **THIRD**: Map relationships between entities AND back to citation
-4. **FOURTH**: 🚨 **SYSTEMATIC TEXT COVERAGE** - Chunk entire paper sequentially
-
-**Every academic paper MUST include:**
-- 1 complete citation entity (type: "publication")
-- All concepts linked to citation via relationships
-- Complete author information in citation properties
-- DOI and journal metadata for professional credibility
-- **40-60 systematic text chunks covering 95%+ of paper content**
-
-**🚨 CRITICAL REMINDER:**
-- **NOT** selective highlights - **COMPLETE** systematic coverage
-- **NOT** cherry-picked passages - **EVERY** paragraph included
-- **NOT** ~14 chunks - **40-60** comprehensive chunks
-- This enables searching **EVERYTHING**, not just "important" parts
-
-Begin extraction now. Call store_entities first, then store_vectors with COMPLETE coverage.
-
-**BOTTOM LINE**: We're building a research database, not a highlights reel. Researchers need to search across EVERYTHING, not just what seems important.

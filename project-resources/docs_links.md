@@ -5,6 +5,8 @@
 - [MCP Introduction](https://modelcontextprotocol.io/introduction)
 - [MCP GitHub Repository](https://github.com/modelcontextprotocol)
 - [MCP Examples](https://modelcontextprotocol.io/examples)
+- [Getting Started with Local MCP Servers on Claude Desktop](https://support.anthropic.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+- [Anthropic MCP Documentation](https://docs.anthropic.com/en/docs/mcp)
 - [MCP Knowledge Graph Memory Server](https://github.com/shaneholloman/mcp-knowledge-graph)
 - [Neo4j MCP Integration](https://neo4j.com/developer/genai-ecosystem/model-context-protocol-mcp/)
 
