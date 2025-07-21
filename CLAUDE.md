@@ -30,6 +30,9 @@ uv run python <command>
 # Start n8n for batch processing workflows
 ./scripts/n8n_manager.sh start
 
+# Start n8n MCP documentation server (Claude Code integration)
+./scripts/n8n_mcp_server.sh start
+
 # Check n8n status
 ./scripts/n8n_manager.sh status
 
@@ -41,6 +44,10 @@ uv run python <command>
 
 # Access n8n web interface at http://localhost:5678
 # Login: admin / password123
+
+# Manage Claude Code MCP integration
+claude mcp list                    # List configured MCP servers
+claude mcp add-json <name> <json>   # Add MCP server configuration
 ```
 
 ### MCP Server Operations
@@ -229,16 +236,81 @@ cd src && uv run python -c "from tools.storage.entity_storage import register_en
 
 # Test full server
 ./scripts/start_mcp_server.sh
+
+# Test n8n MCP integration
+claude mcp list  # Verify n8n-docs server is configured
 ```
+
+### n8n Workflow Development
+```bash
+# Import workflow template into n8n
+# 1. Open http://localhost:5678
+# 2. Menu (3 dots) → Import from File
+# 3. Select n8n_hello_world_workflow.json
+
+# Test MCP community node in n8n workflows
+# Configure MCP node with:
+# Transport: stdio
+# Command: uv
+# Args: ["run", "python", "src/server/main.py"]
+# Working Directory: /Users/[user]/Agents
+```
+
+## n8n Batch Processing Integration
+
+### Dual-Mode Operation
+The system now operates in two complementary modes:
+
+1. **Interactive Mode (Claude Desktop)**: Manual document processing via MCP tools
+2. **Batch Mode (n8n Workflows)**: Automated batch processing of multiple documents
+
+### n8n MCP Integration Architecture
+```
+Interactive: Claude Desktop ←→ Knowledge Graph MCP ←→ Neo4j + ChromaDB
+Batch:       n8n Workflows ←→ MCP Community Node ←→ Knowledge Graph MCP ←→ Neo4j + ChromaDB
+```
+
+### Key n8n Integration Components
+- **n8n MCP Documentation Server**: Provides Claude Code with expert n8n knowledge
+- **n8n MCP Community Node**: Enables n8n workflows to call your MCP tools directly
+- **Batch Processing Workflows**: Automated PDF processing, entity extraction, and knowledge graph building
+
+### Branch Structure
+- **main**: Stable interactive MCP system
+- **feature/n8n-batch-processing**: n8n integration development (current)
+
+### Workflow Templates
+Pre-built n8n workflow files available:
+- `n8n_hello_world_workflow.json`: Basic test workflow
+- Comprehensive batch processing workflow in planning docs
+
+## Entity Extraction System
+
+### AI-Driven Flexible Schema
+The system uses **Claude-determined entity extraction** rather than rigid schemas:
+
+- **Adaptive categorization**: No fixed entity types - Claude determines relevance
+- **Cross-domain compatibility**: Works for chemistry, CS, biology, literature, etc.
+- **Confidence scoring**: All entities and relationships include confidence metrics (0.5-1.0)
+- **Contextual relationships**: Include source text fragments for verification
+- **Complete citation requirements**: Mandatory bibliographic data for academic papers
+
+### Extraction Process
+Follows the comprehensive prompt in `ENTITY_EXTRACTION_PROMPT.md`:
+1. **Citation entity creation** (mandatory first step)
+2. **Entity identification** with descriptive IDs
+3. **Relationship mapping** with contextual evidence
+4. **Complete text storage** with systematic chunking
+5. **Validation** of entity-relationship consistency
 
 ## Project Context
 
-This is a **production-ready MCP toolkit** for building knowledge graphs from documents using Claude Desktop or ChatGPT. The system enables researchers to:
+This is a **production-ready MCP toolkit** for building knowledge graphs from documents using Claude Desktop or n8n workflows. The system enables researchers to:
 
-1. Upload PDFs to Claude Projects
-2. Extract entities and relationships via natural language
-3. Store everything in a dual-database system (graph + vector)
-4. Query the knowledge base for research insights
-5. Generate formatted literature reviews with citations
+1. **Interactive Processing**: Upload PDFs to Claude Desktop for immediate analysis
+2. **Batch Processing**: Use n8n workflows for automated processing of document collections
+3. **Dual Storage**: Store in both graph (Neo4j) and vector (ChromaDB) databases
+4. **Intelligent Querying**: Query knowledge base for research insights and connections
+5. **Academic Output**: Generate formatted literature reviews with proper citations
 
-The architecture emphasizes **simplicity, modularity, and local privacy** while providing powerful research capabilities through the MCP protocol integration with AI assistants.
+The architecture emphasizes **simplicity, modularity, and local privacy** while providing both interactive and automated research capabilities through comprehensive MCP protocol integration.

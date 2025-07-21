@@ -1,0 +1,133 @@
+{
+  "name": "Simple PDF Content Processing for Knowledge Graph",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/Users/aimiegarces/Agents/Literature",
+        "trigger": "added",
+        "fileExtensions": "pdf"
+      },
+      "id": "folder-watch",
+      "name": "Watch for New PDFs",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simple PDF text extraction placeholder\n// In practice, this would call pdfplumber or similar\nconst fileName = $json.name.replace('.pdf', '');\nconst extractedText = `Content extracted from ${fileName}`;\n\nreturn {\n  json: {\n    document_id: fileName,\n    file_path: $json.path,\n    extracted_text: extractedText,\n    processing_date: new Date().toISOString()\n  }\n};"
+      },
+      "id": "extract-text",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "store_vectors",
+        "parameters": {
+          "content": "={{ $json.extracted_text }}",
+          "metadata": {
+            "document_id": "={{ $json.document_id }}",
+            "source": "pdf_batch_processing",
+            "file_path": "={{ $json.file_path }}"
+          }
+        }
+      },
+      "id": "store-vectors",
+      "name": "Store Text Vectors",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Extract entities and relationships from this academic text. Return as JSON with entities and relationships arrays.\n\nText: {{ $json.extracted_text }}"
+          }
+        ]
+      },
+      "id": "llm-extraction",
+      "name": "Extract Entities via LLM",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "store_entities",
+        "parameters": {
+          "entities": "={{ JSON.parse($json.content).entities }}",
+          "relationships": "={{ JSON.parse($json.content).relationships }}"
+        }
+      },
+      "id": "store-entities",
+      "name": "Store Extracted Entities",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "Watch for New PDFs": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Store Text Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Text Vectors": {
+      "main": [
+        [
+          {
+            "node": "Extract Entities via LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Entities via LLM": {
+      "main": [
+        [
+          {
+            "node": "Store Extracted Entities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "America/New_York"
+  }
+}
