@@ -1,0 +1,117 @@
+{
+  "name": "MCP Knowledge Graph Test Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Start Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "test_query",
+              "value": "What entities are in my knowledge graph?"
+            },
+            {
+              "name": "tool_name", 
+              "value": "query_knowledge_graph"
+            }
+          ]
+        }
+      },
+      "id": "set-test-data",
+      "name": "Set Test Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "query_knowledge_graph",
+        "parameters": {
+          "query": "={{ $json.test_query }}",
+          "max_results": 10,
+          "include_relationships": true
+        }
+      },
+      "id": "mcp-query-node",
+      "name": "Query Knowledge Graph",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "result_summary",
+              "value": "={{ 'MCP Query completed: ' + JSON.stringify($json) }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        }
+      },
+      "id": "format-results",
+      "name": "Format Results",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Start Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Test Query": {
+      "main": [
+        [
+          {
+            "node": "Query Knowledge Graph", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Knowledge Graph": {
+      "main": [
+        [
+          {
+            "node": "Format Results",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "America/New_York"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCreatedBy": "n8n MCP Integration - Knowledge Graph Test"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "name": "Batch PDF+RIS Processing with Neo4j Document Storage",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "folder-watch-trigger",
+      "name": "Watch Literature Folder",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "parameters": {
+        "path": "/Users/aimiegarces/Agents/Literature",
+        "trigger": "added",
+        "fileExtensions": "pdf,ris"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check for PDF+RIS pairs\nconst items = $input.all();\nconst pdfFiles = items.filter(item => item.json.name.endsWith('.pdf'));\nconst risFiles = items.filter(item => item.json.name.endsWith('.ris'));\n\nconst pairs = [];\nfor (const pdf of pdfFiles) {\n  const baseName = pdf.json.name.replace('.pdf', '');\n  const risFile = risFiles.find(ris => ris.json.name === baseName + '.ris');\n  \n  if (risFile) {\n    pairs.push({\n      pdf_path: pdf.json.path,\n      ris_path: risFile.json.path,\n      base_name: baseName,\n      pdf_size: pdf.json.size,\n      pair_id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)\n    });\n  }\n}\n\nreturn pairs.map(pair => ({ json: pair }));"
+      },
+      "id": "pair-detector",
+      "name": "Detect PDF+RIS Pairs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "read",
+        "filePath": "={{ $json.ris_path }}"
+      },
+      "id": "read-ris-metadata",
+      "name": "Read RIS Metadata",
+      "type": "n8n-nodes-base.filesReadWrite",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse RIS format to extract citation metadata\nconst risContent = $json.data.toString();\nconst metadata = {};\n\nconst lines = risContent.split('\\n');\nfor (const line of lines) {\n  if (line.includes(' - ')) {\n    const [key, value] = line.split(' - ', 2);\n    const cleanKey = key.trim();\n    const cleanValue = value ? value.trim() : '';\n    \n    switch(cleanKey) {\n      case 'TI': metadata.title = cleanValue; break;\n      case 'AU': \n        if (!metadata.authors) metadata.authors = [];\n        metadata.authors.push(cleanValue);\n        break;\n      case 'JO': case 'T2': metadata.journal = cleanValue; break;\n      case 'PY': case 'Y1': metadata.year = parseInt(cleanValue); break;\n      case 'DO': metadata.doi = cleanValue; break;\n      case 'AB': metadata.abstract = cleanValue; break;\n      case 'KW': \n        if (!metadata.keywords) metadata.keywords = [];\n        metadata.keywords.push(cleanValue);\n        break;\n    }\n  }\n}\n\nreturn {\n  json: {\n    pair_id: $json.pair_id,\n    pdf_path: $json.pdf_path,\n    ris_path: $json.ris_path,\n    base_name: $json.base_name,\n    pdf_size: $json.pdf_size,\n    metadata: metadata\n  }\n};"
+      },
+      "id": "parse-ris",
+      "name": "Parse RIS Citation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "store_entities",
+        "parameters": {
+          "entities": [
+            {
+              "id": "={{ $json.pair_id }}",
+              "name": "={{ $json.metadata.title || $json.base_name }}",
+              "type": "Document",
+              "properties": {
+                "title": "={{ $json.metadata.title }}",
+                "authors": "={{ JSON.stringify($json.metadata.authors) }}",
+                "year": "={{ $json.metadata.year }}",
+                "journal": "={{ $json.metadata.journal }}",
+                "doi": "={{ $json.metadata.doi }}",
+                "abstract": "={{ $json.metadata.abstract }}",
+                "keywords": "={{ JSON.stringify($json.metadata.keywords) }}",
+                "pdf_path": "={{ $json.pdf_path }}",
+                "ris_path": "={{ $json.ris_path }}",
+                "file_size": "={{ $json.pdf_size }}",
+                "processing_status": "metadata_stored",
+                "uploaded_date": "={{ new Date().toISOString() }}"
+              },
+              "confidence": 1.0
+            }
+          ],
+          "relationships": []
+        }
+      },
+      "id": "store-document-metadata",
+      "name": "Store Document in Neo4j",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "read",
+        "filePath": "={{ $json.pdf_path }}"
+      },
+      "id": "read-pdf",
+      "name": "Read PDF Content",
+      "type": "n8n-nodes-base.filesReadWrite",
+      "typeVersion": 1,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert PDF to text (simplified - in practice use pdfplumber)\nconst pdfData = $json.data;\n// This is a placeholder - actual PDF text extraction would use pdfplumber\nconst extractedText = `Text extracted from ${$json.base_name}.pdf\\n\\nTitle: ${$json.metadata.title}\\nAbstract: ${$json.metadata.abstract}`;\n\nreturn {\n  json: {\n    pair_id: $json.pair_id,\n    text_content: extractedText,\n    metadata: $json.metadata\n  }\n};"
+      },
+      "id": "extract-text",
+      "name": "Extract Text from PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "store_vectors",
+        "parameters": {
+          "content": "={{ $json.text_content }}",
+          "metadata": {
+            "document_id": "={{ $json.pair_id }}",
+            "title": "={{ $json.metadata.title }}",
+            "authors": "={{ JSON.stringify($json.metadata.authors) }}",
+            "source": "pdf_upload"
+          }
+        }
+      },
+      "id": "store-vectors",
+      "name": "Store Text Vectors",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "transport": "stdio",
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "tool": "store_entities",
+        "parameters": {
+          "entities": [
+            {
+              "id": "={{ $json.pair_id }}",
+              "name": "={{ $json.metadata.title }}",
+              "type": "Document",
+              "properties": {
+                "processing_status": "completed",
+                "processing_end": "={{ new Date().toISOString() }}",
+                "text_extracted": true,
+                "vectors_stored": true
+              },
+              "confidence": 1.0
+            }
+          ],
+          "relationships": []
+        }
+      },
+      "id": "update-completion-status",
+      "name": "Update Processing Status",
+      "type": "n8n-nodes-mcp.mcp",
+      "typeVersion": 1,
+      "position": [1960, 300]
+    }
+  ],
+  "connections": {
+    "Watch Literature Folder": {
+      "main": [
+        [
+          {
+            "node": "Detect PDF+RIS Pairs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect PDF+RIS Pairs": {
+      "main": [
+        [
+          {
+            "node": "Read RIS Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read RIS Metadata": {
+      "main": [
+        [
+          {
+            "node": "Parse RIS Citation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RIS Citation": {
+      "main": [
+        [
+          {
+            "node": "Store Document in Neo4j",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Document in Neo4j": {
+      "main": [
+        [
+          {
+            "node": "Read PDF Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PDF Content": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from PDF": {
+      "main": [
+        [
+          {
+            "node": "Store Text Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Text Vectors": {
+      "main": [
+        [
+          {
+            "node": "Update Processing Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "America/New_York"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCreatedBy": "n8n MCP Batch Processing - PDF+RIS Literature Management"
+  }
+}

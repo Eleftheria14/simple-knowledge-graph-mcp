@@ -10,6 +10,19 @@
 - [MCP Knowledge Graph Memory Server](https://github.com/shaneholloman/mcp-knowledge-graph)
 - [Neo4j MCP Integration](https://neo4j.com/developer/genai-ecosystem/model-context-protocol-mcp/)
 
+## n8n Workflow Automation and MCP Integration
+- [n8n MCP Server (czlonkowski)](https://github.com/czlonkowski/n8n-mcp) - Makes Claude Desktop an expert at n8n workflow building
+- [n8n MCP Community Node (nerding-io)](https://github.com/nerding-io/n8n-nodes-mcp) - Enables n8n workflows to call MCP servers directly
+- [n8n Official Documentation](https://docs.n8n.io/)
+- [n8n Community Nodes](https://docs.n8n.io/integrations/community-nodes/)
+- [n8n Docker Installation](https://docs.n8n.io/hosting/installation/docker/)
+- [n8n Workflow Templates](https://n8n.io/workflows/)
+
+## Claude Code and MCP Setup
+- [Claude Code Remote MCP Announcement](https://www.anthropic.com/news/claude-code-remote-mcp) - Claude Code can access MCP servers
+- [Claude Code MCP Documentation](https://docs.anthropic.com/en/docs/claude-code/mcp) - Complete setup guide for MCP in Claude Code
+- [n8n-nodes-mcp npm package](https://www.npmjs.com/package/n8n-nodes-mcp) - Community node for n8n MCP integration
+
 ## GraphRAG and Knowledge Graphs
 - [Microsoft GraphRAG](https://graphrag.com/concepts/intro-to-graphrag/)
 - [LangChain GraphRAG Guide](https://blog.langchain.com/enhancing-rag-based-applications-accuracy-by-constructing-and-leveraging-knowledge-graphs/)

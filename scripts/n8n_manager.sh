@@ -22,6 +22,8 @@ case "$1" in
                 -e N8N_BASIC_AUTH_PASSWORD=password123 \
                 -e N8N_SECURE_COOKIE=false \
                 -e N8N_RUNNERS_ENABLED=true \
+                -e N8N_COMMUNITY_PACKAGES_ENABLED=true \
+                -e N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true \
                 n8nio/n8n
             
             echo "⏳ Waiting for n8n to start..."
