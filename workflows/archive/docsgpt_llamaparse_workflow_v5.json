@@ -1,0 +1,174 @@
+{
+  "name": "DocsGPT-LlamaParse-Integration-v5",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf",
+        "options": {}
+      },
+      "id": "fetch-file-docsgpt",
+      "name": "Read File Direct",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.data }}",
+              "type": "formBinaryData"
+            },
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 45
+      },
+      "id": "wait-processing",
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.cloud.llamaindex.ai/api/parsing/job/{{ $('LlamaParse Upload').first().json.id }}/result/markdown",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        }
+      },
+      "id": "get-results",
+      "name": "Get LlamaParse Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const llamaParseResult = items[0].json;\nconst webhookData = $('DocsGPT Webhook').first().json;\n\nlet markdownContent = '';\nif (llamaParseResult && llamaParseResult.markdown) {\n  markdownContent = llamaParseResult.markdown;\n} else {\n  markdownContent = 'No content extracted';\n}\n\nconst response = {\n  success: true,\n  batch_id: webhookData.batch_id,\n  processed_file: webhookData.files[0].name,\n  markdown_length: markdownContent.length,\n  processing_timestamp: new Date().toISOString(),\n  status: 'processing_complete'\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "simple-response",
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read File Direct",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read File Direct": {
+      "main": [
+        [
+          {
+            "node": "LlamaParse Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LlamaParse Upload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Processing": {
+      "main": [
+        [
+          {
+            "node": "Get LlamaParse Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get LlamaParse Results": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "5",
+  "meta": {},
+  "id": "docsgpt-llamaparse-integration-v5",
+  "tags": []
+}

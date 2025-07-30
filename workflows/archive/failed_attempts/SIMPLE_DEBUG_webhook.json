@@ -1,0 +1,41 @@
+{
+  "name": "SIMPLE-DEBUG-Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// LOG EVERYTHING to find where the data actually is\nconsole.log('=== COMPLETE ITEMS STRUCTURE ===');\nconsole.log('items:', JSON.stringify(items, null, 2));\nconsole.log('items.length:', items.length);\n\nif (items[0]) {\n  console.log('items[0] keys:', Object.keys(items[0]));\n  console.log('items[0]:', JSON.stringify(items[0], null, 2));\n  \n  if (items[0].json) {\n    console.log('items[0].json:', JSON.stringify(items[0].json, null, 2));\n  }\n  \n  if (items[0].body) {\n    console.log('items[0].body:', JSON.stringify(items[0].body, null, 2));\n  }\n  \n  if (items[0].query) {\n    console.log('items[0].query:', JSON.stringify(items[0].query, null, 2));\n  }\n}\n\nreturn [{ json: { debug: 'complete', timestamp: new Date().toISOString() } }];"
+      },
+      "id": "debug-structure",
+      "name": "Debug Data Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Debug Data Structure", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "debug",
+  "meta": {},
+  "id": "simple-debug-webhook",
+  "tags": []
+}

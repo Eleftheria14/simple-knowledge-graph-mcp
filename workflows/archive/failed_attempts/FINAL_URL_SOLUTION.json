@@ -1,0 +1,65 @@
+{
+  "name": "FINAL-URL-SOLUTION",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "final-url-solution",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "final-url-solution"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "input_url",
+              "value": "https://arxiv.org/pdf/2301.00810.pdf"
+            },
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "final-url-solution",
+  "tags": []
+}

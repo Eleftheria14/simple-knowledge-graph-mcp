@@ -1,0 +1,64 @@
+{
+  "name": "LLAMAPARSE-COMMUNITY-NODE",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "llamaparse-community-node",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "llamaparse-community-node"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "llamaparse-node",
+      "name": "LlamaParse",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process LlamaParse response\nconst webhookData = $('Webhook').first().json;\nconst llamaParseResult = $input.all()[0];\n\n// Extract markdown content from LlamaParse response\nlet markdownContent = '';\nif (llamaParseResult.json && llamaParseResult.json.markdown) {\n  markdownContent = llamaParseResult.json.markdown;\n} else if (llamaParseResult.json && typeof llamaParseResult.json === 'string') {\n  markdownContent = llamaParseResult.json;\n} else if (llamaParseResult.markdown) {\n  markdownContent = llamaParseResult.markdown;\n} else {\n  markdownContent = 'No content extracted from PDF';\n}\n\n// Prepare structured response\nconst response = {\n  success: true,\n  batch_id: webhookData.batch_id || 'community-node-test',\n  processed_file: webhookData.filename || 'd4sc03921a.pdf',\n  processing_method: 'LlamaParse Community Node',\n  markdown_length: markdownContent.length,\n  processing_timestamp: new Date().toISOString(),\n  status: 'processing_complete',\n  markdown_preview: markdownContent.substring(0, 500) + (markdownContent.length > 500 ? '...' : ''),\n  full_markdown: markdownContent\n};\n\nreturn { json: response };"
+      },
+      "id": "prepare-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "LlamaParse", "type": "main", "index": 0}]]
+    },
+    "LlamaParse": {
+      "main": [[{"node": "Prepare Final Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "llamaparse-community-node",
+  "tags": []
+}

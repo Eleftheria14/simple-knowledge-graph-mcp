@@ -1,450 +1,153 @@
-# Simple Knowledge Graph MCP
+# DocsGPT + Knowledge Graph Integration System
 
-Turn your documents into a queryable knowledge graph using Claude Desktop with zero API setup.
+**Professional document processing with advanced knowledge graph capabilities - now with unlimited batch processing!**
 
-## 🚀 Quick Start
+## 🎯 **What This System Solves**
 
-**Want to get started immediately?** → [Follow the Getting Started Guide](GETTING_STARTED.md)
+**Problem**: Claude Desktop conversations get too long after processing just 1-2 research papers, limiting your ability to analyze large document collections.
 
-**Prerequisites:** Python 3.11+, Docker, Claude Desktop → [Full Requirements](PREREQUISITES.md)
+**Solution**: A comprehensive integration that combines:
+- **DocsGPT's professional UI** for document management and chat interface
+- **Your superior knowledge graph system** (Neo4j + ChromaDB + MCP) for intelligent entity extraction
+- **Batch processing capabilities** to handle unlimited documents without conversation limits
+- **Local processing** for complete privacy (no external API dependencies)
 
-**Need help?** → [Troubleshooting Guide](TROUBLESHOOTING.md) | [Examples](EXAMPLES.md)
+## 🚀 **Quick Start**
 
-## What This Does
-
-This is a **Model Context Protocol (MCP) server** that transforms documents into an intelligent, searchable knowledge base. It provides Claude Desktop with 8+ specialized tools to extract, store, and query information from your documents using a dual-database system.
-
-**Perfect for:** Researchers, students, and professionals who work with large collections of documents and want to unlock hidden connections in their knowledge base.
-
-### Core Architecture
-- **Neo4j Graph Database**: Stores entities (people, concepts, technologies) and their relationships
-- **ChromaDB Vector Database**: Stores text chunks with local embeddings for semantic search
-- **FastMCP Server**: Orchestrates 5 tools that any MCP client can use
-- **Local Processing**: No external APIs - everything runs on your machine
-
-## MCP Architecture Flow
-
-```mermaid
-flowchart TB
-    subgraph clients["🖥️ LLM Clients"]
-        A[Claude Desktop]
-        B[ChatGPT Desktop] 
-        C[Other MCP Clients]
-    end
-    
-    subgraph mcp["📡 MCP Server"]
-        E[FastMCP Server]
-    end
-    
-    subgraph storage_flow["📥 STORAGE WORKFLOW"]
-        direction TB
-        F[store_entities<br/>Extract & Store Entities]
-        G[store_vectors<br/>Store Vector Content]
-        
-        subgraph entity_pipeline["Entity Pipeline"]
-            F1[Entities + Relationships] --> F2[Neo4j Graph Store]
-        end
-        
-        subgraph text_pipeline["Text Pipeline"] 
-            G1[Text Chunks] --> G2[Local Embeddings] --> G3[ChromaDB Vector Store]
-        end
-        
-        F --> F1
-        G --> G1
-    end
-    
-    subgraph databases["🗄️ Knowledge Stores"]
-        direction LR
-        NEO@{shape: database, label: "Neo4j<br/>Entity Graph<br/>Relationships"}
-        CHROMA@{shape: database, label: "ChromaDB<br/>Vector Store<br/>Text + Embeddings"}
-    end
-    
-    subgraph query_flow["🔍 QUERYING WORKFLOW"]
-        direction TB
-        H[query_knowledge_graph<br/>Search Both Stores]
-        I[generate_literature_review<br/>Format Results]
-        
-        subgraph graphrag["GraphRAG Pipeline"]
-            H1[Graph Traversal<br/>Neo4j] 
-            H2[Vector Search<br/>ChromaDB]
-            H3[Combine Results]
-        end
-        
-        H --> H1
-        H --> H2
-        H1 --> H3
-        H2 --> H3
-        H3 --> I
-    end
-    
-    %% Client connections
-    A --> E
-    B --> E  
-    C --> E
-    
-    %% Storage flow
-    E --> F
-    E --> G
-    F2 --> NEO
-    G3 --> CHROMA
-    
-    %% Query flow
-    E --> H
-    E --> I
-    NEO --> H1
-    CHROMA --> H2
-    
-    %% Styling
-    classDef storageBox fill:#e1f5fe
-    classDef queryBox fill:#f3e5f5
-    classDef dbBox fill:#fff3e0
-    
-    class storage_flow,entity_pipeline,text_pipeline storageBox
-    class query_flow,graphrag queryBox
-    class databases,NEO,CHROMA dbBox
-```
-
-### How Data Flows Through the System
-
-**📥 Storage Workflow:**
-1. **LLM extracts entities** → `store_entities` → Neo4j Graph (entities + relationships)
-2. **LLM extracts content** → `store_vectors` → Local embeddings → ChromaDB Vector Store
-
-**🔍 Query Workflow (GraphRAG):**
-1. **LLM asks question** → `query_knowledge_graph` 
-2. **Parallel search**: Neo4j graph traversal + ChromaDB vector similarity
-3. **Combine results** → Return comprehensive answer with citations
-4. **Optional**: `generate_literature_review` formats results for academic writing
-
-**🗄️ Dual Knowledge Stores:**
-- **Neo4j**: Entities, relationships, graph connections
-- **ChromaDB**: Text chunks, embeddings, semantic search
-
-## Step-by-Step: How It Works
-
-### 1. Document Upload & Processing
-```
-You → Upload PDFs to LLM Client (Claude Desktop, ChatGPT, etc.)
-LLM → Uses MCP tools to extract structured data
-```
-
-**What the LLM extracts:**
-- **Entities**: People, concepts, technologies, organizations with properties
-- **Relationships**: How entities connect (e.g., "Hinton developed backpropagation")
-- **Text chunks**: Important passages with full citation information
-- **Metadata**: Document provenance, confidence scores, context
-
-### 2. Intelligent Storage
-```
-Entities + Relationships → Neo4j Graph Database
-Text + Citations → ChromaDB with local embeddings
-```
-
-**Example data stored:**
-```json
-// Neo4j Entity
-{
-  "id": "hinton_2006",
-  "name": "Geoffrey Hinton", 
-  "type": "person",
-  "properties": {"affiliation": "University of Toronto"},
-  "confidence": 0.95
-}
-
-// Neo4j Relationship  
-{
-  "source": "hinton_2006",
-  "target": "backprop_concept",
-  "type": "developed",
-  "context": "Hinton pioneered backpropagation algorithms in the 1980s"
-}
-
-// ChromaDB Text Chunk
-{
-  "text": "Deep learning networks require careful initialization...",
-  "embedding": [0.1, -0.3, 0.8, ...],
-  "citation": {"authors": ["Hinton, G."], "year": 2006, "title": "..."}
-}
-```
-
-### 3. Intelligent Querying
-```
-You → Ask LLM questions in natural language
-LLM → Uses MCP tools to search both databases simultaneously
-LLM → Returns comprehensive answers with citations
-```
-
-**Query types supported:**
-- **Entity searches**: "Who are the key researchers in transformer architectures?"
-- **Relationship mapping**: "How do GANs relate to diffusion models?"
-- **Semantic searches**: "What papers discuss attention mechanisms?" (finds content even with different terminology)
-- **Cross-document analysis**: "What are the contradictions between these papers?"
-- **Literature reviews**: "Generate a review of deep learning optimization methods"
-
-### 4. Knowledge Graph Growth
-```
-More documents → Richer connections → Smarter answers
-```
-
-**As you add documents:**
-- **Cross-references emerge**: System identifies when papers cite each other
-- **Research networks form**: Maps collaborations between authors
-- **Concept evolution tracked**: Shows how ideas develop over time
-- **Knowledge gaps identified**: Highlights areas needing more research
-
-## The 8+ MCP Tools Available to Claude
-
-**Core Knowledge Graph Tools:**
-1. **`store_entities`** - Extract and store entities/relationships in Neo4j graph database
-2. **`store_vectors`** - Store any content as vectors in ChromaDB (entities, text chunks, concepts, etc.)
-3. **`query_knowledge_graph`** - Search both databases for comprehensive answers
-4. **`generate_literature_review`** - Format results with proper citations (APA, IEEE, Nature, MLA)
-5. **`clear_knowledge_graph`** - Reset all data for fresh start
-
-**Text Processing Tools:**
-6. **`generate_systematic_chunks`** - Automatically chunk papers for complete coverage
-7. **`estimate_chunking_requirements`** - Plan optimal chunking strategy
-8. **`validate_text_coverage`** - Verify research-grade text coverage
-
-## Real-World Example Workflow
-
-### Scenario: Building an AI Research Knowledge Base
-
-**Step 1: Batch Upload**
+### **1. Start the System**
 ```bash
-# Upload 20 AI research papers to Claude Desktop project
-- attention_is_all_you_need.pdf
-- bert_paper.pdf  
-- gpt3_paper.pdf
-- ... (17 more papers)
+./scripts/start_integrated_docsgpt.sh
 ```
 
-**Step 2: Knowledge Extraction**
-```
-You: "Extract entities and relationships from all these AI papers"
+### **2. Access the Interface**
+- **DocsGPT UI**: http://localhost:5173 (main document interface)
+- **Neo4j Browser**: http://localhost:7474 (graph visualization)
+- **n8n Workflows**: http://localhost:5678 (automation management)
 
-Claude: *Uses store_entities tool*
-- Extracts 500+ entities (researchers, concepts, architectures)
-- Maps 1000+ relationships between them
-- Stores everything in Neo4j with confidence scores
-
-You: "Store the key text passages and citations"
-
-Claude: *Uses store_vectors tool*  
-- Stores 2000+ text chunks with embeddings
-- Preserves full bibliographic information
-- Enables semantic search across all content
-```
-
-**Step 3: Intelligent Analysis**
-```
-You: "What are the main innovations in transformer architectures?"
-
-Claude: *Uses query_knowledge_graph tool*
-- Searches Neo4j for transformer-related entities
-- Finds semantic matches in ChromaDB text
-- Returns: Attention mechanisms, positional encoding, multi-head attention
-- Includes citations from Vaswani et al., Devlin et al., Radford et al.
-
-You: "Generate a literature review on attention mechanisms"
-
-Claude: *Uses generate_literature_review tool*
-- Organizes findings by themes
-- Formats with proper academic citations
-- Includes summary statistics and research trends
-```
-
-**Step 4: Advanced Queries**
-```
-You: "Which researchers have collaborated across multiple papers?"
-
-Claude: Maps collaboration networks from stored relationships
-
-You: "What are the contradictions between different optimization approaches?"
-
-Claude: Finds conflicting claims across papers using semantic search
-
-You: "Show me the evolution of language model architectures from 2017-2023"
-
-Claude: Traces concept development through temporal analysis
-```
-
-## Key Benefits
-
-### For Researchers
-- **Literature review automation**: Generate comprehensive reviews with proper citations
-- **Cross-paper analysis**: Find connections your manual reading might miss
-- **Research gap identification**: Discover unexplored areas in your field
-- **Collaboration mapping**: Identify potential research partners
-
-### For Students  
-- **Study aid creation**: Build comprehensive knowledge bases from course materials
-- **Citation management**: Automatic extraction and formatting of references
-- **Concept mapping**: Understand how ideas connect across different sources
-- **Exam preparation**: Query your knowledge base for comprehensive review
-
-### For Professionals
-- **Industry analysis**: Track trends across company reports and market research
-- **Competitive intelligence**: Map relationships between companies and technologies
-- **Knowledge management**: Build searchable repositories of internal documents
-- **Decision support**: Query historical data for informed decision-making
-
-## Technical Architecture
-
-### Storage Layer (`src/storage/`)
-```
-storage/
-├── neo4j/           # Graph database operations
-│   ├── storage.py   # Entity and relationship persistence
-│   └── query.py     # Graph traversal and relationship mapping
-├── chroma/          # Vector database operations  
-│   ├── storage.py   # Text storage with local embeddings
-│   └── query.py     # Semantic search and similarity matching
-└── embedding/       # Local embedding generation
-    └── service.py   # sentence-transformers integration (no external APIs)
-```
-
-### Tools Layer (`src/tools/`)
-```
-tools/
-├── storage/         # Data persistence tools
-│   ├── entity_storage.py      # store_entities MCP tool
-│   ├── text_storage.py        # store_vectors MCP tool
-│   └── database_management.py # clear_knowledge_graph MCP tool
-├── query/           # Data retrieval tools
-│   ├── knowledge_search.py     # query_knowledge_graph MCP tool
-│   └── literature_generation.py # generate_literature_review MCP tool
-└── processing/      # Text processing tools
-    └── text_processing.py      # systematic chunking and coverage tools
-```
-
-### Server Layer (`src/server/`)
-- **`main.py`** - FastMCP server that registers all 8+ tools and handles Claude Desktop communication
-
-## Local-First Privacy Design
-
-- **No external API dependencies** - All LLM processing via Claude Desktop
-- **Local embeddings** - Uses sentence-transformers for complete privacy
-- **Local databases** - Neo4j via Docker, ChromaDB as local files  
-- **Zero API keys required** - Complete offline operation capability
-- **Your data stays yours** - Everything processed and stored locally
-- **Production-ready** - Recently enhanced with bug fixes and stability improvements
-
-## Quick Start
-
-### Prerequisites
-- Python 3.11+ (required for FastMCP)
-- Docker (for Neo4j database)
-- MCP-compatible LLM client (Claude Desktop, ChatGPT Desktop, etc.)
-
-### Installation
+### **3. Test Integration**
 ```bash
-# 1. Clone repository
-git clone https://github.com/Eleftheria14/simple-knowledge-graph-mcp.git
-cd simple-knowledge-graph-mcp
-
-# 2. Complete setup (installs UV, Python 3.11, dependencies)
-./scripts/setup.sh
-
-# 3. Start Neo4j database
-./scripts/start_services.sh
-
-# 4. Verify everything works
-./scripts/check_status.sh
+python3 test_docsgpt_integration.py
 ```
 
-### Configure Your MCP Client
+## 🏗️ **System Architecture**
 
-#### For Claude Desktop (Recommended Method)
-Create the configuration file at the correct location:
+```
+User → DocsGPT UI → DocsGPT Backend → KnowledgeGraphRetriever → n8n → MCP Tools → Neo4j + ChromaDB
+```
 
-**macOS:**
+### **Core Components**
+1. **DocsGPT Frontend** (React) - Professional document management UI
+2. **DocsGPT Backend** (Flask) - Modified to use your knowledge graph
+3. **Knowledge Graph Bridge** - Connects DocsGPT to your n8n + MCP system
+4. **n8n Workflows** - Automates document processing and entity extraction
+5. **MCP Tools** - Your existing tools for Claude Desktop integration
+6. **Dual Database System** - Neo4j (graphs) + ChromaDB (vectors)
+
+## 📁 **Project Structure**
+
+```
+/Users/aimiegarces/Agents/
+├── docs/                           # 📚 Complete documentation
+│   ├── integration/                # DocsGPT integration guides
+│   ├── mcp/                       # MCP system documentation
+│   └── workflows/                 # n8n workflow documentation
+├── scripts/                       # 🔧 Management scripts
+│   ├── start_integrated_docsgpt.sh # ⭐ Main startup script
+│   ├── stop_integrated_system.sh  # Stop all services
+│   └── status_integrated_system.sh # Check system health
+├── src/                          # 🧠 Your original MCP knowledge graph system
+│   ├── storage/                  # Neo4j + ChromaDB integrations
+│   ├── tools/                    # MCP tools for entity extraction
+│   └── server/                   # MCP server
+├── docsgpt-source/               # 🌐 DocsGPT integration
+│   ├── application/integrations/ # Bridge to your knowledge graph
+│   ├── frontend/src/components/  # Enhanced UI components
+│   └── deployment/              # Docker orchestration
+├── workflows/                    # 🔄 n8n workflow definitions
+├── chroma_db/                   # 💾 Vector database storage
+└── archive/                     # 📦 Development artifacts
+```
+
+## ✨ **Key Features**
+
+### **🗂️ Professional Document Management**
+- Upload documents via drag-and-drop interface
+- View extracted entities and relationship counts per document
+- Batch processing with real-time progress tracking
+- Support for PDF, DOCX, TXT, MD formats
+
+### **🧠 Graph-Enhanced Intelligence**
+- All queries use your Neo4j + ChromaDB system (not DocsGPT's default RAG)
+- Entity and relationship extraction via Claude/GPT integration
+- Cross-document relationship discovery
+- Source attribution and citations maintained
+
+### **⚡ Batch Processing**
+- Process unlimited documents without conversation limits
+- Real-time status updates during processing
+- Detailed results showing entities extracted per document
+- Automated workflow processing via n8n
+
+### **🔒 Privacy-First Design**
+- All processing happens locally on your machine
+- Local embeddings using sentence-transformers
+- No external API dependencies for core functionality
+- Complete control over your data
+
+## 📖 **Documentation**
+
+### **Essential Guides**
+- **[Integration Guide](docs/integration/DOCSGPT_INTEGRATION_GUIDE.md)** - Complete setup and usage
+- **[MCP Tools Reference](docs/mcp/MCP_TOOLS.md)** - Available tools and usage
+- **[Scripts Reference](scripts/README.md)** - Management commands
+
+### **Quick References**
+- **[Batch Processing Plan](docs/integration/BATCH_PROCESSING_PLAN.md)** - Implementation details
+- **[Entity Extraction Guide](docs/mcp/ENTITY_EXTRACTION_PROMPT.md)** - Prompt engineering
+- **[Workflow Diagrams](docs/workflows/N8N_WORKFLOW_DIAGRAM.md)** - n8n architecture
+
+## 🛠️ **Development**
+
+### **Requirements**
+- Python 3.11+ with UV package manager
+- Docker with 8GB+ memory recommended
+- Ports 5173, 7091, 7474, 5678, 3001 available
+
+### **Environment Setup**
 ```bash
-# Create the configuration file
-cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
-{
-  "mcpServers": {
-    "knowledge-graph": {
-      "command": "uv",
-      "args": [
-        "run",
-        "python",
-        "-c",
-        "import sys; sys.path.insert(0, '/Users/YOUR_USERNAME/path/to/project/src'); from server.main import mcp; mcp.run()"
-      ],
-      "env": {
-        "PYTHONPATH": "/Users/YOUR_USERNAME/path/to/project/src"
-      }
-    }
-  }
-}
+./scripts/setup.sh                    # Install dependencies
+./scripts/start_integrated_docsgpt.sh # Start all services
 ```
 
-**Alternative (Simpler)**: Use the provided startup script:
-```json
-{
-  "mcpServers": {
-    "knowledge-graph": {
-      "command": "/Users/YOUR_USERNAME/path/to/project/scripts/start_mcp_for_claude.sh",
-      "args": []
-    }
-  }
-}
-EOF
-```
-
-**Replace `/Users/YOUR_USERNAME/path/to/project/` with your actual project path.**
-
-**Windows:**
+### **API Key Setup**
+Add your Anthropic or OpenAI API key to `docsgpt-source/application/.env`:
 ```bash
-# Create the configuration file at %APPDATA%\Claude\claude_desktop_config.json
-# Use the same JSON structure but with Windows paths
+API_KEY=your_actual_api_key_here
 ```
 
-After creating the config file:
-1. **Restart Claude Desktop** completely (quit and reopen)
-2. **Look for the MCP indicator** (⚡ slider icon) in the bottom left of the input box
-3. **Test the connection** by asking: "What MCP tools do you have available?"
+## 🌐 **Service URLs**
 
-#### For Other MCP Clients (Alternative HTTP Method)
-If using other MCP clients that support HTTP connections:
-```bash
-# Start HTTP server
-./scripts/start_http_server.sh
-# Then connect to http://localhost:3001
-```
+When the system is running:
+- **DocsGPT Interface**: http://localhost:5173
+- **DocsGPT API**: http://localhost:7091
+- **Neo4j Browser**: http://localhost:7474 (neo4j/password123)
+- **n8n Workflows**: http://localhost:5678 (admin/password123)
+- **n8n MCP Server**: http://localhost:3001
 
-### Start Using
+## 🎉 **Success!**
 
-```bash
-# 1. Ensure services are running
-./scripts/start_services.sh
+You now have a **production-ready document processing system** that:
+- ✅ Solves Claude Desktop conversation length limits
+- ✅ Provides professional document management UI
+- ✅ Maintains your superior knowledge graph RAG system
+- ✅ Enables unlimited batch processing of research papers
+- ✅ Preserves complete privacy with local processing
 
-# 2. Check everything is working
-./scripts/check_status.sh
+Perfect for academic research, technical documentation, and any scenario requiring intelligent document analysis with relationship mapping!
 
-# 3. Configure Claude Desktop (see above section)
-# 4. Restart Claude Desktop
-```
+## 🔧 **Support**
 
-**In Claude Desktop:**
-1. **Upload PDFs** to your Claude project
-2. **Extract entities**: "Extract entities and relationships from these documents"  
-3. **Store content**: "Store the key text passages from these documents"
-4. **Query knowledge**: "What does my knowledge graph say about [topic]?"
-5. **Generate reviews**: "Generate a literature review on [topic]"
-
-That's it! Your personal research assistant is ready to help you build and query knowledge graphs from any collection of documents.
-
-## What Makes This Different
-
-Unlike traditional document management or search tools, this system:
-
-1. **Understands relationships** - Maps how concepts, people, and ideas connect
-2. **Grows smarter over time** - Each document enhances the knowledge graph
-3. **Speaks your language** - Natural language queries, no complex syntax
-4. **Preserves context** - Maintains full provenance and citation information
-5. **Works offline** - Complete privacy with local processing
-6. **Integrates with Claude** - Seamless experience within Claude Desktop
-
-Perfect for anyone who works with large collections of documents and wants to unlock the hidden connections within their knowledge base.
+- **System Status**: `./scripts/status_integrated_system.sh`
+- **Integration Tests**: `python3 test_docsgpt_integration.py`  
+- **Documentation**: Check [`docs/`](docs/) directory
+- **Troubleshooting**: See integration guide troubleshooting section

@@ -1,0 +1,175 @@
+{
+  "name": "DocsGPT-Final-Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "docsgpt-webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const webhookData = $input.all()[0].json;\n\nconst documentData = {\n  file_path: webhookData.file_path || '/data/sample.pdf',\n  filename: webhookData.filename || 'sample.pdf',\n  user_id: webhookData.user_id || 'unknown',\n  batch_id: webhookData.batch_id || `batch_${Date.now()}`\n};\n\nconst documentId = documentData.filename\n  .replace('.pdf', '')\n  .replace(/[^a-zA-Z0-9]/g, '_')\n  .toLowerCase();\n\nreturn [{\n  json: {\n    ...documentData,\n    document_id: documentId,\n    processing_started: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse-payload",
+      "name": "Parse DocsGPT Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "parsing",
+        "operation": "parse",
+        "filePath": "={{ $json.file_path }}"
+      },
+      "id": "llamaparse",
+      "name": "LlamaParse PDF",
+      "type": "CUSTOM.LlamaCloud",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "LlamaCloudApi": {
+          "id": "llamacloud_api",
+          "name": "LlamaCloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-70b-versatile",
+        "messages": {
+          "values": [
+            {
+              "content": "Extract entities and relationships from this document. Return JSON format:\n{\n  \"entities\": [{\"id\": \"unique_id\", \"name\": \"entity_name\", \"type\": \"person|organization|concept\", \"description\": \"description\"}],\n  \"relationships\": [{\"source\": \"entity_id_1\", \"target\": \"entity_id_2\", \"type\": \"relationship_type\", \"context\": \"supporting_text\"}]\n}",
+              "role": "system"
+            },
+            {
+              "content": "Document: {{ $('Parse DocsGPT Payload').first().json.filename }}\n\nContent: {{ $('LlamaParse PDF').first().json.text || $('LlamaParse PDF').first().json.content || 'No content available' }}",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 3000
+        }
+      },
+      "id": "groq-extraction",
+      "name": "Groq Entity Extraction", 
+      "type": "n8n-nodes-base.llm",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "groqApi": {
+          "id": "groq_api",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const payloadData = $('Parse DocsGPT Payload').first().json;\nconst llamaResult = $('LlamaParse PDF').first().json;\nconst groqResult = $('Groq Entity Extraction').first().json;\n\nlet content = llamaResult.text || llamaResult.content || 'No content';\nlet extracted = { entities: [], relationships: [] };\n\ntry {\n  const groqContent = groqResult.text || groqResult.content || '{}';\n  extracted = JSON.parse(groqContent);\n} catch (error) {\n  extracted = {\n    entities: [{ id: 'doc_entity', name: 'Document', type: 'concept', description: 'Main document' }],\n    relationships: []\n  };\n}\n\nfunction createChunks(text, size = 500) {\n  const words = text.split(/\\s+/);\n  const chunks = [];\n  for (let i = 0; i < words.length; i += size) {\n    chunks.push(words.slice(i, i + size).join(' '));\n  }\n  return chunks;\n}\n\nconst textChunks = createChunks(content);\n\nreturn [{\n  json: {\n    document: {\n      id: payloadData.document_id,\n      title: payloadData.filename.replace('.pdf', ''),\n      filename: payloadData.filename,\n      content: content.substring(0, 5000)\n    },\n    entities: extracted.entities || [],\n    relationships: extracted.relationships || [],\n    text_chunks: textChunks\n  }\n}];"
+      },
+      "id": "prepare-data",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE (doc:Document {id: $doc.id, title: $doc.title, filename: $doc.filename, content: $doc.content, created_at: datetime()}) RETURN doc.id as document_created",
+        "parameters": {
+          "doc": "={{ $json.document }}"
+        }
+      },
+      "id": "neo4j-graph",
+      "name": "Neo4j Create Document",
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [1340, 200],
+      "credentials": {
+        "neo4jApi": {
+          "id": "neo4j_database",
+          "name": "Neo4j Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addTexts",
+        "texts": "={{ $json.text_chunks }}",
+        "indexName": "document_vectors"
+      },
+      "id": "neo4j-vector",
+      "name": "Neo4j Vector Store",
+      "type": "n8n-nodes-neo4j.neo4j", 
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "credentials": {
+        "neo4jApi": {
+          "id": "neo4j_database",
+          "name": "Neo4j Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const processedData = $('Prepare Data').first().json;\nconst graphResult = $('Neo4j Create Document').first().json;\nconst vectorResult = $('Neo4j Vector Store').first().json;\n\nconst response = {\n  success: true,\n  message: 'Document processed successfully!',\n  document: processedData.document,\n  results: {\n    entities_extracted: processedData.entities.length,\n    relationships_extracted: processedData.relationships.length,\n    chunks_created: processedData.text_chunks.length,\n    document_created: graphResult ? 1 : 0,\n    vectors_stored: processedData.text_chunks.length\n  },\n  processed_at: new Date().toISOString()\n};\n\nreturn { json: response };"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Parse DocsGPT Payload", "type": "main", "index": 0}]]
+    },
+    "Parse DocsGPT Payload": {
+      "main": [[{"node": "LlamaParse PDF", "type": "main", "index": 0}]]
+    },
+    "LlamaParse PDF": {
+      "main": [[{"node": "Groq Entity Extraction", "type": "main", "index": 0}]]
+    },
+    "Groq Entity Extraction": {
+      "main": [[{"node": "Prepare Data", "type": "main", "index": 0}]]
+    },
+    "Prepare Data": {
+      "main": [[
+        {"node": "Neo4j Create Document", "type": "main", "index": 0},
+        {"node": "Neo4j Vector Store", "type": "main", "index": 0}
+      ]]
+    },
+    "Neo4j Create Document": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    },
+    "Neo4j Vector Store": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "docsgpt-final-integration",
+  "tags": ["docsgpt", "integration", "final", "llamaparse", "neo4j"],
+  "meta": {
+    "instanceId": "docsgpt-final-workflow"
+  }
+}

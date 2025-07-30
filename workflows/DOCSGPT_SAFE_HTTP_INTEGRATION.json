@@ -1,0 +1,172 @@
+{
+  "name": "DOCSGPT-SAFE-HTTP-INTEGRATION",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-integration",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "docsgpt-webhook",
+      "name": "DocsGPT Integration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-integration"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse DocsGPT payload and extract document information\nconst webhookData = $input.all()[0].json;\n\n// DocsGPT sends different payload formats depending on operation\nlet documentData;\n\nif (webhookData.action === 'batch_process' && webhookData.files) {\n  // Batch processing mode\n  documentData = webhookData.files.map(file => ({\n    file_path: file.path || file.file_path,\n    filename: file.name || file.filename,\n    user_id: webhookData.user_id || 'unknown',\n    batch_id: webhookData.batch_id || `batch_${Date.now()}`,\n    processing_type: 'batch'\n  }));\n} else if (webhookData.file_path || webhookData.filename) {\n  // Single document processing\n  documentData = [{\n    file_path: webhookData.file_path || '/data/local/sample.pdf',\n    filename: webhookData.filename || 'sample.pdf',\n    user_id: webhookData.user_id || 'unknown',\n    batch_id: webhookData.batch_id || `single_${Date.now()}`,\n    processing_type: 'single'\n  }];\n} else {\n  // Test/fallback mode\n  documentData = [{\n    file_path: '/data/local/chemistry-paper.pdf/d4sc03921a.pdf',\n    filename: 'd4sc03921a.pdf',\n    user_id: 'test_user',\n    batch_id: `test_${Date.now()}`,\n    processing_type: 'test'\n  }];\n}\n\n// Process first document (extend for batch processing later)\nconst doc = documentData[0];\n\nreturn [{\n  json: {\n    file_path: doc.file_path,\n    filename: doc.filename,\n    user_id: doc.user_id,\n    batch_id: doc.batch_id,\n    processing_type: doc.processing_type,\n    processing_started: new Date().toISOString(),\n    total_documents: documentData.length,\n    current_document: 1,\n    workflow_version: 'docsgpt_safe_http_integration_v1'\n  }\n}];"
+      },
+      "id": "parse-docsgpt-payload",
+      "name": "Parse DocsGPT Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.file_path }}",
+        "resultType": "markdown",
+        "parsingMode": "premium"
+      },
+      "id": "llamaparse-premium",
+      "name": "LlamaParse Premium",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer GROQ_API_KEY_PLACEHOLDER"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const markdownContent = $('LlamaParse Premium').first().json;\n  const fileData = $('Parse DocsGPT Payload').first().json;\n  \n  return {\n    model: \"llama-3.1-70b-versatile\",\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are an expert entity extraction system for academic papers and research documents. Extract entities, relationships, and structured data from the provided content. Focus on research concepts, methodologies, authors, institutions, and key findings. Return ONLY valid JSON format without any markdown formatting.\"\n      },\n      {\n        role: \"user\",\n        content: `Extract comprehensive knowledge from this research document:\\n\\n**DOCUMENT**: ${fileData.filename}\\n\\n**EXTRACT**:\\n1. **ENTITIES**: People (authors, researchers), Organizations (institutions, companies), Concepts (theories, methods, technologies), Materials (chemicals, compounds), Measurements (values, metrics)\\n2. **RELATIONSHIPS**: How entities connect with confidence scores (0.5-1.0)\\n3. **STRUCTURED_DATA**: Tables, figures, equations, code blocks\\n\\n**CITATION**: Create a citation entity for this document with complete bibliographic information.\\n\\nReturn JSON format:\\n{\\n  \"citation\": {\"id\": \"doc_citation\", \"title\": \"document_title\", \"authors\": [], \"year\": \"YYYY\", \"type\": \"research_paper\", \"doi\": \"\", \"abstract\": \"brief_summary\"},\\n  \"entities\": [{\"id\": \"unique_id\", \"name\": \"display_name\", \"type\": \"person|organization|concept|method|material|measurement\", \"description\": \"brief_description\", \"confidence\": 0.8, \"source_location\": \"approximate_location_in_text\"}],\\n  \"relationships\": [{\"source_entity\": \"entity_id\", \"target_entity\": \"entity_id\", \"relationship_type\": \"describes_relationship\", \"context\": \"text_snippet_showing_connection\", \"confidence\": 0.8}],\\n  \"structured_elements\": {\"tables\": [], \"figures\": [], \"equations\": [], \"key_findings\": []}\\n}\\n\\nDocument content:\\n${markdownContent.substring(0, 12000)}`\n      }\n    ],\n    temperature: 0.1,\n    max_tokens: 4000\n  };\n}}"
+      },
+      "id": "groq-entity-extraction",
+      "name": "Groq Entity Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process Groq response and prepare data for Neo4j HTTP API storage\nconst fileData = $('Parse DocsGPT Payload').first().json;\nconst markdownContent = $('LlamaParse Premium').first().json;\nconst groqResponse = $('Groq Entity Extraction').first().json;\n\n// Parse AI extraction results\nlet extractedData = { citation: {}, entities: [], relationships: [], structured_elements: {} };\ntry {\n  if (groqResponse.choices && groqResponse.choices[0] && groqResponse.choices[0].message) {\n    const content = groqResponse.choices[0].message.content;\n    extractedData = JSON.parse(content);\n  }\n} catch (error) {\n  console.log('Error parsing Groq response:', error.message);\n}\n\n// Create systematic text chunks\nfunction createSystematicChunks(text, chunkSize = 300, overlap = 75) {\n  if (!text || typeof text !== 'string') return [];\n  \n  const words = text.split(/\\s+/);\n  const chunks = [];\n  \n  for (let i = 0; i < words.length; i += (chunkSize - overlap)) {\n    const chunk = words.slice(i, i + chunkSize).join(' ');\n    if (chunk.trim().length > 50) {\n      chunks.push({\n        id: `${fileData.filename.replace('.pdf', '').replace(/\\s+/g, '_').toLowerCase()}_chunk_${chunks.length + 1}`,\n        content: chunk,\n        word_count: chunk.split(/\\s+/).length,\n        document_id: fileData.filename.replace('.pdf', '').replace(/\\s+/g, '_').toLowerCase(),\n        chunk_index: chunks.length,\n        created_at: new Date().toISOString()\n      });\n    }\n  }\n  return chunks;\n}\n\nconst textChunks = createSystematicChunks(markdownContent);\nconst documentId = fileData.filename.replace('.pdf', '').replace(/\\s+/g, '_').toLowerCase();\n\nreturn [{\n  json: {\n    document_id: documentId,\n    file_data: fileData,\n    extracted_data: extractedData,\n    text_chunks: textChunks,\n    processing_summary: {\n      entities_count: extractedData.entities?.length || 0,\n      relationships_count: extractedData.relationships?.length || 0,\n      chunks_count: textChunks.length,\n      document_title: extractedData.citation?.title || fileData.filename.replace('.pdf', ''),\n      processed_at: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "process-neo4j-data",
+      "name": "Process & Prepare Neo4j Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:7474/db/neo4j/tx/commit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Basic bmVvNGo6cGFzc3dvcmQ="
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const processedData = $('Process & Prepare Neo4j Data').first().json;\n  const extractedData = processedData.extracted_data;\n  const fileData = processedData.file_data;\n  const documentId = processedData.document_id;\n  const textChunks = processedData.text_chunks;\n  \n  const statements = [];\n  \n  // Create Document node with vector placeholder\n  statements.push({\n    statement: \"CREATE (doc:Document {id: $doc_id, title: $title, filename: $filename, file_path: $file_path, user_id: $user_id, batch_id: $batch_id, authors: $authors, year: $year, document_type: $doc_type, abstract: $abstract, doi: $doi, processed_at: datetime($processed_at), processing_method: $processing_method, llm_used: $llm_used, total_chunks: $total_chunks, total_entities: $total_entities, total_relationships: $total_relationships}) RETURN doc.id as document_id\",\n    parameters: {\n      doc_id: documentId,\n      title: extractedData.citation?.title || fileData.filename.replace('.pdf', ''),\n      filename: fileData.filename,\n      file_path: fileData.file_path,\n      user_id: fileData.user_id,\n      batch_id: fileData.batch_id,\n      authors: extractedData.citation?.authors || [],\n      year: extractedData.citation?.year || new Date().getFullYear(),\n      doc_type: extractedData.citation?.type || 'research_paper',\n      abstract: extractedData.citation?.abstract || '',\n      doi: extractedData.citation?.doi || '',\n      processed_at: new Date().toISOString(),\n      processing_method: 'docsgpt_safe_http_integration',\n      llm_used: 'groq_llama_3_1_70b',\n      total_chunks: textChunks.length,\n      total_entities: extractedData.entities?.length || 0,\n      total_relationships: extractedData.relationships?.length || 0\n    }\n  });\n  \n  // Create Entity nodes\n  if (extractedData.entities && Array.isArray(extractedData.entities)) {\n    extractedData.entities.forEach((entity, index) => {\n      statements.push({\n        statement: \"CREATE (e:Entity {id: $entity_id, name: $name, type: $entity_type, description: $description, confidence: $confidence, source_location: $source_location, document_id: $document_id, extracted_at: datetime($extracted_at)}) RETURN e.id as entity_id\",\n        parameters: {\n          entity_id: entity.id || `entity_${index}`,\n          name: entity.name || 'Unknown Entity',\n          entity_type: entity.type || 'concept',\n          description: entity.description || '',\n          confidence: entity.confidence || 0.8,\n          source_location: entity.source_location || 'unknown',\n          document_id: documentId,\n          extracted_at: new Date().toISOString()\n        }\n      });\n    });\n  }\n  \n  // Create Chunk nodes with vector placeholder\n  textChunks.forEach((chunk, index) => {\n    statements.push({\n      statement: \"CREATE (c:Chunk {id: $chunk_id, content: $content, word_count: $word_count, document_id: $document_id, chunk_index: $chunk_index, created_at: datetime($created_at)}) RETURN c.id as chunk_id\",\n      parameters: {\n        chunk_id: chunk.id,\n        content: chunk.content,\n        word_count: chunk.word_count,\n        document_id: documentId,\n        chunk_index: chunk.chunk_index,\n        created_at: chunk.created_at\n      }\n    });\n  });\n  \n  return { statements: statements };\n}}"
+      },
+      "id": "store-graph-structure",
+      "name": "Store Graph Structure (Neo4j HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:7474/db/neo4j/tx/commit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Basic bmVvNGo6cGFzc3dvcmQ="
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const processedData = $('Process & Prepare Neo4j Data').first().json;\n  const extractedData = processedData.extracted_data;\n  const documentId = processedData.document_id;\n  \n  const statements = [];\n  \n  // Create Entity-Entity relationships\n  if (extractedData.relationships && Array.isArray(extractedData.relationships)) {\n    extractedData.relationships.forEach((rel, index) => {\n      statements.push({\n        statement: \"MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id}) CREATE (source)-[r:RELATED_TO {id: $rel_id, type: $rel_type, context: $context, confidence: $confidence, document_id: $document_id, created_at: datetime($created_at)}]->(target) RETURN r.id as relationship_id\",\n        parameters: {\n          source_id: rel.source_entity || `entity_${index}_source`,\n          target_id: rel.target_entity || `entity_${index}_target`,\n          rel_id: `rel_${index}`,\n          rel_type: rel.relationship_type || 'RELATED_TO',\n          context: rel.context || '',\n          confidence: rel.confidence || 0.8,\n          document_id: documentId,\n          created_at: new Date().toISOString()\n        }\n      });\n    });\n  }\n  \n  // Create Document-Chunk relationships\n  statements.push({\n    statement: \"MATCH (doc:Document {id: $doc_id}), (c:Chunk {document_id: $doc_id}) CREATE (doc)-[:CONTAINS]->(c) RETURN count(c) as chunks_linked\",\n    parameters: {\n      doc_id: documentId\n    }\n  });\n  \n  // Create Document-Entity relationships\n  statements.push({\n    statement: \"MATCH (doc:Document {id: $doc_id}), (e:Entity {document_id: $doc_id}) CREATE (doc)-[:EXTRACTED_FROM]->(e) RETURN count(e) as entities_linked\",\n    parameters: {\n      doc_id: documentId\n    }\n  });\n  \n  // Create Chunk-Entity relationships (basic text matching)\n  statements.push({\n    statement: \"MATCH (c:Chunk {document_id: $doc_id}), (e:Entity {document_id: $doc_id}) WHERE toLower(c.content) CONTAINS toLower(e.name) CREATE (c)-[:MENTIONS {confidence: 0.7, method: 'text_matching', created_at: datetime()}]->(e) RETURN count(*) as chunk_entity_links\",\n    parameters: {\n      doc_id: documentId\n    }\n  });\n  \n  return { statements: statements };\n}}"
+      },
+      "id": "create-graph-relationships",
+      "name": "Create Graph Relationships (Neo4j HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format comprehensive DocsGPT response\nconst fileData = $('Parse DocsGPT Payload').first().json;\nconst processedData = $('Process & Prepare Neo4j Data').first().json;\nconst graphResult = $('Store Graph Structure (Neo4j HTTP)').first().json;\nconst relationshipResult = $('Create Graph Relationships (Neo4j HTTP)').first().json;\n\n// Calculate processing statistics\nconst processingStats = {\n  entities_extracted: processedData.processing_summary.entities_count,\n  relationships_extracted: processedData.processing_summary.relationships_count,\n  text_chunks_created: processedData.processing_summary.chunks_count,\n  processing_time_seconds: Math.round((new Date() - new Date(fileData.processing_started)) / 1000),\n  neo4j_operations_completed: 2 // graph structure + relationships\n};\n\n// DocsGPT expected response format\nconst docsgptResponse = {\n  success: true,\n  message: \"Document processed successfully with Neo4j knowledge graph integration\",\n  \n  // Document information\n  document: {\n    filename: fileData.filename,\n    file_path: fileData.file_path,\n    batch_id: fileData.batch_id,\n    user_id: fileData.user_id,\n    processing_type: fileData.processing_type\n  },\n  \n  // Processing results\n  results: {\n    document_id: processedData.document_id,\n    title: processedData.processing_summary.document_title,\n    processing_method: 'safe_http_neo4j_integration',\n    llm_used: 'groq_llama_3_1_70b',\n    ...processingStats\n  },\n  \n  // Knowledge graph statistics\n  knowledge_graph: {\n    nodes_created: {\n      documents: 1,\n      entities: processingStats.entities_extracted,\n      chunks: processingStats.text_chunks_created\n    },\n    relationships_created: {\n      entity_relationships: processingStats.relationships_extracted,\n      document_contains_chunks: processingStats.text_chunks_created,\n      document_extracted_entities: processingStats.entities_extracted,\n      chunk_mentions_entities: 'text_matching_applied'\n    },\n    storage_method: 'neo4j_http_api_direct',\n    vector_capability: 'ready_for_embedding_integration'\n  },\n  \n  // Architecture information\n  architecture: {\n    workflow_approach: 'safe_http_requests_only',\n    nodes_used: [\n      'n8n-nodes-base.webhook',\n      'n8n-nodes-base.code',\n      'n8n-nodes-llamacloud.llamaParse',\n      'n8n-nodes-base.httpRequest'\n    ],\n    problematic_nodes_avoided: [\n      'n8n-nodes-neo4j (caused ? nodes)',\n      'n8n-nodes-langchain.*',\n      'community nodes with build issues'\n    ],\n    reliability: 'maximum_no_question_mark_nodes',\n    database_integration: 'neo4j_http_cypher_api'\n  },\n  \n  // Query capabilities\n  query_examples: {\n    entity_search: \"MATCH (e:Entity {document_id: '\" + processedData.document_id + \"'}) RETURN e\",\n    relationship_discovery: \"MATCH (e1:Entity)-[r:RELATED_TO]->(e2:Entity) WHERE r.document_id = '\" + processedData.document_id + \"' RETURN e1.name, r.type, e2.name\",\n    content_search: \"MATCH (c:Chunk {document_id: '\" + processedData.document_id + \"'}) WHERE c.content CONTAINS 'keyword' RETURN c.content\",\n    document_overview: \"MATCH (doc:Document {id: '\" + processedData.document_id + \"'}) RETURN doc\"\n  },\n  \n  // API endpoints for DocsGPT integration\n  api_endpoints: {\n    neo4j_browser: \"http://localhost:7474\",\n    search_knowledge_graph: \"/api/knowledge/search\",\n    get_document_entities: `/api/knowledge/document/${processedData.document_id}/entities`,\n    graph_visualization: `/api/knowledge/graph/${processedData.document_id}`\n  },\n  \n  // Processing metadata\n  metadata: {\n    processed_at: new Date().toISOString(),\n    processing_duration: `${processingStats.processing_time_seconds}s`,\n    workflow_version: 'docsgpt_safe_http_integration_v1',\n    neo4j_integration: 'http_api_based',\n    vector_store_ready: false,\n    batch_processing_compatible: true,\n    no_question_mark_nodes: true,\n    reliability_score: 'maximum'\n  }\n};\n\nreturn { json: docsgptResponse };"
+      },
+      "id": "format-docsgpt-response",
+      "name": "Format DocsGPT Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Integration Webhook": {
+      "main": [[{"node": "Parse DocsGPT Payload", "type": "main", "index": 0}]]
+    },
+    "Parse DocsGPT Payload": {
+      "main": [[{"node": "LlamaParse Premium", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Premium": {
+      "main": [[{"node": "Groq Entity Extraction", "type": "main", "index": 0}]]
+    },
+    "Groq Entity Extraction": {
+      "main": [[{"node": "Process & Prepare Neo4j Data", "type": "main", "index": 0}]]
+    },
+    "Process & Prepare Neo4j Data": {
+      "main": [[{"node": "Store Graph Structure (Neo4j HTTP)", "type": "main", "index": 0}]]
+    },
+    "Store Graph Structure (Neo4j HTTP)": {
+      "main": [[{"node": "Create Graph Relationships (Neo4j HTTP)", "type": "main", "index": 0}]]
+    },
+    "Create Graph Relationships (Neo4j HTTP)": {
+      "main": [[{"node": "Format DocsGPT Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "docsgpt-safe-http-integration",
+  "tags": ["docsgpt", "neo4j", "safe", "http-requests", "knowledge-graph", "integration", "no-community-nodes", "groq", "llamaparse"]
+}

@@ -1,0 +1,274 @@
+{
+  "name": "Enhanced Document Processing with LlamaParse",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "llamaparse-document-upload",
+        "responseMode": "responseNode",
+        "responseData": "allEntries",
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true
+      },
+      "id": "webhook-document-upload",
+      "name": "Document Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "llamaparse-upload"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Process incoming document upload from DocsGPT with proper webhook data access\n// ⚠️ CRITICAL: Webhook data is at items[0].json.body, not items[0].json\n\nconst webhookData = items[0].json.body;  // ✅ CORRECT webhook data access\nconst headers = items[0].json.headers;\nconst binaryData = items[0].binary;\n\ntry {\n  // Validate document upload\n  if (!binaryData || !binaryData.data) {\n    throw new Error('No document data received');\n  }\n\n  // Extract document metadata\n  const filename = webhookData.filename || 'unknown.pdf';\n  const title = webhookData.title || filename.replace('.pdf', '');\n  const userId = webhookData.user_id || 'anonymous';\n  const metadata = webhookData.metadata || {};\n\n  // Validate file type\n  const mimeType = binaryData.mimeType || 'application/pdf';\n  if (!mimeType.includes('pdf')) {\n    throw new Error(`Unsupported file type: ${mimeType}. Only PDF files are supported.`);\n  }\n\n  // Generate document ID\n  const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n  // Prepare for LlamaParse processing\n  const result = {\n    document_id: documentId,\n    filename: filename,\n    title: title,\n    user_id: userId,\n    file_size: binaryData.data ? binaryData.data.length : 0,\n    content_type: mimeType,\n    metadata: metadata,\n    processing_started: new Date().toISOString(),\n    source: 'docsgpt_upload'\n  };\n\n  return [{\n    json: result,\n    binary: {\n      document: binaryData\n    }\n  }];\n\n} catch (error) {\n  return [{\n    json: {\n      success: false,\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}",
+        "onError": "continueRegularOutput"
+      },
+      "id": "process-document-upload",
+      "name": "Process Document Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.LLAMAPARSE_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.document }}"
+            },
+            {
+              "name": "result_type",
+              "value": "json"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            },
+            {
+              "name": "language", 
+              "value": "en"
+            }
+          ]
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "alwaysOutputData": true,
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "llamaparse-api-call",
+      "name": "LlamaParse API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript", 
+        "jsCode": "// Transform LlamaParse output into our structured format\n// and extract entities using Claude-style prompting\n\nconst documentData = items[0].json;\nconst llamaParseResult = documentData.result || documentData;\n\ntry {\n  // Extract structured content from LlamaParse\n  const structuredContent = {\n    text: llamaParseResult.text || '',\n    tables: (llamaParseResult.tables || []).map((table, index) => ({\n      id: `table_${index + 1}`,\n      caption: table.caption || `Table ${index + 1}`,\n      markdown: table.markdown || '',\n      html: table.html || '',\n      columns: table.columns || [],\n      row_count: table.row_count || 0,\n      location: {\n        page: table.page || 1,\n        bbox: table.bbox || [],\n        line_start: table.line_start,\n        line_end: table.line_end,\n        section: table.section || '',\n        paragraph_context: table.paragraph_context || ''\n      },\n      table_type: table.table_type || 'data',\n      has_headers: table.has_headers !== false\n    })),\n    figures: (llamaParseResult.figures || []).map((figure, index) => ({\n      id: `figure_${index + 1}`,\n      caption: figure.caption || `Figure ${index + 1}`,\n      figure_type: figure.figure_type || 'diagram',\n      ocr_text: figure.ocr_text || '',\n      image_data: figure.image_data,\n      location: {\n        page: figure.page || 1,\n        bbox: figure.bbox || [],\n        section: figure.section || '',\n        paragraph_context: figure.paragraph_context || ''\n      },\n      surrounding_text: figure.surrounding_text || '',\n      referenced_in_text: figure.referenced_in_text || []\n    })),\n    formulas: (llamaParseResult.formulas || []).map((formula, index) => ({\n      id: `formula_${index + 1}`,\n      latex: formula.latex || '',\n      context: formula.context || '',\n      domain: formula.domain || 'general_mathematics',\n      equation_number: formula.equation_number || '',\n      variables_defined: formula.variables_defined || [],\n      location: {\n        page: formula.page || 1,\n        line_start: formula.line_number,\n        section: formula.section || '',\n        paragraph_context: formula.paragraph_context || ''\n      },\n      referenced_in_text: formula.referenced_in_text || []\n    })),\n    metadata: llamaParseResult.metadata || {}\n  };\n\n  // TODO: Here you would typically call Claude/GPT for entity extraction\n  // For now, create mock entities based on the structured content\n  const mockEntities = [\n    {\n      id: `${items[0].json.document_id}_main_topic`,\n      name: 'Main Research Topic',\n      type: 'concept',\n      confidence: 0.9,\n      properties: {\n        extracted_from: 'document_title',\n        document_section: 'title'\n      }\n    }\n  ];\n\n  const mockRelationships = [\n    {\n      source: `${items[0].json.document_id}_main_topic`,\n      target: `citation_${items[0].json.document_id}`,\n      type: 'discussed_in',\n      confidence: 0.95,\n      context: 'Main topic discussed in this paper'\n    }\n  ];\n\n  // Prepare enhanced document info\n  const documentInfo = {\n    id: items[0].json.document_id,\n    title: items[0].json.title,\n    type: 'academic_paper',\n    path: items[0].json.filename,\n    authors: [], // Would extract from parsed content\n    year: new Date().getFullYear(),\n    processed_with_llamaparse: true,\n    processing_timestamp: new Date().toISOString()\n  };\n\n  return [{\n    json: {\n      // Original document metadata\n      document_id: items[0].json.document_id,\n      filename: items[0].json.filename,\n      title: items[0].json.title,\n      user_id: items[0].json.user_id,\n      \n      // LlamaParse results\n      llamaparse_result: structuredContent,\n      \n      // Extracted entities (mock for now)\n      extracted_entities: mockEntities,\n      extracted_relationships: mockRelationships,\n      \n      // Enhanced document info\n      document_info: documentInfo,\n      \n      // Processing metadata\n      processing_metadata: {\n        llamaparse_processing_time: llamaParseResult.metadata?.processing_time || 0,\n        total_pages: llamaParseResult.metadata?.total_pages || 0,\n        elements_found: {\n          tables: structuredContent.tables.length,\n          figures: structuredContent.figures.length,\n          formulas: structuredContent.formulas.length\n        },\n        processed_at: new Date().toISOString()\n      }\n    }\n  }];\n\n} catch (error) {\n  return [{\n    json: {\n      success: false,\n      error: `Entity extraction failed: ${error.message}`,\n      document_id: items[0].json.document_id,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}",
+        "onError": "continueRegularOutput"
+      },
+      "id": "extract-entities-and-structure",\n      "name": "Extract Entities & Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "command": "uv",
+        "args": ["run", "python", "src/server/main.py"],
+        "workingDirectory": "/Users/aimiegarces/Agents",
+        "operation": "store_entities_with_structure",
+        "parameters": {
+          "entities": "={{ $json.extracted_entities }}",
+          "relationships": "={{ $json.extracted_relationships }}",
+          "document_info": "={{ $json.document_info }}",
+          "structured_content": "={{ $json.llamaparse_result }}"
+        },
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true
+      },
+      "id": "enhanced-mcp-storage",
+      "name": "Enhanced MCP Storage",
+      "type": "n8n-community-nodes.mcp",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Format the complete processing response for DocsGPT\n\nconst mcpResult = items[0].json;\nconst originalData = items[0].json;\n\ntry {\n  // Create comprehensive response\n  const response = {\n    success: !mcpResult.error && mcpResult.success !== false,\n    document_id: originalData.document_id,\n    filename: originalData.filename,\n    title: originalData.title,\n    user_id: originalData.user_id,\n    \n    // Processing results\n    processing_results: {\n      entities_stored: mcpResult.entities_created || 0,\n      relationships_stored: mcpResult.relationships_created || 0,\n      tables_stored: mcpResult.tables_stored || 0,\n      figures_stored: mcpResult.figures_stored || 0,\n      formulas_stored: mcpResult.formulas_stored || 0,\n      total_elements: mcpResult.total_elements || 0\n    },\n    \n    // Processing metadata\n    processing_time: Date.now() - new Date(originalData.processing_started).getTime(),\n    llamaparse_elements: {\n      tables_found: originalData.llamaparse_result?.tables?.length || 0,\n      figures_found: originalData.llamaparse_result?.figures?.length || 0,\n      formulas_found: originalData.llamaparse_result?.formulas?.length || 0\n    },\n    \n    // Status and errors\n    errors: mcpResult.errors || [],\n    warnings: [],\n    \n    // Completion timestamp\n    completed_at: new Date().toISOString(),\n    \n    // Message for UI display\n    message: mcpResult.success \n      ? `Successfully processed ${originalData.filename} with ${mcpResult.total_elements || 0} total elements stored in knowledge graph`\n      : `Processing completed with ${(mcpResult.errors || []).length} errors`\n  };\n  \n  // Add warnings for partial failures\n  if (mcpResult.errors && mcpResult.errors.length > 0) {\n    response.warnings.push(`${mcpResult.errors.length} errors occurred during processing`);\n  }\n  \n  if (response.processing_results.total_elements === 0) {\n    response.warnings.push('No structured elements were extracted from the document');\n  }\n\n  return [{ json: response }];\n\n} catch (error) {\n  return [{\n    json: {\n      success: false,\n      document_id: originalData.document_id || 'unknown',\n      error: `Response formatting failed: ${error.message}`,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}",
+        "onError": "continueRegularOutput"
+      },
+      "id": "format-processing-response",
+      "name": "Format Processing Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseBody": "={{ JSON.stringify($json) }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          },
+          "responseCode": "={{ $json.success ? 200 : 500 }}"
+        }
+      },
+      "id": "respond-to-docsgpt",
+      "name": "Respond to DocsGPT",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Error handling node - processes any errors from the workflow\n\nconst errorData = items[0].json;\nconst hasError = errorData.error || !errorData.success;\n\nif (hasError) {\n  // Log error details\n  console.error('LlamaParse workflow error:', {\n    error: errorData.error,\n    document_id: errorData.document_id,\n    step: 'workflow_error_handler',\n    timestamp: new Date().toISOString()\n  });\n  \n  // Return user-friendly error response\n  return [{\n    json: {\n      success: false,\n      error: 'Document processing failed',\n      details: errorData.error || 'Unknown error occurred',\n      document_id: errorData.document_id || 'unknown',\n      timestamp: new Date().toISOString(),\n      support_message: 'Please try uploading the document again. If the problem persists, contact support.'\n    }\n  }];\n} else {\n  // Pass through successful results\n  return [{ json: errorData }];\n}",
+        "onError": "continueRegularOutput"
+      },\n      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 500]
+    }
+  ],
+  "connections": {
+    "Document Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Document Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Document Upload": {
+      "main": [
+        [
+          {
+            "node": "LlamaParse API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LlamaParse API Call": {
+      "main": [
+        [
+          {
+            "node": "Extract Entities & Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Entities & Structure": {
+      "main": [
+        [
+          {
+            "node": "Enhanced MCP Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced MCP Storage": {
+      "main": [
+        [
+          {
+            "node": "Format Processing Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Processing Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to DocsGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Respond to DocsGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "llamaparse",
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    },
+    {
+      "name": "enhanced-processing",
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    },
+    {
+      "name": "knowledge-graph",
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

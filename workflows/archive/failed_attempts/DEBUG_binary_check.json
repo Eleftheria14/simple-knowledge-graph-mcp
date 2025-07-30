@@ -1,0 +1,55 @@
+{
+  "name": "DEBUG-Binary-Check",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-json-debug-test.pdf/d4sc03921a.pdf",
+        "options": {}
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// CHECK: Do we have binary data?\nconsole.log('=== BINARY DATA CHECK ===');\nconsole.log('$binary exists:', !!$binary);\nconsole.log('$binary.data exists:', !!($binary && $binary.data));\n\nif ($binary && $binary.data) {\n  console.log('Binary data type:', typeof $binary.data);\n  console.log('Binary data length:', $binary.data.length);\n  console.log('Binary data constructor:', $binary.data.constructor.name);\n  \n  return [{\n    json: {\n      binary_status: 'SUCCESS',\n      data_type: typeof $binary.data,\n      data_length: $binary.data.length,\n      has_binary: true\n    }\n  }];\n} else {\n  console.log('ERROR: No binary data found!');\n  return [{\n    json: {\n      binary_status: 'FAILED',\n      has_binary: false,\n      error: 'No binary data available'\n    }\n  }];\n}"
+      },
+      "id": "check-binary",
+      "name": "Check Binary Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Check Binary Data", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "debug",
+  "meta": {},
+  "id": "debug-binary-check",
+  "tags": []
+}

@@ -1,0 +1,348 @@
+{
+  "name": "LlamaParse + MCP Knowledge Graph Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "filesAdded"
+      },
+      "id": "a0b1c2d3-e4f5-6789-abcd-ef0123456789",
+      "name": "File Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "filePath",
+        "extractValue": "{{ $json.path }}"
+      },
+      "id": "b1c2d3e4-f5g6-789a-bcde-f01234567890",
+      "name": "Extract File Path",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.llamaParseApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            },
+            {
+              "name": "language",
+              "value": "en"
+            }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "file"
+      },
+      "id": "c2d3e4f5-g6h7-89ab-cdef-012345678901",
+      "name": "Upload to LlamaParse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 30
+      },
+      "id": "d3e4f5g6-h7i8-9abc-def0-123456789012",
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/job/{{ $json.id }}/result/markdown",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.llamaParseApi.apiKey }}"
+            }
+          ]
+        }
+      },
+      "id": "e4f5g6h7-i8j9-abcd-ef01-234567890123",
+      "name": "Get Parse Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process LlamaParse markdown output for MCP storage\nconst items = [];\n\nfor (const item of $input.all()) {\n  const parseResult = item.json;\n  \n  // Extract document metadata\n  const documentInfo = {\n    id: `doc_${Date.now()}`,\n    title: parseResult.title || 'Parsed Document',\n    source: item.json.originalFile || 'unknown',\n    processed_with_llamaparse: true,\n    processing_time: parseResult.processing_time || 0,\n    total_pages: parseResult.total_pages || 1\n  };\n  \n  // Process the markdown content\n  const markdownContent = parseResult.markdown || parseResult.text || '';\n  \n  // Extract potential entities from content\n  const entities = extractEntitiesFromMarkdown(markdownContent);\n  \n  // Create systematic text chunks for comprehensive coverage\n  const textChunks = createSystematicChunks(markdownContent, {\n    chunkSize: 300,\n    overlap: 75,\n    title: documentInfo.title\n  });\n  \n  // Extract structured content patterns\n  const structuredContent = extractStructuredContent(markdownContent);\n  \n  items.push({\n    json: {\n      documentInfo,\n      entities,\n      textChunks,\n      structuredContent,\n      rawMarkdown: markdownContent\n    }\n  });\n}\n\nfunction extractEntitiesFromMarkdown(markdown) {\n  const entities = [];\n  const relationships = [];\n  \n  // Extract headings as potential entities\n  const headingRegex = /^#+\\s+(.+)$/gm;\n  let match;\n  let entityId = 1;\n  \n  while ((match = headingRegex.exec(markdown)) !== null) {\n    entities.push({\n      id: `entity_${entityId++}`,\n      name: match[1].trim(),\n      type: 'concept',\n      properties: {\n        section: 'heading',\n        level: match[0].split('#').length - 1\n      },\n      confidence: 0.8\n    });\n  }\n  \n  // Extract tables as entities\n  const tableRegex = /\\|(.+)\\|/g;\n  const tables = [];\n  let tableMatch;\n  \n  while ((tableMatch = tableRegex.exec(markdown)) !== null) {\n    if (!tables.some(t => t.content === tableMatch[0])) {\n      entities.push({\n        id: `table_${entityId++}`,\n        name: `Table: ${tableMatch[1].trim()}`,\n        type: 'table',\n        properties: {\n          raw_content: tableMatch[0],\n          data_type: 'structured'\n        },\n        confidence: 0.9\n      });\n      tables.push({ content: tableMatch[0] });\n    }\n  }\n  \n  return { entities, relationships };\n}\n\nfunction createSystematicChunks(text, options) {\n  const chunks = [];\n  const words = text.split(/\\s+/);\n  const chunkSize = options.chunkSize || 300;\n  const overlap = options.overlap || 75;\n  \n  for (let i = 0; i < words.length; i += chunkSize - overlap) {\n    const chunkWords = words.slice(i, i + chunkSize);\n    const chunkText = chunkWords.join(' ');\n    \n    if (chunkText.trim().length > 50) {\n      chunks.push({\n        id: `chunk_${i / (chunkSize - overlap)}`,\n        text: chunkText,\n        metadata: {\n          word_start: i,\n          word_end: i + chunkWords.length,\n          chunk_index: Math.floor(i / (chunkSize - overlap)),\n          source_document: options.title,\n          chunk_type: 'systematic_overlap'\n        }\n      });\n    }\n  }\n  \n  return chunks;\n}\n\nfunction extractStructuredContent(markdown) {\n  const structured = {\n    tables: [],\n    figures: [],\n    formulas: [],\n    codeBlocks: []\n  };\n  \n  // Extract mermaid diagrams as figures\n  const mermaidRegex = /```mermaid\\n([\\s\\S]*?)\\n```/g;\n  let mermaidMatch;\n  \n  while ((mermaidMatch = mermaidRegex.exec(markdown)) !== null) {\n    structured.figures.push({\n      id: `figure_${structured.figures.length + 1}`,\n      type: 'diagram',\n      content: mermaidMatch[1],\n      format: 'mermaid'\n    });\n  }\n  \n  // Extract mathematical formulas\n  const formulaRegex = /\\$\\$([^$]+)\\$\\$/g;\n  let formulaMatch;\n  \n  while ((formulaMatch = formulaRegex.exec(markdown)) !== null) {\n    structured.formulas.push({\n      id: `formula_${structured.formulas.length + 1}`,\n      latex: formulaMatch[1].trim(),\n      context: 'mathematical_equation'\n    });\n  }\n  \n  // Extract code blocks\n  const codeRegex = /```(\\w+)?\\n([\\s\\S]*?)\\n```/g;\n  let codeMatch;\n  \n  while ((codeMatch = codeRegex.exec(markdown)) !== null) {\n    if (codeMatch[1] !== 'mermaid') {\n      structured.codeBlocks.push({\n        id: `code_${structured.codeBlocks.length + 1}`,\n        language: codeMatch[1] || 'text',\n        content: codeMatch[2]\n      });\n    }\n  }\n  \n  return structured;\n}\n\nreturn items;"
+      },
+      "id": "f5g6h7i8-j9k0-bcde-f012-345678901234",
+      "name": "Process Parse Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "command": "uv",
+        "arguments": "run python src/server/main.py",
+        "workingDirectory": "/Users/aimiegarces/Agents"
+      },
+      "id": "g6h7i8j9-k0l1-cdef-0123-456789012345",
+      "name": "Call MCP Store Entities",
+      "type": "n8n-community-nodes.mcp",
+      "typeVersion": 1,
+      "position": [1640, 200],
+      "parameters": {
+        "mcpTool": "store_entities",
+        "toolParameters": {
+          "entities": "{{ $json.entities.entities }}",
+          "relationships": "{{ $json.entities.relationships }}",
+          "document_info": "{{ $json.documentInfo }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "uv",
+        "arguments": "run python src/server/main.py",
+        "workingDirectory": "/Users/aimiegarces/Agents"
+      },
+      "id": "h7i8j9k0-l1m2-def0-1234-567890123456",
+      "name": "Call MCP Store Vectors",
+      "type": "n8n-community-nodes.mcp",
+      "typeVersion": 1,
+      "position": [1640, 400],
+      "parameters": {
+        "mcpTool": "store_vectors",
+        "toolParameters": {
+          "vectors": "{{ $json.textChunks }}",
+          "document_info": "{{ $json.documentInfo }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "uv",
+        "arguments": "run python src/server/main.py",
+        "workingDirectory": "/Users/aimiegarces/Agents"
+      },
+      "id": "i8j9k0l1-m2n3-ef01-2345-678901234567",
+      "name": "Call MCP Store Structured",
+      "type": "n8n-community-nodes.mcp",
+      "typeVersion": 1,
+      "position": [1640, 600],
+      "parameters": {
+        "mcpTool": "store_entities_with_structure",
+        "toolParameters": {
+          "entities": "{{ $json.entities.entities }}",
+          "relationships": "{{ $json.entities.relationships }}",
+          "structured_content": "{{ $json.structuredContent }}",
+          "document_info": "{{ $json.documentInfo }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "j9k0l1m2-n3o4-f012-3456-789012345678",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1860, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive processing report\nconst items = [];\n\nfor (const item of $input.all()) {\n  const report = {\n    success: true,\n    document_id: item.json.documentInfo?.id || 'unknown',\n    document_title: item.json.documentInfo?.title || 'Unknown Document',\n    processing_summary: {\n      entities_stored: item.json.entities?.entities?.length || 0,\n      relationships_stored: item.json.entities?.relationships?.length || 0,\n      text_chunks_stored: item.json.textChunks?.length || 0,\n      structured_elements: {\n        tables: item.json.structuredContent?.tables?.length || 0,\n        figures: item.json.structuredContent?.figures?.length || 0,\n        formulas: item.json.structuredContent?.formulas?.length || 0,\n        code_blocks: item.json.structuredContent?.codeBlocks?.length || 0\n      }\n    },\n    processing_timestamp: new Date().toISOString(),\n    llamaparse_enhanced: true\n  };\n  \n  items.push({ json: report });\n}\n\nreturn items;"
+      },
+      "id": "k0l1m2n3-o4p5-0123-4567-890123456789",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, 400]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "processing_reports/llamaparse_report_{{ new Date().toISOString().split('T')[0] }}.json",
+        "fileContent": "{{ JSON.stringify($json, null, 2) }}",
+        "options": {
+          "createDirectories": true
+        }
+      },
+      "id": "l1m2n3o4-p5q6-1234-5678-901234567890",
+      "name": "Save Report",
+      "type": "n8n-nodes-base.writeJsonFile",
+      "typeVersion": 1,
+      "position": [2300, 400]
+    }
+  ],
+  "connections": {
+    "File Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract File Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract File Path": {
+      "main": [
+        [
+          {
+            "node": "Upload to LlamaParse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to LlamaParse": {
+      "main": [
+        [
+          {
+            "node": "Wait for Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Processing": {
+      "main": [
+        [
+          {
+            "node": "Get Parse Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Parse Results": {
+      "main": [
+        [
+          {
+            "node": "Process Parse Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Parse Results": {
+      "main": [
+        [
+          {
+            "node": "Call MCP Store Entities",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call MCP Store Vectors", 
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call MCP Store Structured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call MCP Store Entities": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call MCP Store Vectors": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Call MCP Store Structured": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Save Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["llamaparse", "mcp", "knowledge-graph", "document-processing"],
+  "triggerCount": 1,
+  "updatedAt": "2025-07-26T19:00:00.000Z",
+  "versionId": "1"
+}

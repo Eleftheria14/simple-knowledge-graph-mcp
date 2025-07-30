@@ -1,0 +1,199 @@
+{
+  "name": "FIXED-GROQ-WORKFLOW",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fixed-groq-workflow",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "fixed-groq-workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract file path from webhook payload\nconst webhookData = $input.all()[0].json;\n\n// Use dynamic file path from DocsGPT or default for testing\nconst filePath = webhookData.file_path || '/data/local/chemistry-paper.pdf/d4sc03921a.pdf';\nconst fileName = webhookData.filename || 'd4sc03921a.pdf';\nconst batchId = webhookData.batch_id || 'fixed-groq-test';\n\nreturn [{\n  json: {\n    file_path: filePath,\n    filename: fileName,\n    batch_id: batchId,\n    processing_started: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "prepare-file-path",
+      "name": "Prepare File Path",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.file_path }}",
+        "resultType": "markdown",
+        "parsingMode": "premium"
+      },
+      "id": "llamaparse-node",
+      "name": "LlamaParse Premium",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer GROQ_API_KEY_PLACEHOLDER"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const markdownContent = $('LlamaParse Premium').first().json;\n  \n  return {\n    model: \"llama-3.1-70b-versatile\",\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are an expert entity extraction system for academic papers. Extract entities, relationships, and structured data from the provided content. Return ONLY valid JSON format without any markdown formatting.\"\n      },\n      {\n        role: \"user\",\n        content: `Analyze this document and extract:\\n\\n1. ENTITIES: concepts, methods, people, organizations, technologies, chemicals, formulas\\n2. RELATIONSHIPS: how entities connect with confidence scores\\n3. STRUCTURED_DATA: tables, figures, equations\\n\\nReturn JSON format:\\n{\\n  \"entities\": [{\"id\": \"string\", \"name\": \"string\", \"type\": \"string\", \"description\": \"string\", \"confidence\": 0.8}],\\n  \"relationships\": [{\"source_entity\": \"string\", \"target_entity\": \"string\", \"relationship_type\": \"string\", \"context\": \"string\", \"confidence\": 0.8}],\\n  \"structured_elements\": {\"tables\": [], \"figures\": [], \"equations\": []}\\n}\\n\\nDocument:\\n${markdownContent}`\n      }\n    ],\n    temperature: 0.1,\n    max_tokens: 4000\n  };\n}}"
+      },
+      "id": "groq-api-call",
+      "name": "Groq AI Entity Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process Groq response and create text chunks\nconst fileData = $('Prepare File Path').first().json;\nconst markdownContent = $('LlamaParse Premium').first().json;\nconst groqResponse = $('Groq AI Entity Extraction').first().json;\n\n// Extract AI results from Groq response\nlet extractedData = { entities: [], relationships: [], structured_elements: {} };\ntry {\n  if (groqResponse.choices && groqResponse.choices[0] && groqResponse.choices[0].message) {\n    const content = groqResponse.choices[0].message.content;\n    extractedData = JSON.parse(content);\n  }\n} catch (error) {\n  console.log('Error parsing Groq response:', error.message);\n  console.log('Raw Groq response:', JSON.stringify(groqResponse, null, 2));\n}\n\n// Create systematic text chunks\nfunction createSystematicChunks(text, chunkSize = 300, overlap = 75) {\n  if (!text || typeof text !== 'string') {\n    return [];\n  }\n  \n  const words = text.split(/\\s+/);\n  const chunks = [];\n  \n  for (let i = 0; i < words.length; i += (chunkSize - overlap)) {\n    const chunk = words.slice(i, i + chunkSize).join(' ');\n    if (chunk.trim().length > 50) {\n      chunks.push({\n        id: `chunk_${chunks.length + 1}`,\n        content: chunk,\n        word_count: chunk.split(/\\s+/).length,\n        start_word: i,\n        end_word: Math.min(i + chunkSize, words.length),\n        metadata: {\n          document: fileData.filename,\n          chunk_index: chunks.length,\n          processing_timestamp: new Date().toISOString()\n        }\n      });\n    }\n  }\n  \n  return chunks;\n}\n\nconst textChunks = createSystematicChunks(markdownContent);\n\nreturn [{\n  json: {\n    batch_id: fileData.batch_id,\n    filename: fileData.filename,\n    total_chunks: textChunks.length,\n    chunks: textChunks,\n    extracted_data: extractedData,\n    groq_response: groqResponse,\n    document_info: {\n      title: fileData.filename.replace('.pdf', ''),\n      type: 'research_paper',\n      file_path: fileData.file_path,\n      processed_by: 'fixed_groq_workflow',\n      processing_timestamp: new Date().toISOString(),\n      llm_used: 'groq_llama_3_1_70b_via_http'\n    }\n  }\n}];"
+      },
+      "id": "process-results",
+      "name": "Process Results & Create Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:7474/db/neo4j/tx/commit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Basic bmVvNGo6cGFzc3dvcmQ="
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const processedData = $('Process Results & Create Chunks').first().json;\n  const extractedData = processedData.extracted_data;\n  const documentInfo = processedData.document_info;\n  \n  const statements = [];\n  \n  // Create document node\n  statements.push({\n    statement: \"MERGE (doc:Document {id: $doc_id}) SET doc.title = $title, doc.type = $type, doc.file_path = $file_path, doc.processed_at = datetime($processed_at), doc.processed_by = $processed_by, doc.llm_used = $llm_used RETURN doc.id as document_id\",\n    parameters: {\n      doc_id: documentInfo.title.replace(/\\s+/g, '_').toLowerCase(),\n      title: documentInfo.title,\n      type: documentInfo.type,\n      file_path: documentInfo.file_path,\n      processed_at: documentInfo.processing_timestamp,\n      processed_by: documentInfo.processed_by,\n      llm_used: documentInfo.llm_used\n    }\n  });\n  \n  // Create entity nodes\n  if (extractedData.entities && Array.isArray(extractedData.entities)) {\n    extractedData.entities.forEach((entity, index) => {\n      statements.push({\n        statement: \"MERGE (e:Entity {id: $entity_id}) SET e.name = $name, e.type = $entity_type, e.description = $description, e.confidence = $confidence RETURN e.id as entity_id\",\n        parameters: {\n          entity_id: entity.id || `entity_${index}`,\n          name: entity.name || 'Unknown',\n          entity_type: entity.type || 'concept',\n          description: entity.description || '',\n          confidence: entity.confidence || 0.8\n        }\n      });\n    });\n  }\n  \n  // Create relationship edges\n  if (extractedData.relationships && Array.isArray(extractedData.relationships)) {\n    extractedData.relationships.forEach((rel, index) => {\n      statements.push({\n        statement: \"MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id}) MERGE (source)-[r:RELATED {type: $rel_type}]->(target) SET r.context = $context, r.confidence = $confidence RETURN r\",\n        parameters: {\n          source_id: rel.source_entity || `entity_${index}_source`,\n          target_id: rel.target_entity || `entity_${index}_target`,\n          rel_type: rel.relationship_type || 'RELATED_TO',\n          context: rel.context || '',\n          confidence: rel.confidence || 0.8\n        }\n      });\n    });\n  }\n  \n  return { statements: statements };\n}}"
+      },
+      "id": "store-in-neo4j",
+      "name": "Store in Neo4j",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/v1/collections",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const processedData = $('Process Results & Create Chunks').first().json;\n  const collectionName = processedData.document_info.title.replace(/\\s+/g, '_').toLowerCase();\n  \n  return {\n    name: collectionName,\n    metadata: {\n      description: `Groq-processed chunks from ${processedData.filename}`,\n      created_at: new Date().toISOString(),\n      total_chunks: processedData.total_chunks,\n      llm_used: processedData.document_info.llm_used,\n      entities_extracted: processedData.extracted_data.entities ? processedData.extracted_data.entities.length : 0\n    }\n  };\n}}"
+      },
+      "id": "create-chromadb-collection",
+      "name": "Create ChromaDB Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://localhost:8000/api/v1/collections/' + $('Process Results & Create Chunks').first().json.document_info.title.replace(/\\s+/g, '_').toLowerCase() + '/add' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const processedData = $('Process Results & Create Chunks').first().json;\n  \n  return {\n    documents: processedData.chunks.map(chunk => chunk.content),\n    metadatas: processedData.chunks.map(chunk => ({\n      ...chunk.metadata,\n      llm_used: processedData.document_info.llm_used,\n      chunk_id: chunk.id\n    })),\n    ids: processedData.chunks.map(chunk => chunk.id)\n  };\n}}"
+      },
+      "id": "store-chunks-chromadb",
+      "name": "Store Chunks in ChromaDB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Final response with all results\nconst fileData = $('Prepare File Path').first().json;\nconst processedData = $('Process Results & Create Chunks').first().json;\nconst neo4jResult = $('Store in Neo4j').first().json;\nconst chromaStoreResult = $('Store Chunks in ChromaDB').first().json;\n\nconst response = {\n  success: true,\n  workflow_type: 'fixed_groq_workflow',\n  batch_id: fileData.batch_id,\n  processed_file: fileData.filename,\n  processing_timestamp: new Date().toISOString(),\n  \n  extraction_summary: {\n    entities_extracted: processedData.extracted_data.entities?.length || 0,\n    relationships_extracted: processedData.extracted_data.relationships?.length || 0,\n    text_chunks_created: processedData.total_chunks,\n    processing_method: 'groq_http_api_direct'\n  },\n  \n  storage_summary: {\n    neo4j_status: neo4jResult ? 'success' : 'pending',\n    chromadb_status: chromaStoreResult ? 'success' : 'pending'\n  },\n  \n  architecture: {\n    llamaparse_node: 'community_node_official',\n    ai_extraction: 'groq_api_direct_http_request',\n    neo4j_storage: 'http_cypher_transactions',\n    chromadb_storage: 'http_api_direct',\n    groq_model: 'llama-3.1-70b-versatile',\n    workflow_approach: 'http_request_based_fixed'\n  }\n};\n\nreturn { json: response };"
+      },
+      "id": "prepare-final-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Prepare File Path", "type": "main", "index": 0}]]
+    },
+    "Prepare File Path": {
+      "main": [[{"node": "LlamaParse Premium", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Premium": {
+      "main": [[{"node": "Groq AI Entity Extraction", "type": "main", "index": 0}]]
+    },
+    "Groq AI Entity Extraction": {
+      "main": [[{"node": "Process Results & Create Chunks", "type": "main", "index": 0}]]
+    },
+    "Process Results & Create Chunks": {
+      "main": [
+        [
+          {"node": "Store in Neo4j", "type": "main", "index": 0},
+          {"node": "Create ChromaDB Collection", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Store in Neo4j": {
+      "main": [[{"node": "Prepare Final Response", "type": "main", "index": 0}]]
+    },
+    "Create ChromaDB Collection": {
+      "main": [[{"node": "Store Chunks in ChromaDB", "type": "main", "index": 0}]]
+    },
+    "Store Chunks in ChromaDB": {
+      "main": [[{"node": "Prepare Final Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "fixed-groq-workflow",
+  "tags": ["ai", "groq", "llamaparse", "neo4j", "chromadb", "fixed", "http-api"]
+}

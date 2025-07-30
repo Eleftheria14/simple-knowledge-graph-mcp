@@ -1,0 +1,65 @@
+{
+  "name": "FIXED-DOCSGPT-DOWNLOAD", 
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fixed-docsgpt-download",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "fixed-docsgpt-download"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "input_url",
+              "value": "http://docsgpt-oss-backend-1:7091/api/download?user=test_user&name=chemistry-paper.pdf&file=d4sc03921a.pdf"
+            },
+            {
+              "name": "result_type", 
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "fixed-docsgpt-download",
+  "tags": []
+}

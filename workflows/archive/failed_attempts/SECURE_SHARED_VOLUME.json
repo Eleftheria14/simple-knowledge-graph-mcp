@@ -1,0 +1,52 @@
+{
+  "name": "SECURE-SHARED-VOLUME",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "secure-shared-volume",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "secure-shared-volume"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf",
+        "options": {}
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Use axios instead of broken n8n HTTP Request binary upload\nconst fs = require('fs');\nconst FormData = require('form-data');\nconst axios = require('axios');\n\n// Get binary data from previous node\nconst fileBuffer = $binary.data;\nconst fileName = 'd4sc03921a.pdf';\n\n// Create form data manually\nconst form = new FormData();\nform.append('file', fileBuffer, {\n  filename: fileName,\n  contentType: 'application/pdf'\n});\nform.append('result_type', 'markdown');\nform.append('premium_mode', 'true');\n\n// Make request with axios\nconst response = await axios.post('https://api.cloud.llamaindex.ai/api/parsing/upload', form, {\n  headers: {\n    'Authorization': 'Bearer LLAMAPARSE_API_KEY_PLACEHOLDER',\n    ...form.getHeaders()\n  },\n  timeout: 30000\n});\n\nreturn {\n  json: {\n    success: true,\n    llamaparse_job_id: response.data.id,\n    status: 'uploaded',\n    file_processed: fileName\n  }\n};"
+      },
+      "id": "secure-upload",
+      "name": "Secure LlamaParse Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Secure LlamaParse Upload", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "secure-shared-volume",
+  "tags": []
+}

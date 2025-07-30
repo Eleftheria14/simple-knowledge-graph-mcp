@@ -1,0 +1,372 @@
+{
+  "name": "DocsGPT Knowledge Graph Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-integration",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-docsgpt",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route DocsGPT requests to appropriate MCP tools\nconst action = $json.action;\nconst query = $json.query;\nconst chatHistory = $json.chat_history || [];\n\nif (action === 'search') {\n  return {\n    json: {\n      action: 'search',\n      query: query,\n      chunks: $json.chunks || 5,\n      max_results: $json.max_results || 10,\n      source: 'docsgpt'\n    }\n  };\n} else if (action === 'generate_answer') {\n  return {\n    json: {\n      action: 'generate_answer', \n      query: query,\n      chat_history: chatHistory,\n      chunks: $json.chunks || 5,\n      max_results: $json.max_results || 10,\n      source: 'docsgpt'\n    }\n  };\n} else {\n  return {\n    json: {\n      error: 'Unknown action: ' + action\n    }\n  };\n}"
+      },
+      "id": "route-action",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "search",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "switch-action",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [580, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeWorkflow",
+        "workflowId": "{{ $('Get Workflow ID').item.json.id }}",
+        "fieldsToSend": {
+          "specifyFields": true,
+          "fields": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "max_results", 
+              "value": "={{ $json.max_results }}"
+            },
+            {
+              "name": "source",
+              "value": "docsgpt"
+            }
+          ]
+        }
+      },
+      "id": "search-knowledge-graph",
+      "name": "Search Knowledge Graph",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [780, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeWorkflow", 
+        "workflowId": "{{ $('Get Workflow ID').item.json.id }}",
+        "fieldsToSend": {
+          "specifyFields": true,
+          "fields": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "chat_history",
+              "value": "={{ JSON.stringify($json.chat_history) }}"
+            },
+            {
+              "name": "max_results",
+              "value": "={{ $json.max_results }}"
+            },
+            {
+              "name": "source", 
+              "value": "docsgpt"
+            },
+            {
+              "name": "mode",
+              "value": "generate_answer"
+            }
+          ]
+        }
+      },
+      "id": "generate-answer",
+      "name": "Generate Answer",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [780, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format search results for DocsGPT\nconst results = $json.results || [];\n\nconst formattedResults = {\n  documents: results.map(result => ({\n    content: result.content || result.text || '',\n    source: result.source || 'Unknown',\n    page: result.page || 1,\n    similarity_score: result.score || result.similarity || 0.0,\n    entities: result.entities || [],\n    relationships: result.relationships || [],\n    metadata: result.metadata || {}\n  }))\n};\n\nreturn { json: formattedResults };"
+      },
+      "id": "format-search-results",
+      "name": "Format Search Results",
+      "type": "n8n-nodes-base.code", 
+      "typeVersion": 2,
+      "position": [980, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format streaming answer for DocsGPT\nconst answer = $json.answer || '';\nconst sources = $json.sources || [];\nconst entities = $json.entities || [];\nconst thought = $json.thought || '';\n\n// Create DocsGPT-compatible response\nconst response = {\n  answer: answer,\n  sources: sources.map(source => ({\n    text: source.content ? source.content.substring(0, 100) + '...' : '',\n    source: source.source || 'Knowledge Graph',\n    page: source.page || 1,\n    score: source.similarity_score || 0.0\n  })),\n  entities: entities,\n  thought: thought,\n  stream: true\n};\n\nreturn { json: response };"
+      },
+      "id": "format-answer-response",
+      "name": "Format Answer Response", 
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 400]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseBody": "={{ JSON.stringify($json) }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-to-docsgpt",
+      "name": "Respond to DocsGPT",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-document-upload",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-document-upload",
+      "name": "Document Upload Webhook",
+      "type": "n8n-nodes-base.webhook", 
+      "typeVersion": 1,
+      "position": [180, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process document upload from DocsGPT\nconst payload = JSON.parse($json.payload || '{}');\nconst filename = payload.filename || 'unknown.pdf';\nconst userId = payload.user_id || 'unknown';\nconst metadata = payload.metadata || {};\n\n// Extract file content (assuming it comes as base64 or binary)\nconst fileData = $binary.document;\n\nif (!fileData) {\n  return {\n    json: {\n      success: false,\n      error: 'No file data received'\n    }\n  };\n}\n\n// Prepare for MCP document processing\nreturn {\n  json: {\n    filename: filename,\n    user_id: userId,\n    metadata: metadata,\n    file_size: fileData.data ? fileData.data.length : 0,\n    content_type: fileData.mimeType || 'application/pdf',\n    source: 'docsgpt_upload'\n  },\n  binary: {\n    document: fileData\n  }\n};"
+      },
+      "id": "process-document-upload",
+      "name": "Process Document Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 600]
+    },
+    {
+      "parameters": {
+        "operation": "executeWorkflow",
+        "workflowId": "{{ $('Get Document Processing Workflow ID').item.json.id }}",
+        "fieldsToSend": {
+          "specifyFields": true,
+          "fields": [
+            {
+              "name": "filename",
+              "value": "={{ $json.filename }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ JSON.stringify($json.metadata) }}"
+            },
+            {
+              "name": "source",
+              "value": "docsgpt"
+            }
+          ]
+        }
+      },
+      "id": "call-document-processor",
+      "name": "Call Document Processor",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [580, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format document processing response for DocsGPT\nconst result = $json;\n\nconst response = {\n  success: true,\n  document_id: result.document_id || `doc_${Date.now()}`,\n  entities_count: result.entities_extracted || result.entities?.length || 0,\n  chunks_count: result.chunks_created || result.chunks?.length || 0,\n  processing_time: result.processing_time || 0,\n  message: `Successfully processed ${result.filename || 'document'} with ${result.entities_extracted || 0} entities extracted`\n};\n\nreturn { json: response };"
+      },
+      "id": "format-processing-response",
+      "name": "Format Processing Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 600]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "Search Knowledge Graph",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Answer", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge Graph": {
+      "main": [
+        [
+          {
+            "node": "Format Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Answer": {
+      "main": [
+        [
+          {
+            "node": "Format Answer Response",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Search Results": {
+      "main": [
+        [
+          {
+            "node": "Respond to DocsGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Answer Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to DocsGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Document Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Document Upload": {
+      "main": [
+        [
+          {
+            "node": "Call Document Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Document Processor": {
+      "main": [
+        [
+          {
+            "node": "Format Processing Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Processing Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to DocsGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "docsGPT",
+      "createdAt": "2025-07-21T12:00:00.000Z"
+    },
+    {
+      "name": "knowledge-graph",
+      "createdAt": "2025-07-21T12:00:00.000Z"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2025-07-21T12:00:00.000Z",
+  "versionId": "1"
+}

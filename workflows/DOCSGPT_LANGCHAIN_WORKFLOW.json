@@ -1,0 +1,127 @@
+{
+  "name": "DocsGPT-LangChain-Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-544, -96],
+      "id": "518320b1-e8a3-4fd6-bc17-c73bdcb98c00",
+      "name": "DocsGPT Webhook",
+      "webhookId": "docsgpt-process"
+    },
+    {
+      "parameters": {},
+      "type": "CUSTOM.LlamaCloud",
+      "typeVersion": 1,
+      "position": [-320, -96],
+      "id": "add152be-57c1-44ef-9fd2-468cb91c681e",
+      "name": "LlamaParse PDF"
+    },
+    {
+      "parameters": {
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [-96, -96],
+      "id": "f342e57b-d2e6-4590-904a-4d5acdb6ba51",
+      "name": "Entity Extraction Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [0, 112],
+      "id": "d43c6956-91e7-46b1-bc3b-7d5abe8eee5d",
+      "name": "Groq Chat Model"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE (doc:Document {id: $doc_id, title: $title, content: $content, created_at: datetime()}) RETURN doc.id as document_created"
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [128, -96],
+      "id": "99a9d479-3243-4b98-9b68-25726a4f2d69",
+      "name": "Neo4j Graph Storage"
+    },
+    {
+      "parameters": {
+        "operation": "addTexts"
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [352, -96],
+      "id": "8bb4182b-2124-470a-b5ac-60d7cde8c5cc",
+      "name": "Neo4j Vector Storage"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[
+        {
+          "node": "LlamaParse PDF",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "LlamaParse PDF": {
+      "main": [[
+        {
+          "node": "Entity Extraction Chain",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Entity Extraction Chain": {
+      "main": [[
+        {
+          "node": "Neo4j Graph Storage",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Neo4j Graph Storage": {
+      "main": [[
+        {
+          "node": "Neo4j Vector Storage",
+          "type": "main",
+          "index": 0
+        }
+      ]]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [[
+        {
+          "node": "Entity Extraction Chain",
+          "type": "ai_languageModel",
+          "index": 0
+        }
+      ]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ba4c5ccf-4a9a-4634-be7f-b943921a1f57",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c7d3dbfac6f354cbc75bf9e22cf7efe3c74cd0d0081d9d42beebb66724d531a5"
+  },
+  "id": "LGRBBQVI5kHgAJXC",
+  "tags": []
+}

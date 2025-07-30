@@ -1,0 +1,57 @@
+{
+  "entities": [
+    {
+      "id": "entity_1",
+      "name": "Attention Is All You Need",
+      "type": "concept",
+      "confidence": 0.8
+    },
+    {
+      "id": "entity_2",
+      "name": "Abstract",
+      "type": "concept",
+      "confidence": 0.8
+    },
+    {
+      "id": "entity_3",
+      "name": "3.2 Multi-Head Attention",
+      "type": "concept",
+      "confidence": 0.8
+    }
+  ],
+  "text_chunks": [
+    {
+      "id": "chunk_0",
+      "text": "# Attention Is All You Need ## Abstract The dominant sequence transduction models are based on complex recurrent networks. | Model | BLEU Score | |-------|------------| | Transformer | 28.4 | | Previous Best | 26.3 | ```mermaid graph TD A[Input] --> B[Attention] B --> C[Output] ``` $$Attention(Q, K, V) = softmax(\\frac{QK^T}{\\sqrt{d_k}})V$$ ## 3.2 Multi-Head Attention Instead of performing a single attention function...",
+      "metadata": {
+        "word_start": 0,
+        "word_end": 63
+      }
+    }
+  ],
+  "structured_content": {
+    "tables": [
+      {
+        "content": "| Model | BLEU Score |"
+      },
+      {
+        "content": "|-------|------------|"
+      },
+      {
+        "content": "| Transformer | 28.4 |"
+      }
+    ],
+    "figures": [
+      {
+        "type": "diagram",
+        "content": "graph TD\n    A[Input] --> B[Attention]\n    B --> C[Output]"
+      }
+    ],
+    "formulas": [
+      {
+        "latex": "Attention(Q, K, V) = softmax(\\frac{QK^T}{\\sqrt{d_k}})V"
+      }
+    ]
+  },
+  "sample_markdown": "\n# Attention Is All You Need\n\n## Abstract\n\nThe dominant sequence transduction models are based on complex recurrent networks.\n\n| Model | BLEU Score |\n|-------|------------|\n| Transformer | 28.4 |\n| Previous Best | 26.3 |\n\n```mermaid\ngraph TD\n    A[Input] --> B[Attention]\n    B --> C[Output]\n```\n\n$$Attention(Q, K, V) = softmax(\\frac{QK^T}{\\sqrt{d_k}})V$$\n\n## 3.2 Multi-Head Attention\n\nInstead of performing a single attention function...\n"
+}

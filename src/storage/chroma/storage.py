@@ -1,6 +1,6 @@
 """ChromaDB storage manager for text and citations."""
 from typing import List, Dict, Any
-from storage.embedding import EmbeddingService
+from storage.embedding.docsgpt_embeddings import KnowledgeGraphEmbeddings
 from .client import get_shared_chromadb_client
 
 class ChromaDBStorage:
@@ -9,8 +9,9 @@ class ChromaDBStorage:
     def __init__(self):
         """Initialize ChromaDB using shared client and embedding service."""
         self.client, self.collection = get_shared_chromadb_client()
-        self.embedding_service = EmbeddingService()
+        self.embedding_service = KnowledgeGraphEmbeddings()
         print(f"📝 ChromaDBStorage initialized with collection ID: {self.collection.id}")
+        print(f"🧠 Using {self.embedding_service.dimension}D embeddings ({self.embedding_service.model_name})")
     
     
     def store_vectors(
@@ -23,8 +24,8 @@ class ChromaDBStorage:
         if not contents:
             return {"vectors_stored": 0}
         
-        # Generate embeddings for all content
-        embeddings = self.embedding_service.encode_texts(contents)
+        # Generate embeddings for all content using DocsGPT's system
+        embeddings = self.embedding_service.encode_content(contents)
         
         # Store in ChromaDB
         self.collection.add(

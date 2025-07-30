@@ -1,0 +1,6 @@
+{
+  "success": true,
+  "processing_time": 10.477159023284912,
+  "document_count": 15,
+  "sample_content": "\n\nProvided proper attribution is provided, Google hereby grants permission to\nreproduce the tables and figures in this paper solely for use in journalistic or\nscholarly works.\n\n# Attention Is All You Need\n\n| Ashish Vaswani\\*<br/>Google Brain<br/>avaswani\\@google.com | Noam Shazeer\\*<br/>Google Brain<br/>noam\\@google.com                   | Niki Parmar\\*<br/>Google Research<br/>nikip\\@google.com       | Jakob Uszkoreit\\*<br/>Google Research<br/>usz\\@google.com |\n| --------------------------------"
+}

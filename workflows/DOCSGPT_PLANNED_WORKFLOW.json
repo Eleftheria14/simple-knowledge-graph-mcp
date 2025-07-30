@@ -1,0 +1,175 @@
+{
+  "name": "DocsGPT-Integration-Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "docsgpt-webhook",
+      "name": "DocsGPT Webhook",
+      "webhookId": "docsgpt-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Step 1: Parse and validate DocsGPT payload\nconst webhookData = $input.all()[0].json;\n\n// Extract document information\nconst documentData = {\n  file_path: webhookData.file_path || '/data/sample.pdf',\n  filename: webhookData.filename || 'sample.pdf',\n  user_id: webhookData.user_id || 'unknown',\n  batch_id: webhookData.batch_id || `batch_${Date.now()}`,\n  processing_type: webhookData.processing_type || 'single'\n};\n\n// Generate document ID for tracking\nconst documentId = documentData.filename\n  .replace('.pdf', '')\n  .replace(/[^a-zA-Z0-9]/g, '_')\n  .toLowerCase();\n\n// Return structured data for next step\nreturn [{\n  json: {\n    ...documentData,\n    document_id: documentId,\n    processing_started: new Date().toISOString(),\n    workflow_step: 'input_parsed'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "id": "parse-payload",
+      "name": "Parse DocsGPT Payload"
+    },
+    {
+      "parameters": {
+        "resource": "parsing",
+        "operation": "parse",
+        "filePath": "={{ $json.file_path }}"
+      },
+      "type": "CUSTOM.LlamaCloud",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "id": "llamaparse",
+      "name": "LlamaParse PDF Processing",
+      "credentials": {
+        "LlamaCloudApi": {
+          "id": "llamacloud_api",
+          "name": "LlamaCloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-70b-versatile",
+        "messages": {
+          "values": [
+            {
+              "content": "You are an expert entity extraction system for academic papers. Extract entities and relationships from the document content. Return ONLY valid JSON format:\n\n{\n  \"citation\": {\n    \"title\": \"paper_title\",\n    \"authors\": [\"author1\", \"author2\"],\n    \"year\": \"YYYY\",\n    \"abstract\": \"brief_summary\"\n  },\n  \"entities\": [\n    {\n      \"id\": \"unique_id\",\n      \"name\": \"entity_name\", \n      \"type\": \"person|organization|concept|method|material\",\n      \"description\": \"brief_description\",\n      \"confidence\": 0.8\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source_entity\": \"entity_id_1\",\n      \"target_entity\": \"entity_id_2\", \n      \"relationship_type\": \"relationship_description\",\n      \"context\": \"supporting_text\",\n      \"confidence\": 0.8\n    }\n  ]\n}",
+              "role": "system"
+            },
+            {
+              "content": "Document: {{ $('Parse DocsGPT Payload').first().json.filename }}\n\nExtract entities and relationships from this content:\n\n{{ $('LlamaParse PDF Processing').first().json.text || $('LlamaParse PDF Processing').first().json.content || 'No content available' }}",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 4000
+        }
+      },
+      "type": "n8n-nodes-base.llm",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "id": "groq-extraction",
+      "name": "Groq Entity Extraction",
+      "credentials": {
+        "groqApi": {
+          "id": "groq_api",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Step 4: Prepare data for parallel Neo4j operations\nconst payloadData = $('Parse DocsGPT Payload').first().json;\nconst llamaResult = $('LlamaParse PDF Processing').first().json;\nconst groqResult = $('Groq Entity Extraction').first().json;\n\n// Extract document content\nlet documentContent = '';\nif (llamaResult && llamaResult.text) {\n  documentContent = llamaResult.text;\n} else if (llamaResult && llamaResult.content) {\n  documentContent = llamaResult.content;\n} else {\n  documentContent = 'Content extraction failed';\n}\n\n// Parse AI extraction results\nlet extractedData = {\n  citation: {},\n  entities: [],\n  relationships: []\n};\n\ntry {\n  if (groqResult && groqResult.text) {\n    extractedData = JSON.parse(groqResult.text);\n  }\n} catch (error) {\n  console.log('Groq parsing error, using fallback data');\n  extractedData = {\n    citation: {\n      title: payloadData.filename.replace('.pdf', ''),\n      authors: ['Unknown'],\n      year: new Date().getFullYear().toString(),\n      abstract: 'Processed via n8n workflow'\n    },\n    entities: [{\n      id: `${payloadData.document_id}_main`,\n      name: 'Document Content',\n      type: 'concept',\n      description: 'Main document entity',\n      confidence: 0.7\n    }],\n    relationships: []\n  };\n}\n\n// Create text chunks for vector storage\nfunction createTextChunks(text, chunkSize = 500, overlap = 100) {\n  if (!text || typeof text !== 'string') return [];\n  \n  const words = text.split(/\\s+/);\n  const chunks = [];\n  \n  for (let i = 0; i < words.length; i += (chunkSize - overlap)) {\n    const chunk = words.slice(i, i + chunkSize).join(' ');\n    if (chunk.trim().length > 50) {\n      chunks.push(chunk);\n    }\n  }\n  return chunks;\n}\n\nconst textChunks = createTextChunks(documentContent);\n\n// Prepare comprehensive data structure\nconst processedData = {\n  // Document metadata\n  document: {\n    id: payloadData.document_id,\n    title: extractedData.citation.title || payloadData.filename.replace('.pdf', ''),\n    filename: payloadData.filename,\n    file_path: payloadData.file_path,\n    user_id: payloadData.user_id,\n    batch_id: payloadData.batch_id,\n    authors: extractedData.citation.authors || [],\n    year: extractedData.citation.year || new Date().getFullYear(),\n    abstract: extractedData.citation.abstract || '',\n    content: documentContent.substring(0, 5000), // Truncate for storage\n    processed_at: new Date().toISOString(),\n    processing_method: 'n8n_workflow'\n  },\n  \n  // Extracted knowledge\n  entities: extractedData.entities || [],\n  relationships: extractedData.relationships || [],\n  \n  // Text chunks for vector storage\n  text_chunks: textChunks,\n  \n  // Processing statistics\n  stats: {\n    entities_count: (extractedData.entities || []).length,\n    relationships_count: (extractedData.relationships || []).length,\n    chunks_count: textChunks.length,\n    content_length: documentContent.length,\n    processing_step: 'data_prepared'\n  }\n};\n\nreturn [{ json: processedData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "id": "prepare-data",
+      "name": "Prepare Data for Storage"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "// Create Document node\nCREATE (doc:Document {\n  id: $document.id,\n  title: $document.title,\n  filename: $document.filename,\n  file_path: $document.file_path,\n  user_id: $document.user_id,\n  batch_id: $document.batch_id,\n  authors: $document.authors,\n  year: $document.year,\n  abstract: $document.abstract,\n  content: $document.content,\n  processed_at: datetime($document.processed_at),\n  processing_method: $document.processing_method\n})\n\n// Create Entity nodes\nFOREACH (entity IN $entities |\n  CREATE (e:Entity {\n    id: entity.id,\n    name: entity.name,\n    type: entity.type,\n    description: entity.description,\n    confidence: entity.confidence,\n    document_id: $document.id,\n    created_at: datetime()\n  })\n)\n\n// Create relationships between entities\nFOREACH (rel IN $relationships |\n  MERGE (source:Entity {id: rel.source_entity, document_id: $document.id})\n  MERGE (target:Entity {id: rel.target_entity, document_id: $document.id})\n  CREATE (source)-[r:RELATED_TO {\n    type: rel.relationship_type,\n    context: rel.context,\n    confidence: rel.confidence,\n    document_id: $document.id,\n    created_at: datetime()\n  }]->(target)\n)\n\n// Link document to entities\nMATCH (doc:Document {id: $document.id})\nMATCH (e:Entity {document_id: $document.id})\nCREATE (doc)-[:CONTAINS_ENTITY]->(e)\n\nRETURN doc.id as document_created, \n       count(DISTINCT e) as entities_created,\n       count(DISTINCT r) as relationships_created",
+        "parameters": {
+          "document": "={{ $json.document }}",\n          "entities": "={{ $json.entities }}",\n          "relationships": "={{ $json.relationships }}"
+        }
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [1340, 200],
+      "id": "neo4j-graph",
+      "name": "Neo4j Graph Storage",
+      "credentials": {
+        "neo4jApi": {
+          "id": "neo4j_database",
+          "name": "Neo4j Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addTexts",
+        "texts": "={{ $json.text_chunks }}",
+        "indexName": "document_vectors"
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "id": "neo4j-vector",
+      "name": "Neo4j Vector Storage",
+      "credentials": {
+        "neo4jApi": {
+          "id": "neo4j_database",
+          "name": "Neo4j Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Step 6: Format response for DocsGPT backend\nconst processedData = $('Prepare Data for Storage').first().json;\nconst graphResult = $('Neo4j Graph Storage').first().json;\nconst vectorResult = $('Neo4j Vector Storage').first().json;\n\n// Calculate processing statistics\nconst processingTime = Math.round(\n  (new Date() - new Date(processedData.document.processed_at)) / 1000\n);\n\n// Format DocsGPT-compatible response\nconst docsgptResponse = {\n  success: true,\n  message: \"Document successfully processed through n8n workflow\",\n  \n  // Document information\n  document: {\n    id: processedData.document.id,\n    title: processedData.document.title,\n    filename: processedData.document.filename,\n    user_id: processedData.document.user_id,\n    batch_id: processedData.document.batch_id\n  },\n  \n  // Processing results\n  processing_stats: {\n    entities_extracted: processedData.stats.entities_count,\n    relationships_created: processedData.stats.relationships_count,\n    chunks_stored: processedData.stats.chunks_count,\n    processing_time_seconds: processingTime,\n    graph_nodes_created: graphResult?.entities_created || 0,\n    vector_embeddings_stored: processedData.stats.chunks_count\n  },\n  \n  // Knowledge graph access\n  knowledge_graph: {\n    document_id: processedData.document.id,\n    neo4j_browser: \"http://localhost:7474\",\n    vector_index: \"document_vectors\",\n    query_examples: {\n      document_overview: `MATCH (doc:Document {id: '${processedData.document.id}'}) RETURN doc`,\n      entity_search: `MATCH (e:Entity {document_id: '${processedData.document.id}'}) RETURN e`,\n      relationship_discovery: `MATCH (e1:Entity)-[r:RELATED_TO]->(e2:Entity) WHERE r.document_id = '${processedData.document.id}' RETURN e1.name, r.type, e2.name`\n    }\n  },\n  \n  // API integration endpoints\n  api_endpoints: {\n    webhook_endpoint: \"http://localhost:5678/webhook/docsgpt-process\",\n    neo4j_database: \"http://localhost:7474\",\n    workflow_status: \"completed\"\n  },\n  \n  // Processing metadata\n  metadata: {\n    processed_at: new Date().toISOString(),\n    processing_duration: `${processingTime}s`,\n    workflow_version: \"planned_workflow_v1\",\n    nodes_used: [\"LlamaParse\", \"Groq\", \"Neo4j Graph\", \"Neo4j Vector\"],\n    architecture: \"docsgpt_n8n_integration\"\n  }\n};\n\nreturn { json: docsgptResponse };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "id": "format-response",
+      "name": "Format DocsGPT Response"
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Parse DocsGPT Payload", "type": "main", "index": 0}]]
+    },
+    "Parse DocsGPT Payload": {
+      "main": [[{"node": "LlamaParse PDF Processing", "type": "main", "index": 0}]]
+    },
+    "LlamaParse PDF Processing": {
+      "main": [[{"node": "Groq Entity Extraction", "type": "main", "index": 0}]]
+    },
+    "Groq Entity Extraction": {
+      "main": [[{"node": "Prepare Data for Storage", "type": "main", "index": 0}]]
+    },
+    "Prepare Data for Storage": {
+      "main": [[
+        {"node": "Neo4j Graph Storage", "type": "main", "index": 0},
+        {"node": "Neo4j Vector Storage", "type": "main", "index": 0}
+      ]]
+    },
+    "Neo4j Graph Storage": {
+      "main": [[{"node": "Format DocsGPT Response", "type": "main", "index": 0}]]
+    },
+    "Neo4j Vector Storage": {
+      "main": [[{"node": "Format DocsGPT Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "docsgpt-integration-workflow",
+  "tags": ["docsgpt", "integration", "planned", "llamaparse", "neo4j", "knowledge-graph"],
+  "meta": {
+    "instanceId": "docsgpt-planned-workflow"
+  }
+}

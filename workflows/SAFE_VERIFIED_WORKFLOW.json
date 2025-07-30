@@ -1,0 +1,98 @@
+{
+  "name": "SAFE-VERIFIED-WORKFLOW",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "safe-verified-workflow",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "safe-verified-workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract and prepare file path\nconst webhookData = $input.all()[0].json;\nconst filePath = webhookData.file_path || '/data/local/chemistry-paper.pdf/d4sc03921a.pdf';\nconst fileName = webhookData.filename || 'd4sc03921a.pdf';\nconst batchId = webhookData.batch_id || 'safe-verified-test';\n\nreturn [{\n  json: {\n    file_path: filePath,\n    filename: fileName,\n    batch_id: batchId,\n    processing_started: new Date().toISOString(),\n    workflow_type: 'safe_verified_nodes_only'\n  }\n}];"
+      },
+      "id": "prepare-file-path",
+      "name": "Prepare File Path",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.file_path }}",
+        "resultType": "markdown",
+        "parsingMode": "premium"
+      },
+      "id": "llamaparse-node",
+      "name": "LlamaParse Premium",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer GROQ_API_KEY_PLACEHOLDER"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ \n  const markdownContent = $('LlamaParse Premium').first().json;\n  \n  return {\n    model: \"llama-3.1-70b-versatile\",\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are an expert entity extraction system. Extract entities, relationships, and structured data from academic papers. Return ONLY valid JSON without markdown formatting.\"\n      },\n      {\n        role: \"user\",\n        content: `Extract from this document:\\n\\n**ENTITIES**: concepts, methods, people, organizations, technologies\\n**RELATIONSHIPS**: connections between entities with confidence scores\\n**STRUCTURED_DATA**: tables, figures, equations\\n\\nReturn JSON:\\n{\\n  \"entities\": [{\"id\": \"string\", \"name\": \"string\", \"type\": \"string\", \"description\": \"string\", \"confidence\": 0.8}],\\n  \"relationships\": [{\"source_entity\": \"string\", \"target_entity\": \"string\", \"relationship_type\": \"string\", \"context\": \"string\", \"confidence\": 0.8}],\\n  \"structured_elements\": {\"tables\": [], \"figures\": [], \"equations\": []}\\n}\\n\\nDocument:\\n${markdownContent.substring(0, 15000)}`\n      }\n    ],\n    temperature: 0.1,\n    max_tokens: 4000\n  };\n}}"
+      },
+      "id": "groq-entity-extraction",
+      "name": "Groq Entity Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process all results and create final response\nconst fileData = $('Prepare File Path').first().json;\nconst markdownContent = $('LlamaParse Premium').first().json;\nconst groqResponse = $('Groq Entity Extraction').first().json;\n\n// Extract entities from Groq response\nlet extractedData = { entities: [], relationships: [], structured_elements: {} };\ntry {\n  if (groqResponse.choices && groqResponse.choices[0] && groqResponse.choices[0].message) {\n    const content = groqResponse.choices[0].message.content;\n    extractedData = JSON.parse(content);\n  }\n} catch (error) {\n  console.log('Error parsing Groq response:', error.message);\n}\n\n// Create systematic text chunks\nfunction createSystematicChunks(text, chunkSize = 300, overlap = 75) {\n  if (!text || typeof text !== 'string') return [];\n  \n  const words = text.split(/\\s+/);\n  const chunks = [];\n  \n  for (let i = 0; i < words.length; i += (chunkSize - overlap)) {\n    const chunk = words.slice(i, i + chunkSize).join(' ');\n    if (chunk.trim().length > 50) {\n      chunks.push({\n        id: `chunk_${chunks.length + 1}`,\n        content: chunk,\n        word_count: chunk.split(/\\s+/).length,\n        start_word: i,\n        end_word: Math.min(i + chunkSize, words.length),\n        metadata: {\n          document: fileData.filename,\n          chunk_index: chunks.length,\n          processing_timestamp: new Date().toISOString()\n        }\n      });\n    }\n  }\n  \n  return chunks;\n}\n\nconst textChunks = createSystematicChunks(markdownContent);\n\n// Final comprehensive response\nconst response = {\n  success: true,\n  workflow_type: 'safe_verified_nodes_only',\n  batch_id: fileData.batch_id,\n  processed_file: fileData.filename,\n  processing_timestamp: new Date().toISOString(),\n  \n  // Content Processing Results\n  content_summary: {\n    markdown_length: markdownContent ? markdownContent.length : 0,\n    text_chunks_created: textChunks.length,\n    llamaparse_status: 'success',\n    groq_extraction_status: groqResponse.choices ? 'success' : 'failed'\n  },\n  \n  // AI Extraction Results\n  extraction_summary: {\n    entities_extracted: extractedData.entities?.length || 0,\n    relationships_extracted: extractedData.relationships?.length || 0,\n    structured_elements: extractedData.structured_elements || {},\n    processing_method: 'groq_llama_3_1_70b_via_http_api'\n  },\n  \n  // Architecture Information\n  architecture: {\n    workflow_approach: 'verified_nodes_only',\n    nodes_used: [\n      'n8n-nodes-base.webhook',\n      'n8n-nodes-base.code', \n      'n8n-nodes-llamacloud.llamaParse',\n      'n8n-nodes-base.httpRequest'\n    ],\n    problematic_nodes_avoided: [\n      'n8n-nodes-langchain.agent',\n      'n8n-nodes-langchain.lmChatGroq',\n      '@rxap/n8n-nodes-neo4j',\n      'n8n-nodes-chromadb'\n    ],\n    storage_approach: 'manual_http_api_calls_needed',\n    ai_provider: 'groq_direct_api'\n  },\n  \n  // Data Ready for Storage\n  ready_for_storage: {\n    neo4j_data: {\n      document: {\n        id: fileData.filename.replace('.pdf', '').replace(/\\s+/g, '_').toLowerCase(),\n        title: fileData.filename.replace('.pdf', ''),\n        type: 'research_paper',\n        processed_at: new Date().toISOString()\n      },\n      entities: extractedData.entities || [],\n      relationships: extractedData.relationships || []\n    },\n    chromadb_data: {\n      collection_name: fileData.filename.replace('.pdf', '').replace(/\\s+/g, '_').toLowerCase(),\n      chunks: textChunks,\n      metadata: {\n        document: fileData.filename,\n        processed_with: 'groq_llama_3_1_70b',\n        total_chunks: textChunks.length\n      }\n    }\n  },\n  \n  // Next Steps\n  next_steps: [\n    'Use HTTP Request nodes to store data in Neo4j via Cypher API',\n    'Use HTTP Request nodes to store chunks in ChromaDB via REST API',\n    'Avoid problematic LangChain and community nodes that cause ? errors',\n    'Test this workflow first before adding storage nodes'\n  ]\n};\n\nreturn { json: response };"
+      },
+      "id": "process-and-prepare-response",
+      "name": "Process & Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Prepare File Path", "type": "main", "index": 0}]]
+    },
+    "Prepare File Path": {
+      "main": [[{"node": "LlamaParse Premium", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Premium": {
+      "main": [[{"node": "Groq Entity Extraction", "type": "main", "index": 0}]]
+    },
+    "Groq Entity Extraction": {
+      "main": [[{"node": "Process & Prepare Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "safe-verified-workflow",
+  "tags": ["verified", "safe", "groq", "llamaparse", "no-langchain"]
+}

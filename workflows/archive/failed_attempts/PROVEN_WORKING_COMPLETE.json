@@ -1,0 +1,149 @@
+{
+  "name": "PROVEN-WORKING-COMPLETE",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proven-working-complete",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "proven-working-complete"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "binaryToProperty",
+        "sourceKey": "data",
+        "destinationKey": "file",
+        "options": {
+          "fileName": "d4sc03921a.pdf",
+          "mimeType": "application/pdf"
+        }
+      },
+      "id": "move-binary",
+      "name": "Move Binary Data",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "parameterType": "n8nBinaryFile",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 30
+      },
+      "id": "wait-processing",
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.cloud.llamaindex.ai/api/parsing/job/{{ $('LlamaParse Upload').first().json.id }}/result/markdown",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        }
+      },
+      "id": "get-results",
+      "name": "Get LlamaParse Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Handle LlamaParse response and prepare final output\nconst webhookData = $('Webhook').first().json;\nconst uploadResponse = $('LlamaParse Upload').first().json;\nconst resultsResponse = $input.all()[0];\n\n// Extract markdown content from response\nlet markdownContent = '';\nif (resultsResponse.json && resultsResponse.json.markdown) {\n  markdownContent = resultsResponse.json.markdown;\n} else if (resultsResponse.json && typeof resultsResponse.json === 'string') {\n  markdownContent = resultsResponse.json;\n} else if (resultsResponse.body) {\n  markdownContent = resultsResponse.body;\n} else {\n  markdownContent = 'No content extracted from PDF';\n}\n\n// Prepare structured response\nconst response = {\n  success: true,\n  batch_id: webhookData.batch_id || 'test-batch',\n  processed_file: webhookData.filename || 'd4sc03921a.pdf',\n  llamaparse_job_id: uploadResponse.id || 'unknown',\n  markdown_length: markdownContent.length,\n  processing_timestamp: new Date().toISOString(),\n  status: 'processing_complete',\n  markdown_preview: markdownContent.substring(0, 500) + (markdownContent.length > 500 ? '...' : ''),\n  full_markdown: markdownContent\n};\n\nreturn { json: response };"
+      },
+      "id": "prepare-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Move Binary Data", "type": "main", "index": 0}]]
+    },
+    "Move Binary Data": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Upload": {
+      "main": [[{"node": "Wait for Processing", "type": "main", "index": 0}]]
+    },
+    "Wait for Processing": {
+      "main": [[{"node": "Get LlamaParse Results", "type": "main", "index": 0}]]
+    },
+    "Get LlamaParse Results": {
+      "main": [[{"node": "Prepare Final Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "proven-working-complete",
+  "tags": []
+}

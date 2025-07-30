@@ -1,0 +1,67 @@
+{
+  "name": "OPTIMAL-LLAMAPARSE-WORKFLOW",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "optimal-llamaparse-workflow",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "optimal-llamaparse-workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract file path from webhook payload\nconst webhookData = $input.all()[0].json;\n\n// Use dynamic file path from DocsGPT or default for testing\nconst filePath = webhookData.file_path || '/data/local/chemistry-paper.pdf/d4sc03921a.pdf';\nconst fileName = webhookData.filename || 'd4sc03921a.pdf';\nconst batchId = webhookData.batch_id || 'test-batch';\n\nreturn [{\n  json: {\n    file_path: filePath,\n    filename: fileName,\n    batch_id: batchId,\n    processing_started: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "prepare-file-path",
+      "name": "Prepare File Path",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.file_path }}",
+        "resultType": "markdown",
+        "parsingMode": "premium"
+      },
+      "id": "llamaparse-node",
+      "name": "LlamaParse",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process LlamaParse results and prepare for knowledge graph storage\nconst fileData = $('Prepare File Path').first().json;\nconst llamaParseResult = $input.all()[0];\n\n// Extract markdown content from LlamaParse response\nlet markdownContent = '';\nif (llamaParseResult.json && typeof llamaParseResult.json === 'string') {\n  markdownContent = llamaParseResult.json;\n} else if (llamaParseResult.json && llamaParseResult.json.markdown) {\n  markdownContent = llamaParseResult.json.markdown;\n} else if (llamaParseResult.markdown) {\n  markdownContent = llamaParseResult.markdown;\n} else if (llamaParseResult.json) {\n  // Sometimes the entire response is the markdown content\n  markdownContent = JSON.stringify(llamaParseResult.json, null, 2);\n} else {\n  markdownContent = 'No content extracted from PDF';\n}\n\n// Prepare structured response for DocsGPT and knowledge graph\nconst response = {\n  // DocsGPT integration fields\n  success: true,\n  batch_id: fileData.batch_id,\n  processed_file: fileData.filename,\n  processing_method: 'LlamaParse Community Node',\n  processing_timestamp: new Date().toISOString(),\n  status: 'processing_complete',\n  \n  // Content fields\n  markdown_length: markdownContent.length,\n  markdown_preview: markdownContent.substring(0, 1000) + (markdownContent.length > 1000 ? '...' : ''),\n  full_markdown: markdownContent,\n  \n  // Knowledge graph preparation\n  document_info: {\n    title: fileData.filename.replace('.pdf', ''),\n    type: 'research_paper',\n    file_path: fileData.file_path,\n    processed_by: 'llamaparse_community_node',\n    processing_timestamp: new Date().toISOString()\n  },\n  \n  // Ready for MCP knowledge graph storage\n  ready_for_entity_extraction: true,\n  ready_for_vector_storage: true\n};\n\nreturn { json: response };"
+      },
+      "id": "prepare-final-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Prepare File Path", "type": "main", "index": 0}]]
+    },
+    "Prepare File Path": {
+      "main": [[{"node": "LlamaParse", "type": "main", "index": 0}]]
+    },
+    "LlamaParse": {
+      "main": [[{"node": "Prepare Final Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "optimal-llamaparse-workflow",
+  "tags": []
+}

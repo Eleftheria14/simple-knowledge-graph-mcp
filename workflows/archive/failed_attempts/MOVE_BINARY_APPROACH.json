@@ -1,0 +1,99 @@
+{
+  "name": "MOVE-BINARY-APPROACH",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "move-binary-approach",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "move-binary-approach"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "binaryToProperty",
+        "setAllData": false,
+        "sourceKey": "data",
+        "destinationKey": "file_data",
+        "options": {
+          "fileName": "d4sc03921a.pdf",
+          "mimeType": "application/pdf"
+        }
+      },
+      "id": "move-binary",
+      "name": "Move Binary Data",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "parameterType": "n8nBinaryFile",
+              "inputDataFieldName": "file_data"
+            },
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Move Binary Data", "type": "main", "index": 0}]]
+    },
+    "Move Binary Data": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "move-binary-approach",
+  "tags": []
+}

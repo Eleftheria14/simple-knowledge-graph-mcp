@@ -1,0 +1,26 @@
+FROM n8nio/n8n:latest
+
+# Switch to root to install packages
+USER root
+
+# Install Python and build tools for community nodes
+RUN apk add --no-cache python3 py3-pip build-base git
+
+# Create proper directory structure for community nodes
+RUN mkdir -p /home/node/.n8n/nodes
+
+# Install community nodes globally and copy to n8n directory
+RUN npm install -g n8n-nodes-llamacloud n8n-nodes-neo4j
+
+# Copy installed nodes to n8n's expected location
+RUN cp -r /usr/local/lib/node_modules/n8n-nodes-llamacloud /home/node/.n8n/nodes/ || true
+RUN cp -r /usr/local/lib/node_modules/n8n-nodes-neo4j /home/node/.n8n/nodes/ || true
+
+# Set proper ownership
+RUN chown -R node:node /home/node/.n8n
+
+# Switch back to node user for security
+USER node
+
+# Expose the port
+EXPOSE 5678

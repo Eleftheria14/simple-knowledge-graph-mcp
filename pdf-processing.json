@@ -1,0 +1,111 @@
+{
+  "name": "pdf-processing",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -48
+      ],
+      "id": "fbfade15-63b2-412e-97b8-1e65c52fa6e8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {},
+      "type": "CUSTOM.LlamaCloud",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -48
+      ],
+      "id": "add152be-57c1-44ef-9fd2-468cb91c681e",
+      "name": "Parse a PDF File"
+    },
+    {
+      "parameters": {},
+      "type": "CUSTOM.LlamaExtract",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -48
+      ],
+      "id": "42fab26a-39be-44d6-8cce-80fa383af21d",
+      "name": "Extract Data from a File"
+    },
+    {
+      "parameters": {
+        "moreOptions": {}
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -48
+      ],
+      "id": "99a9d479-3243-4b98-9b68-25726a4f2d69",
+      "name": "SimilaritySearch vectorStore"
+    },
+    {
+      "parameters": {
+        "operation": "addTexts"
+      },
+      "type": "n8n-nodes-neo4j.neo4j",
+      "typeVersion": 1,
+      "position": [
+        208,
+        176
+      ],
+      "id": "8bb4182b-2124-470a-b5ac-60d7cde8c5cc",
+      "name": "AddTexts vectorStore"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Parse a PDF File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse a PDF File": {
+      "main": [
+        [
+          {
+            "node": "Extract Data from a File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Data from a File": {
+      "main": [
+        [
+          {
+            "node": "SimilaritySearch vectorStore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d12583eb-d9c0-4cb8-bac8-42698639a599",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c7d3dbfac6f354cbc75bf9e22cf7efe3c74cd0d0081d9d42beebb66724d531a5"
+  },
+  "id": "LGRBBQVI5kHgAJXC",
+  "tags": []
+}

@@ -1,0 +1,122 @@
+{
+  "name": "ERROR-RESISTANT-DocsGPT-LlamaParse",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST", 
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// VALIDATION: Check webhook payload structure\nconst webhookData = items[0].json;\n\nconsole.log('=== WEBHOOK VALIDATION ===');\nconsole.log('Webhook data:', JSON.stringify(webhookData, null, 2));\n\n// Check if files array exists\nif (!webhookData.files || !Array.isArray(webhookData.files) || webhookData.files.length === 0) {\n  throw new Error('No files array in webhook payload');\n}\n\n// Check if first file has name\nconst fileName = webhookData.files[0].name;\nif (!fileName) {\n  throw new Error('No filename in webhook payload');\n}\n\n// Construct and validate file path\nconst filePath = `/data/local/${fileName}/d4sc03921a.pdf`;\nconsole.log('Constructed file path:', filePath);\n\nreturn [{\n  json: {\n    webhook_data: webhookData,\n    file_name: fileName,\n    file_path: filePath,\n    validation_status: 'passed'\n  }\n}];"
+      },
+      "id": "validate-webhook",
+      "name": "Validate Webhook Data", 
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.file_path }}",
+        "options": {}
+      },
+      "id": "read-pdf-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile", 
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// VALIDATION: Check binary data exists\nif (!$binary.data) {\n  throw new Error('No binary data available from file read');\n}\n\nconsole.log('Binary data size:', $binary.data.length);\nconsole.log('Binary data type:', typeof $binary.data);\n\nreturn [{\n  json: {\n    binary_validation: 'passed',\n    file_size_bytes: $binary.data.length,\n    ready_for_upload: true\n  }\n}];"
+      },
+      "id": "validate-binary",
+      "name": "Validate Binary Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1, 
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "result_type", 
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true" 
+            }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems", 
+        "jsCode": "// VALIDATION: Check upload response\nconst uploadResult = items[0].json;\n\nconsole.log('Upload result:', JSON.stringify(uploadResult, null, 2));\n\nif (!uploadResult.id) {\n  throw new Error('No job ID returned from LlamaParse upload');\n}\n\nreturn [{\n  json: {\n    upload_status: 'success',\n    job_id: uploadResult.id,\n    ready_for_wait: true\n  }\n}];"
+      },
+      "id": "validate-upload",
+      "name": "Validate Upload Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Validate Webhook Data", "type": "main", "index": 0}]]
+    },
+    "Validate Webhook Data": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Validate Binary Data", "type": "main", "index": 0}]]
+    },
+    "Validate Binary Data": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Upload": {
+      "main": [[{"node": "Validate Upload Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "error-resistant",
+  "meta": {},
+  "id": "error-resistant-docsgpt-llamaparse", 
+  "tags": []
+}

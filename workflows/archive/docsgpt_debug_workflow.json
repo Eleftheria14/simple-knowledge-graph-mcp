@@ -1,0 +1,71 @@
+{
+  "name": "DocsGPT-Debug-Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log the entire webhook payload\nconsole.log('=== WEBHOOK PAYLOAD ===');\nconsole.log(JSON.stringify($input.all()[0].json, null, 2));\n\n// Extract key information\nconst webhookData = $input.all()[0].json;\n\n// Build debug response\nconst debugInfo = {\n  webhook_payload: webhookData,\n  files_array: webhookData.files || 'No files array found',\n  first_file: webhookData.files ? webhookData.files[0] : 'No first file',\n  batch_id: webhookData.batch_id || 'No batch_id',\n  user_id: webhookData.user_id || 'No user_id',\n  timestamp: webhookData.timestamp || 'No timestamp'\n};\n\n// Also check what the actual file structure might be\nif (webhookData.files && webhookData.files[0]) {\n  const file = webhookData.files[0];\n  debugInfo.file_details = {\n    name: file.name || 'No name',\n    path: file.path || 'No path', \n    user: file.user || 'No user',\n    job_name: file.job_name || 'No job_name',\n    all_properties: Object.keys(file)\n  };\n}\n\nreturn [{ json: debugInfo }];"
+      },
+      "id": "debug-payload",
+      "name": "Debug Webhook Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "content": "=## Debug Information\n\n**Webhook Payload:**\n```json\n{{ JSON.stringify($json.webhook_payload, null, 2) }}\n```\n\n**File Details:**\n```json\n{{ JSON.stringify($json.file_details, null, 2) }}\n```",
+        "options": {}
+      },
+      "id": "show-debug",
+      "name": "Show Debug Info",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [
+        [
+          {
+            "node": "Debug Webhook Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug Webhook Payload": {
+      "main": [
+        [
+          {
+            "node": "Show Debug Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1",
+  "meta": {},
+  "id": "docsgpt-debug-workflow",
+  "tags": []
+}

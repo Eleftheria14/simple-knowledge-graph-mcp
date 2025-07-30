@@ -19,5 +19,11 @@ CHROMADB_COLLECTION = os.getenv("CHROMADB_COLLECTION", "knowledge_graph")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
 
+# LlamaParse Configuration
+LLAMAPARSE_API_KEY = os.getenv("LLAMAPARSE_API_KEY", "")
+LLAMAPARSE_BASE_URL = "https://api.cloud.llamaindex.ai"
+LLAMAPARSE_PREMIUM_MODE = True
+LLAMAPARSE_LANGUAGE = "en"
+
 # Citation Styles
 CITATION_STYLES = ["APA", "IEEE", "Nature", "MLA"]

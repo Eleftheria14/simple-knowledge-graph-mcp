@@ -4,313 +4,232 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Essential Development Commands
 
-### Environment Setup
+### System Management
 ```bash
-# Modern UV-based setup (RECOMMENDED - Python 3.11+)
-./scripts/setup.sh
+# Complete system startup (recommended for development)
+./scripts/start_system.sh
 
-# Activate UV environment for manual commands
-uv run python <command>
-```
+# System health and status check
+./scripts/status_system.sh
 
-### Service Management
-```bash
-# Start required services (Neo4j)
-./scripts/start_services.sh
+# Complete system shutdown
+./scripts/stop_system.sh
 
-# Check system status and connections
-./scripts/check_status.sh
-
-# Stop all services
-./scripts/stop_services.sh
-```
-
-### n8n Workflow Automation
-```bash
-# Start n8n for batch processing workflows
-./scripts/n8n_manager.sh start
-
-# Start n8n MCP documentation server (Claude Code integration)
-./scripts/n8n_mcp_server.sh start
-
-# Check n8n status
-./scripts/n8n_manager.sh status
-
-# View n8n logs
-./scripts/n8n_manager.sh logs
-
-# Stop n8n
-./scripts/n8n_manager.sh stop
-
-# Access n8n web interface at http://localhost:5678
-# Login: admin / password123
-
-# Manage Claude Code MCP integration
-claude mcp list                    # List configured MCP servers
-claude mcp add-json <name> <json>   # Add MCP server configuration
+# Environment setup with UV package manager
+./scripts/utilities/setup.sh
 ```
 
 ### MCP Server Operations
 ```bash
-# Start HTTP MCP server (easy GUI setup)
-./scripts/start_http_server.sh
+# Start MCP server for Claude Desktop integration
+./scripts/mcp/start_mcp_for_claude.sh
 
-# Start STDIO MCP server (advanced JSON config)
-./scripts/start_mcp_server.sh
+# Start HTTP MCP server (web-based setup)
+./scripts/mcp/start_http_server.sh
 
-# Test specific components
-uv run python -c "import sys; sys.path.insert(0, 'src'); from server.main import mcp; print('✅ Server imports work')"
-
-# Manual server startup (for development)
+# Test MCP server functionality
 cd src && uv run python server/main.py
 cd src && uv run python server/main.py --http  # HTTP mode
 ```
 
 ### Database Management
 ```bash
-# Clear all data (fresh start)
-./scripts/clear_databases.sh
+# Clear all databases (fresh start)
+./scripts/database/clear_databases.sh
 
-# Test database connections
-uv run python -c "from neo4j import GraphDatabase; import chromadb; print('✅ DB libraries work')"
+# Start required services (Neo4j, Redis, MongoDB)
+./scripts/system/start_services.sh
+
+# Check database connections
+./scripts/status_system.sh
+```
+
+### DocsGPT Integration
+```bash
+# Start complete DocsGPT system with knowledge graph
+cd docsgpt-source/deployment && docker compose up -d
+
+# Development mode (frontend + backend)
+cd docsgpt-source/frontend && npm run dev  # Port 5173
+cd docsgpt-source/application && python app.py  # Port 7091
 ```
 
 ### Testing and Validation
 ```bash
 # Test import structure
 cd src && uv run python -c "
-from storage.neo4j import Neo4jStorage, Neo4jQuery
-from storage.chroma import ChromaDBStorage, ChromaDBQuery  
-from tools.storage.entity_storage import register_entity_tools
+from storage.neo4j import Neo4jStorage
+from storage.chroma import ChromaDBStorage  
 from server.main import mcp
 print('✅ All imports successful')
 "
 
 # Test MCP tools registration
 cd src && uv run python -c "from server.main import mcp; print(f'MCP server has {len(mcp._tools)} tools registered')"
+
+# Test database connections
+uv run python -c "from neo4j import GraphDatabase; import chromadb; print('✅ DB libraries work')"
 ```
 
-## System Architecture
+## High-Level Architecture
 
-### Dual-Mode Knowledge Graph MCP System
-This is a **modular FastMCP server** that provides 5 core tools for building and querying knowledge graphs from documents. The system uses two complementary storage backends:
+### System Purpose
+This is a **comprehensive document processing and knowledge graph system** designed to solve Claude Desktop conversation length limits when processing multiple research papers. It provides unlimited batch processing capabilities through multiple interfaces while maintaining complete local privacy.
 
-- **Neo4j**: Graph database for entities, relationships, and semantic connections
-- **ChromaDB**: Vector database for any content with local embeddings (sentence-transformers)
-
-### Core MCP Tools Available
-1. `store_entities` - Store entities and relationships in Neo4j graph database
-2. `store_vectors` - Store any content as vectors with embeddings in ChromaDB
-3. `query_knowledge_graph` - Query both databases for comprehensive research results
-4. `generate_literature_review` - Format results for academic writing with citations
-5. `clear_knowledge_graph` - Clear all data from both databases
-
-### Modular Architecture Pattern
-
-#### Storage Layer (`src/storage/`)
+### Multi-Interface Architecture
 ```
-storage/
-├── neo4j/           # Graph database operations
-│   ├── storage.py   # Entity and relationship storage
-│   └── query.py     # Graph queries and traversal
-├── chroma/          # Vector database operations  
-│   ├── storage.py   # Text storage with embeddings
-│   └── query.py     # Semantic search and retrieval
-└── embedding/       # Local embedding generation
-    └── service.py   # sentence-transformers integration
+Claude Desktop ↔ MCP Server ↔ Knowledge Graph Tools ↔ Neo4j + ChromaDB
+DocsGPT UI (5173) ↔ Flask Backend (7091) ↔ Knowledge Graph Bridge ↔ Storage Layer
+n8n Workflows (5678) ↔ MCP Community Node ↔ Knowledge Graph MCP ↔ Databases
 ```
 
-#### Tools Layer (`src/tools/`)
-```
-tools/
-├── storage/         # Data persistence tools
-│   ├── entity_storage.py      # register_entity_tools()
-│   ├── text_storage.py        # register_text_tools()  
-│   └── database_management.py # register_management_tools()
-└── query/           # Data retrieval tools
-    ├── knowledge_search.py     # register_search_tools()
-    └── literature_generation.py # register_literature_tools()
-```
+### Core Components
 
-#### Server Layer (`src/server/`)
-- `main.py` - FastMCP server orchestration and tool registration
+#### **MCP Knowledge Graph Server (`src/`)**
+- **FastMCP Server**: `src/server/main.py` - Main orchestration with 8+ registered tools
+- **Storage Layer**: Dual database strategy with Neo4j (graph) + ChromaDB (vector)
+  - `src/storage/neo4j/` - Entity and relationship storage/queries
+  - `src/storage/chroma/` - Vector storage with local embeddings
+  - `src/storage/embedding/` - sentence-transformers integration
+- **Tools Layer**: MCP tool implementations in `src/tools/`
+  - `storage/` modules - Data persistence tools
+  - `query/` modules - Data retrieval and literature generation tools
 
-#### Configuration (`src/config/`)
-- `settings.py` - Environment variables and database configuration
+#### **DocsGPT Integration (`docsgpt-source/`)**
+Professional document management UI with enhanced knowledge graph capabilities:
+- **Custom Retriever**: `application/integrations/knowledge_graph_bridge.py`
+- **Modified RAG Pipeline**: Bypasses default FAISS for Neo4j + ChromaDB queries
+- **Batch Processing**: No conversation length limits for document collections
 
-### Tool Registration Pattern
-Each tool module follows this pattern:
+#### **Workflow Automation**
+- **n8n Integration**: Community node enables workflow access to MCP tools
+- **Batch Processing**: `workflows/` directory contains pre-built processing pipelines
+- **Management Scripts**: Organized in `scripts/` by functionality (system, MCP, database, utilities)
+
+### Technology Stack
+
+#### **Core Technologies**
+- **Python 3.11+** with UV package manager for fast dependency resolution
+- **FastMCP** for Model Context Protocol server implementation
+- **Neo4j** (Docker) for graph database storage
+- **ChromaDB** for vector database with local sentence-transformers embeddings
+- **Docker** for multi-service orchestration
+
+#### **DocsGPT Stack**
+- **React + TypeScript** frontend with Vite build system
+- **Flask** RESTful API backend with Celery background processing
+- **Redis** for caching and message broker
+- **MongoDB** for user data and conversation storage
+
+#### **AI/ML Components**
+- **Local Embeddings**: sentence-transformers (privacy-first, no external APIs)
+- **LlamaParse** for advanced PDF processing with premium parsing modes
+- **Multi-LLM Support**: OpenAI, Anthropic, Google, Groq, local models
+
+### Development Patterns
+
+#### **Modular Tool Registration**
+All MCP tools follow this pattern in `src/tools/`:
 ```python
 def register_*_tools(mcp: FastMCP, *managers):
     @mcp.tool()
     def tool_name(params) -> Dict[str, Any]:
-        # Tool implementation
+        # Tool implementation using injected managers
         pass
 ```
 
-The main server imports and registers all tools:
-```python
-# Initialize storage managers
-neo4j_storage = Neo4jStorage()
-chromadb_storage = ChromaDBStorage()
+#### **Storage Abstraction**
+- **Separate Classes**: Storage and query operations split (e.g., `Neo4jStorage` + `Neo4jQuery`)
+- **Shared Dependencies**: `EmbeddingService` used across both Neo4j and ChromaDB
+- **Dependency Injection**: Managers passed to tool registration functions
 
-# Register tools from modules
-register_entity_tools(mcp, neo4j_storage)
-register_text_tools(mcp, chromadb_storage)
-```
-
-### Import Structure Requirements
-**Critical**: All imports within `src/` use absolute imports from the package root:
+#### **Import Structure Requirements**
+**Critical**: All imports within `src/` use absolute imports from package root:
 ```python
 # Correct
 from storage.neo4j import Neo4jStorage
 from tools.storage.entity_storage import register_entity_tools
-import config
 
-# Incorrect (relative imports cause issues)
+# Incorrect - causes import failures
 from ..storage.neo4j import Neo4jStorage
-from ...tools.storage.entity_storage import register_entity_tools
 ```
-
-### Database Integration Pattern
-The system uses separate storage and query classes for each database:
-
-**Neo4j Pattern**:
-- `Neo4jStorage` - Handles entity and relationship persistence
-- `Neo4jQuery` - Handles graph queries and relationship traversal
-
-**ChromaDB Pattern**:
-- `ChromaDBStorage` - Handles text storage with automatic embedding generation
-- `ChromaDBQuery` - Handles semantic search and citation retrieval
-
-Both share the `EmbeddingService` for consistent vector generation.
-
-### Entity Extraction Philosophy
-The system uses **flexible, AI-driven entity extraction** rather than rigid schemas:
-
-1. **Claude determines relevance** - No fixed entity types or constraints
-2. **Adaptive to document types** - Works across domains (chemistry, CS, biology, etc.)
-3. **Confidence scoring** - All entities and relationships include confidence metrics
-4. **Contextual relationships** - Relationships include source context for verification
-
-See `src/prompts/entity_extraction.md` for detailed guidance patterns.
-
-### Development Workflow
-1. **Code changes**: Work within the `src/` directory structure
-2. **Test imports**: Use `uv run python` from project root with `sys.path.insert(0, 'src')`
-3. **Server testing**: Always test from `src/` directory: `cd src && uv run python server/main.py`
-4. **Production deployment**: Use `./scripts/start_mcp_server.sh` which handles paths correctly
 
 ### Configuration Management
-- Environment variables in `.env` (created from `.env.example`)
-- Database URIs configurable via `NEO4J_URI`, `CHROMADB_PATH`
-- Embedding model configurable via `EMBEDDING_MODEL`
-- Citation styles: APA, IEEE, Nature, MLA (in `config.CITATION_STYLES`)
 
-### Local-First Design
-- **No external API dependencies** - All LLM processing via Claude Desktop/ChatGPT
-- **Local embeddings** - sentence-transformers for privacy
-- **Local databases** - Neo4j via Docker, ChromaDB as files
-- **Zero API keys required** - Complete offline operation capability
+#### **Environment Variables**
+Primary configuration in `.env` (created from `.env.example`):
+```bash
+# Database Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password123
+CHROMADB_PATH=/path/to/chroma_db
 
-## Common Development Patterns
+# AI Configuration
+EMBEDDING_MODEL=all-MiniLM-L6-v2  # Local model, no API needed
+LLAMAPARSE_API_KEY=llx-...  # Optional for advanced PDF processing
+GROQ_API_KEY=gsk_...  # Optional for fast AI inference
+```
 
-### Adding New MCP Tools
-1. Create tool function in appropriate module (`tools/storage/` or `tools/query/`)
-2. Follow the `register_*_tools(mcp, *managers)` pattern
+#### **Service Dependencies**
+**Required Services**:
+- **Neo4j** (port 7474/7687): Graph database for entities and relationships
+- **Redis** (port 6379): Caching, session storage, Celery broker
+- **MongoDB** (port 27017): User data, conversations, document metadata
+
+**Optional Services**:
+- **n8n** (port 5678): Workflow automation platform
+- **DocsGPT Frontend** (port 5173): Web UI for document management
+- **DocsGPT Backend** (port 7091): Flask API server
+
+### Entity Extraction Philosophy
+The system uses **AI-driven flexible entity extraction** rather than rigid schemas:
+- **Claude determines relevance** - No fixed entity types, adaptive to document domains
+- **Confidence scoring** - All entities and relationships include confidence metrics (0.5-1.0)
+- **Cross-domain compatibility** - Works for chemistry, computer science, biology, literature
+- **Contextual relationships** - Include source text fragments for verification
+
+### Privacy-First Design
+- **Local embeddings** using sentence-transformers (no external API calls)
+- **Local databases** via Docker containers or file-based storage
+- **Zero API keys required** for core functionality
+- **Optional external APIs** only for enhanced features (LlamaParse, LLM providers)
+- **Complete offline operation** capability for document processing
+
+### Multi-Mode Operation
+
+#### **Interactive Mode (Claude Desktop)**
+- Direct MCP integration with 8+ tools available
+- Real-time document processing and knowledge graph queries
+- HTTP and STDIO transport modes supported
+
+#### **Batch Mode (n8n Workflows)**
+- Automated processing of document collections
+- No conversation length limits
+- Pre-built workflows in `workflows/` directory
+
+#### **Web UI Mode (DocsGPT)**
+- Professional document management interface
+- Custom retriever for knowledge graph integration
+- Multi-user support with authentication
+
+### Development Workflow
+
+#### **Initial Setup**
+1. Run `./scripts/utilities/setup.sh` for UV environment setup
+2. Configure `.env` from `.env.example` template
+3. Start services with `./scripts/start_system.sh`
+4. Choose interface: Claude Desktop MCP, DocsGPT UI, or n8n workflows
+
+#### **Adding New MCP Tools**
+1. Create tool function in appropriate `src/tools/` module
+2. Follow `register_*_tools(mcp, *managers)` pattern
 3. Import and register in `src/server/main.py`
-4. Use absolute imports within `src/`
+4. Test with component validation scripts
 
-### Database Manager Development
-1. Separate storage and query operations into different classes
-2. Share common dependencies (like `EmbeddingService`) between related classes
-3. Use dependency injection pattern in tool registration
+#### **Database Schema Evolution**
+- **Neo4j**: Graph schema is dynamic, determined by AI entity extraction
+- **ChromaDB**: Vector collections are automatically managed
+- **Document metadata**: Stored with complete citation information for academic use
 
-### Testing New Components
-```bash
-# Test individual storage components
-cd src && uv run python -c "from storage.neo4j import Neo4jStorage; print('Neo4j ready')"
-
-# Test tool registration
-cd src && uv run python -c "from tools.storage.entity_storage import register_entity_tools; print('Tools ready')"
-
-# Test full server
-./scripts/start_mcp_server.sh
-
-# Test n8n MCP integration
-claude mcp list  # Verify n8n-docs server is configured
-```
-
-### n8n Workflow Development
-```bash
-# Import workflow template into n8n
-# 1. Open http://localhost:5678
-# 2. Menu (3 dots) → Import from File
-# 3. Select n8n_hello_world_workflow.json
-
-# Test MCP community node in n8n workflows
-# Configure MCP node with:
-# Transport: stdio
-# Command: uv
-# Args: ["run", "python", "src/server/main.py"]
-# Working Directory: /Users/[user]/Agents
-```
-
-## n8n Batch Processing Integration
-
-### Dual-Mode Operation
-The system now operates in two complementary modes:
-
-1. **Interactive Mode (Claude Desktop)**: Manual document processing via MCP tools
-2. **Batch Mode (n8n Workflows)**: Automated batch processing of multiple documents
-
-### n8n MCP Integration Architecture
-```
-Interactive: Claude Desktop ←→ Knowledge Graph MCP ←→ Neo4j + ChromaDB
-Batch:       n8n Workflows ←→ MCP Community Node ←→ Knowledge Graph MCP ←→ Neo4j + ChromaDB
-```
-
-### Key n8n Integration Components
-- **n8n MCP Documentation Server**: Provides Claude Code with expert n8n knowledge
-- **n8n MCP Community Node**: Enables n8n workflows to call your MCP tools directly
-- **Batch Processing Workflows**: Automated PDF processing, entity extraction, and knowledge graph building
-
-### Branch Structure
-- **main**: Stable interactive MCP system
-- **feature/n8n-batch-processing**: n8n integration development (current)
-
-### Workflow Templates
-Pre-built n8n workflow files available:
-- `n8n_hello_world_workflow.json`: Basic test workflow
-- Comprehensive batch processing workflow in planning docs
-
-## Entity Extraction System
-
-### AI-Driven Flexible Schema
-The system uses **Claude-determined entity extraction** rather than rigid schemas:
-
-- **Adaptive categorization**: No fixed entity types - Claude determines relevance
-- **Cross-domain compatibility**: Works for chemistry, CS, biology, literature, etc.
-- **Confidence scoring**: All entities and relationships include confidence metrics (0.5-1.0)
-- **Contextual relationships**: Include source text fragments for verification
-- **Complete citation requirements**: Mandatory bibliographic data for academic papers
-
-### Extraction Process
-Follows the comprehensive prompt in `ENTITY_EXTRACTION_PROMPT.md`:
-1. **Citation entity creation** (mandatory first step)
-2. **Entity identification** with descriptive IDs
-3. **Relationship mapping** with contextual evidence
-4. **Complete text storage** with systematic chunking
-5. **Validation** of entity-relationship consistency
-
-## Project Context
-
-This is a **production-ready MCP toolkit** for building knowledge graphs from documents using Claude Desktop or n8n workflows. The system enables researchers to:
-
-1. **Interactive Processing**: Upload PDFs to Claude Desktop for immediate analysis
-2. **Batch Processing**: Use n8n workflows for automated processing of document collections
-3. **Dual Storage**: Store in both graph (Neo4j) and vector (ChromaDB) databases
-4. **Intelligent Querying**: Query knowledge base for research insights and connections
-5. **Academic Output**: Generate formatted literature reviews with proper citations
-
-The architecture emphasizes **simplicity, modularity, and local privacy** while providing both interactive and automated research capabilities through comprehensive MCP protocol integration.
+The system emphasizes **modularity, privacy, and extensibility** while providing both interactive and automated research capabilities through comprehensive MCP protocol integration.

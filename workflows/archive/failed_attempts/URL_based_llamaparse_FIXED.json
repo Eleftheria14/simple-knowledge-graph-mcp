@@ -1,0 +1,133 @@
+{
+  "name": "URL-Based-LlamaParse-FIXED",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build DocsGPT download URL\nconst webhookData = items[0].json;\nconst fileName = webhookData.files[0].name;\n\n// DocsGPT download URL format\nconst downloadUrl = `http://docsgpt-oss-backend-1:7091/api/download?filename=${fileName}&user=test_user`;\n\nconsole.log('Download URL:', downloadUrl);\n\nreturn {\n  json: {\n    download_url: downloadUrl,\n    file_name: fileName,\n    ready_for_llamaparse: true\n  }\n};"
+      },
+      "id": "build-download-url",
+      "name": "Build Download URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "input_url",
+              "value": "={{ $json.download_url }}"
+            },
+            {
+              "name": "result_type",
+              "value": "markdown"
+            },
+            {
+              "name": "premium_mode",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "llamaparse-upload",
+      "name": "LlamaParse Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 45
+      },
+      "id": "wait-processing",
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.cloud.llamaindex.ai/api/parsing/job/{{ $('LlamaParse Upload').first().json.id }}/result/markdown",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer LLAMAPARSE_API_KEY_PLACEHOLDER"
+            }
+          ]
+        }
+      },
+      "id": "get-results",
+      "name": "Get LlamaParse Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const llamaParseResult = items[0].json;\nconst webhookData = $('DocsGPT Webhook').first().json;\n\nlet markdownContent = '';\nif (llamaParseResult && llamaParseResult.markdown) {\n  markdownContent = llamaParseResult.markdown;\n} else {\n  markdownContent = 'No content extracted';\n}\n\nconst response = {\n  success: true,\n  batch_id: webhookData.batch_id,\n  processed_file: webhookData.files[0].name,\n  markdown_length: markdownContent.length,\n  processing_timestamp: new Date().toISOString(),\n  status: 'processing_complete',\n  markdown_preview: markdownContent.substring(0, 500)\n};\n\nreturn {\n  json: response\n};"
+      },
+      "id": "prepare-response",
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Build Download URL", "type": "main", "index": 0}]]
+    },
+    "Build Download URL": {
+      "main": [[{"node": "LlamaParse Upload", "type": "main", "index": 0}]]
+    },
+    "LlamaParse Upload": {
+      "main": [[{"node": "Wait for Processing", "type": "main", "index": 0}]]
+    },
+    "Wait for Processing": {
+      "main": [[{"node": "Get LlamaParse Results", "type": "main", "index": 0}]]
+    },
+    "Get LlamaParse Results": {
+      "main": [[{"node": "Prepare Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "url-based-fixed",
+  "meta": {},
+  "id": "url-based-llamaparse-fixed",
+  "tags": []
+}

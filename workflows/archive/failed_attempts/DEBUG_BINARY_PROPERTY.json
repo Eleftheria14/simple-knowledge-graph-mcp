@@ -1,0 +1,51 @@
+{
+  "name": "DEBUG-BINARY-PROPERTY",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "debug-binary-property",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "debug-binary-property"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Debug: What binary properties exist?\nconsole.log('=== BINARY DEBUG ===');\nconsole.log('$binary exists:', !!$binary);\n\nif ($binary) {\n  const keys = Object.keys($binary);\n  console.log('Binary property keys:', keys);\n  \n  keys.forEach(key => {\n    const prop = $binary[key];\n    console.log(`Property \"${key}\":`);\n    console.log(`  - Type: ${typeof prop}`);\n    console.log(`  - Constructor: ${prop.constructor.name}`);\n    if (prop.length) console.log(`  - Length: ${prop.length}`);\n    if (prop.mimeType) console.log(`  - MIME: ${prop.mimeType}`);\n    if (prop.fileName) console.log(`  - Filename: ${prop.fileName}`);\n  });\n}\n\nreturn {\n  json: {\n    binary_exists: !!$binary,\n    binary_keys: $binary ? Object.keys($binary) : [],\n    debug_complete: true\n  }\n};"
+      },
+      "id": "debug-binary",
+      "name": "Debug Binary Properties",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Debug Binary Properties", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "debug-binary-property",
+  "tags": []
+}

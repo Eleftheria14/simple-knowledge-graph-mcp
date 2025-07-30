@@ -1,0 +1,55 @@
+{
+  "name": "DEBUG-Binary-Properties",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-json-debug-test.pdf/d4sc03921a.pdf",
+        "options": {}
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DEBUG: What exact binary properties exist after readBinaryFile?\nconsole.log('=== COMPLETE ITEM STRUCTURE ===');\nconsole.log('items[0]:', JSON.stringify(items[0], null, 2));\n\nconsole.log('=== BINARY ANALYSIS ===');\nconsole.log('$binary exists:', !!$binary);\n\nif ($binary) {\n  console.log('$binary keys:', Object.keys($binary));\n  \n  Object.keys($binary).forEach(key => {\n    console.log(`Binary property \"${key}\":`);\n    console.log(`  - Type: ${typeof $binary[key]}`);\n    console.log(`  - Constructor: ${$binary[key].constructor.name}`);\n    if ($binary[key].length !== undefined) {\n      console.log(`  - Length: ${$binary[key].length}`);\n    }\n    if ($binary[key].mimeType) {\n      console.log(`  - MIME Type: ${$binary[key].mimeType}`);\n    }\n    if ($binary[key].fileName) {\n      console.log(`  - File Name: ${$binary[key].fileName}`);\n    }\n  });\n} else {\n  console.log('ERROR: No $binary object found!');\n}\n\nconsole.log('=== JSON PROPERTIES ===');\nconsole.log('items[0].json keys:', Object.keys(items[0].json || {}));\n\nreturn [{\n  json: {\n    debug_complete: true,\n    binary_exists: !!$binary,\n    binary_keys: $binary ? Object.keys($binary) : [],\n    json_keys: Object.keys(items[0].json || {}),\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "debug-binary-props",
+      "name": "Debug Binary Properties",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "Debug Binary Properties", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "debug-props",
+  "meta": {},
+  "id": "debug-binary-properties",
+  "tags": []
+}

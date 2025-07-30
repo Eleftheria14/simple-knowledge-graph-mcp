@@ -8,8 +8,9 @@ class EmbeddingService:
     """Generate embeddings locally without API calls."""
     
     def __init__(self):
-        """Initialize embedding model."""
-        self.model = SentenceTransformer(config.EMBEDDING_MODEL)
+        """Initialize embedding model - now using DocsGPT's MPNet model."""
+        # Use DocsGPT's higher quality model instead of MiniLM
+        self.model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
     
     def encode_texts(self, texts: List[str]) -> np.ndarray:
         """Generate embeddings for multiple texts."""

@@ -1,0 +1,94 @@
+{
+  "name": "NODE-VERIFICATION-TEST",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "node-verification-test"
+      },
+      "id": "test-webhook",
+      "name": "Test Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { test: 'code node works' } }];"
+      },
+      "id": "test-code",
+      "name": "Test Code Node",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 100]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://httpbin.org/json"
+      },
+      "id": "test-http",
+      "name": "Test HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 100]
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/test.pdf"
+      },
+      "id": "test-llamaparse",
+      "name": "Test LlamaParse",
+      "type": "n8n-nodes-llamacloud.llamaParse",
+      "typeVersion": 1,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "text": "Test AI agent functionality"
+      },
+      "id": "test-ai-agent",
+      "name": "Test AI Agent",
+      "type": "n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-70b-versatile"
+      },
+      "id": "test-groq-llm",
+      "name": "Test Groq LLM",
+      "type": "n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "RETURN 'test' as result"
+      },
+      "id": "test-neo4j",
+      "name": "Test Neo4j",
+      "type": "@rxap/n8n-nodes-neo4j",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "add",
+        "collectionName": "test"
+      },
+      "id": "test-chromadb",
+      "name": "Test ChromaDB",
+      "type": "n8n-nodes-chromadb",
+      "typeVersion": 1,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {},
+  "active": false,
+  "settings": {},
+  "id": "node-verification-test"
+}

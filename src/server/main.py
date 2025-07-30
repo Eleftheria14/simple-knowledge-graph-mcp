@@ -24,6 +24,7 @@ import config
 
 # Import tool registration functions
 from tools.storage.entity_storage import register_entity_tools
+from tools.storage.enhanced_entity_storage import register_enhanced_entity_tools
 from tools.storage.text_storage import register_text_tools
 from tools.storage.database_management import register_management_tools
 from tools.query.knowledge_search import register_search_tools
@@ -40,7 +41,8 @@ chromadb_storage = ChromaDBStorage()
 chromadb_query = ChromaDBQuery()
 
 # Register all tools from separate modules
-register_entity_tools(mcp, neo4j_storage)
+register_entity_tools(mcp, neo4j_storage)  # Keep original tools for backward compatibility
+register_enhanced_entity_tools(mcp, neo4j_storage, chromadb_storage)  # Add enhanced tools
 register_text_tools(mcp, chromadb_storage)
 register_management_tools(mcp, neo4j_storage, chromadb_storage)
 register_search_tools(mcp, neo4j_query, chromadb_query)

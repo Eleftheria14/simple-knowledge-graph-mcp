@@ -1,0 +1,51 @@
+{
+  "name": "CODE-NODE-SOLUTION",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "code-node-solution",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook",
+      "name": "DocsGPT Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "code-node-solution"
+    },
+    {
+      "parameters": {
+        "filePath": "/data/local/chemistry-paper.pdf/d4sc03921a.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Bypass broken n8n HTTP Request binary upload\nconst https = require('https');\nconst { URL } = require('url');\n\n// Get file buffer from previous node\nconst fileBuffer = $binary.data;\nif (!fileBuffer) {\n  throw new Error('No binary data found');\n}\n\nconsole.log('File buffer size:', fileBuffer.length);\n\n// Create proper multipart form data\nconst boundary = '----formdata-n8n-' + Date.now();\nconst CRLF = '\\r\\n';\n\n// Build multipart body\nlet body = '';\nbody += `--${boundary}${CRLF}`;\nbody += `Content-Disposition: form-data; name=\"file\"; filename=\"d4sc03921a.pdf\"${CRLF}`;\nbody += `Content-Type: application/pdf${CRLF}${CRLF}`;\n\n// Convert to buffers and combine\nconst bodyStart = Buffer.from(body, 'utf8');\nconst bodyEnd = Buffer.from(`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name=\"result_type\"${CRLF}${CRLF}markdown${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name=\"premium_mode\"${CRLF}${CRLF}true${CRLF}--${boundary}--${CRLF}`, 'utf8');\n\nconst fullBody = Buffer.concat([bodyStart, fileBuffer, bodyEnd]);\n\n// Make HTTPS request\nreturn new Promise((resolve, reject) => {\n  const options = {\n    hostname: 'api.cloud.llamaindex.ai',\n    port: 443,\n    path: '/api/parsing/upload',\n    method: 'POST',\n    headers: {\n      'Authorization': 'Bearer LLAMAPARSE_API_KEY_PLACEHOLDER',\n      'Content-Type': `multipart/form-data; boundary=${boundary}`,\n      'Content-Length': fullBody.length\n    }\n  };\n\n  const req = https.request(options, (res) => {\n    let data = '';\n    res.on('data', chunk => data += chunk);\n    res.on('end', () => {\n      try {\n        const result = JSON.parse(data);\n        resolve({ json: { success: true, llamaparse_response: result, status_code: res.statusCode } });\n      } catch (e) {\n        resolve({ json: { success: false, error: 'Invalid JSON', raw_response: data, status_code: res.statusCode } });\n      }\n    });\n  });\n\n  req.on('error', (error) => {\n    reject(new Error(`Request failed: ${error.message}`));\n  });\n\n  req.write(fullBody);\n  req.end();\n});"
+      },
+      "id": "llamaparse-code-upload",
+      "name": "LlamaParse Code Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "DocsGPT Webhook": {
+      "main": [[{"node": "Read PDF File", "type": "main", "index": 0}]]
+    },
+    "Read PDF File": {
+      "main": [[{"node": "LlamaParse Code Upload", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "code-node-solution",
+  "tags": []
+}

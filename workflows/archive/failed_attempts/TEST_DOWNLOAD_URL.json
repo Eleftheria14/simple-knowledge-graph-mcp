@@ -1,0 +1,36 @@
+{
+  "name": "TEST-DOWNLOAD-URL",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docsgpt-batch-process"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "docsgpt-batch-process"
+    },
+    {
+      "parameters": {
+        "url": "http://docsgpt-oss-backend-1:7091/api/download?filename=d4sc03921a.pdf&user=test_user"
+      },
+      "id": "test-download",
+      "name": "Test Download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Test Download", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "test-download-url",
+  "tags": []
+}
