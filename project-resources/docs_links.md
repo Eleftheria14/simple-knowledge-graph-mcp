@@ -31,10 +31,18 @@
 
 ## LangChain
 - [LangChain Introduction](https://python.langchain.com/docs/introduction/)
+- [LangChain Agents Tutorial](https://python.langchain.com/docs/tutorials/agents/)
 - [LangChain GraphRAG Retrievers](https://python.langchain.com/docs/integrations/retrievers/graph_rag/)
 - [LangChain Graph Retriever Package](https://pypi.org/project/langchain-graph-retriever/)
 - [LangChain Knowledge Graph Construction](https://python.langchain.com/docs/how_to/graph_constructing/)
 - [LangChain ChromaDB Integration](https://python.langchain.com/docs/integrations/vectorstores/chroma/)
+
+## LangGraph
+- [LangGraph Introduction](https://python.langchain.com/docs/introduction/?_gl=1*hxgigr*_gcl_au*MTg4NjUwNzM1OC4xNzUyNDAwMTYw*_ga*MTkwNDI4Mjg2NC4xNzUzOTEzMzQ4*_ga_47WX3HKKY2*czE3NTM5MTMzNDgkbzEkZzEkdDE3NTM5MTMzNzMkajM1JGwwJGgw)
+- [LangGraph Agents Tutorial](https://python.langchain.com/docs/tutorials/agents/)
+
+## LangSmith
+- [LangSmith Documentation](https://docs.smith.langchain.com/?_gl=1*6j4bqt*_gcl_au*MTg4NjUwNzM1OC4xNzUyNDAwMTYw*_ga*MTkwNDI4Mjg2NC4xNzUzOTEzMzQ4*_ga_47WX3HKKY2*czE3NTM5MTMzNDgkbzEkZzEkdDE3NTM5MTM2OTIkajMyJGwwJGgw)
 
 ## ChromaDB
 - [ChromaDB Overview](https://docs.trychroma.com/docs/overview/introduction)
