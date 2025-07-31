@@ -9,8 +9,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from processor.config import ProcessorConfig
 from processor.tools.llamaparse_tool import llamaparse_pdf
-from processor.tools.citation_tool import extract_citations
-from processor.tools.storage_tool import store_in_neo4j
+from tools.shared_registry import SharedToolRegistry
 
 class DocumentOrchestrator:
     """Intelligent document processing orchestrator using LangGraph"""
@@ -25,11 +24,11 @@ class DocumentOrchestrator:
             groq_api_key=config.groq_api_key
         )
         
-        # Initialize tools
+        # Initialize tools - combine PDF parsing with shared MCP tools
+        shared_tools = SharedToolRegistry.get_all_tools()
         self.tools = [
-            llamaparse_pdf,
-            extract_citations, 
-            store_in_neo4j
+            llamaparse_pdf,  # Keep specialized PDF tool
+            *shared_tools    # Add all shared MCP tools
         ]
         
         # Create LangGraph agent
@@ -56,12 +55,19 @@ class DocumentOrchestrator:
             Process the PDF document at: {file_path}
             
             Follow these steps:
-            1. Use llamaparse_pdf to extract content from the PDF (pass the API key from config)
-            2. Use extract_citations to find all citations and references from the extracted content
-            3. Extract entities and relationships from the content (create sample entities and relationships for now)
-            4. Use store_in_neo4j to save everything to the knowledge graph
+            1. Use llamaparse_pdf to extract content from the PDF
+               - Use API key: {self.config.llamaparse_api_key}
+               - Get structured text content from the PDF
             
-            Return a summary of what was processed and stored.
+            2. Use extract_and_store_entities to analyze the extracted content
+               - Pass the PDF content as the 'content' parameter
+               - Use document_info with title from the filename and type 'pdf'
+               - This will extract entities, relationships, and store them in Neo4j
+            
+            Return a summary of:
+            - PDF processing results (pages, content length)
+            - Entity extraction results (entities found, relationships mapped)
+            - Storage confirmation (what was stored in Neo4j)
             """
             
             # Execute through LangGraph agent

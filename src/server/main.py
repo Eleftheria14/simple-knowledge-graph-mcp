@@ -21,12 +21,8 @@ from fastmcp import FastMCP
 from storage.neo4j import Neo4jStorage, Neo4jQuery
 import config
 
-# Import tool registration functions
-from tools.storage.entity_storage import register_entity_tools
-from tools.storage.text_storage import register_text_tools
-from tools.storage.database_management import register_management_tools
-from tools.query.knowledge_search import register_search_tools
-from tools.query.literature_generation import register_literature_tools
+# Import shared tool registry
+from tools.shared_registry import register_all_mcp_tools
 
 # Initialize MCP server
 mcp = FastMCP("Knowledge Graph Research Assistant")
@@ -35,12 +31,8 @@ mcp = FastMCP("Knowledge Graph Research Assistant")
 neo4j_storage = Neo4jStorage()
 neo4j_query = Neo4jQuery()
 
-# Register all tools from separate modules
-register_entity_tools(mcp, neo4j_storage)
-register_text_tools(mcp, neo4j_storage)  # Now uses Neo4j for vectors too
-register_management_tools(mcp, neo4j_storage)
-register_search_tools(mcp, neo4j_query, neo4j_storage)  # Updated to use Neo4j for vector search
-register_literature_tools(mcp, neo4j_query, neo4j_storage)
+# Register all tools using shared registry
+register_all_mcp_tools(mcp, neo4j_storage, neo4j_query)
 
 
 if __name__ == "__main__":
