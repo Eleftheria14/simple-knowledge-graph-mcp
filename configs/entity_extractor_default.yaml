@@ -1,0 +1,182 @@
+model_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.1
+  max_tokens: 4096
+  timeout_seconds: 60
+
+extraction_settings:
+  extraction_mode: comprehensive
+  global_confidence_threshold: 0.7
+  max_content_length: 4000
+  enable_fallback_extraction: true
+
+entity_types:
+  enabled_types:
+    - person
+    - organization
+    - concept
+    - technology
+    - publication
+  type_configs:
+    person:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: null
+      required_properties:
+        - affiliation
+      example_entities:
+        - John Smith
+        - Dr. Jane Doe
+        - Prof. Alan Turing
+      extraction_hints:
+        - Look for author names, researchers, historical figures
+    organization:
+      enabled: true
+      confidence_threshold: 0.7
+      max_entities: null
+      required_properties:
+        - type
+      example_entities:
+        - Google Research
+        - MIT
+        - IEEE
+        - Microsoft
+      extraction_hints:
+        - Universities, companies, research institutions, journals
+    concept:
+      enabled: true
+      confidence_threshold: 0.7
+      max_entities: 20
+      required_properties: []
+      example_entities:
+        - machine learning
+        - neural networks
+        - algorithm
+      extraction_hints:
+        - Technical terms, theories, methodologies, key ideas
+    technology:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: null
+      required_properties: []
+      example_entities:
+        - TensorFlow
+        - Python
+        - GPU
+        - Transformer
+      extraction_hints:
+        - Tools, frameworks, programming languages, hardware
+    publication:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: null
+      required_properties:
+        - year
+        - type
+      example_entities:
+        - Nature
+        - NIPS 2017
+        - Attention Is All You Need
+      extraction_hints:
+        - Papers, books, journals, conferences, citations
+
+relationships:
+  enabled_types:
+    - AUTHORED
+    - WORKS_AT
+    - USES
+    - CITES
+    - RELATED_TO
+    - DEVELOPED
+  max_per_entity: 10
+  confidence_threshold: 0.6
+
+prompts:
+  system_prompt: |
+    You are an expert entity extraction agent specialized in analyzing document content.
+    Your task is to identify and extract structured knowledge from text with high accuracy.
+
+    Extraction Mode: comprehensive
+    Domain Context: General document analysis
+
+    Focus on precision and relevance. Only extract entities you are confident about.
+  instruction_template: |
+    Analyze the following document content and extract entities and relationships.
+
+    TARGET ENTITY TYPES: person, organization, concept, technology, publication
+    TARGET RELATIONSHIP TYPES: AUTHORED, WORKS_AT, USES, CITES, RELATED_TO, DEVELOPED
+
+    EXTRACTION GUIDELINES:
+    {entity_guidelines}
+
+    RELATIONSHIP GUIDELINES:  
+    {relationship_guidelines}
+
+    QUALITY REQUIREMENTS:
+    - Only extract entities with confidence >= 0.7
+    - Provide clear, standardized entity names
+    - Include relevant properties for context
+    - Ensure relationships are meaningful and accurate
+
+    {context_instructions}
+
+    Return ONLY valid JSON format:
+    {{
+      "entities": [
+        {{
+          "id": "unique_entity_id",
+          "name": "Standardized Entity Name", 
+          "type": "entity_type",
+          "properties": {{"key": "value"}},
+          "confidence": 0.0-1.0
+        }}
+      ],
+      "relationships": [
+        {{
+          "source": "source_entity_id",
+          "target": "target_entity_id", 
+          "type": "RELATIONSHIP_TYPE",
+          "context": "Brief explanation of relationship",
+          "confidence": 0.0-1.0
+        }}
+      ],
+      "metadata": {{
+        "total_entities": 0,
+        "total_relationships": 0,
+        "extraction_mode": "comprehensive",
+        "confidence_threshold": 0.7
+      }}
+    }}
+
+    Document content:
+    {{content}}
+  entity_guidelines:
+    person: Extract authors, researchers, historical figures. Include affiliation when available.
+    organization: Extract companies, universities, institutions. Specify organization type.
+    concept: Extract key technical terms, theories, methodologies. Focus on domain-specific concepts.
+    technology: Extract tools, frameworks, systems, algorithms. Include version info when relevant.
+    publication: Extract papers, books, journals. Include publication year and venue when available.
+  relationship_guidelines:
+    AUTHORED: Person -> Publication (authored/wrote)
+    WORKS_AT: Person -> Organization (employment/affiliation)
+    USES: Entity -> Technology (utilizes/implements)
+    CITES: Publication -> Publication (references/cites)
+    RELATED_TO: General conceptual relationship
+    DEVELOPED: Person/Organization -> Technology (created/built)
+  context_instructions:
+    - Focus on entities that are central to the document's main topic
+    - Prioritize entities that appear multiple times or in important sections
+    - Extract relationships that provide meaningful connections between entities
+  custom_instructions: []
+  domain_context: ''
+
+output:
+  include_metadata: true
+  include_confidence_scores: true
+  include_extraction_reasoning: false
+  validate_json_output: true
+
+performance:
+  retry_on_json_error: true
+  max_retry_attempts: 2
+  enable_caching: false

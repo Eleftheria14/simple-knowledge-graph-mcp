@@ -8,41 +8,66 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 from processor.config import ProcessorConfig
+from processor.orchestrator_config import OrchestratorConfig, WorkflowType, ProcessingMode
 from processor.tools.llamaparse_tool import llamaparse_pdf
 from tools.shared_registry import SharedToolRegistry
 
 class DocumentOrchestrator:
     """Intelligent document processing orchestrator using LangGraph"""
     
-    def __init__(self, config: ProcessorConfig):
+    def __init__(self, config: ProcessorConfig, orchestrator_config: OrchestratorConfig = None):
         self.config = config
+        self.orchestrator_config = orchestrator_config or OrchestratorConfig()
         
-        # Initialize Groq LLM
+        # Initialize Groq LLM with orchestrator config
         self.llm = ChatGroq(
-            model=config.model_name,
-            temperature=config.temperature,
-            groq_api_key=config.groq_api_key
+            model=self.orchestrator_config.model_name,
+            temperature=self.orchestrator_config.temperature,
+            groq_api_key=config.groq_api_key,
+            max_tokens=self.orchestrator_config.max_tokens
         )
         
-        # Initialize tools - combine PDF parsing with shared MCP tools
-        shared_tools = SharedToolRegistry.get_all_tools()
-        self.tools = [
-            llamaparse_pdf,  # Keep specialized PDF tool
-            *shared_tools    # Add all shared MCP tools
-        ]
+        # Initialize tools based on configuration
+        self.tools = self._initialize_tools()
         
-        # Create LangGraph agent
+        # Create LangGraph agent with system prompt
         self.agent = create_react_agent(
             self.llm, 
             self.tools, 
-            checkpointer=MemorySaver()
+            checkpointer=MemorySaver(),
+            state_modifier=self.orchestrator_config.system_prompt
         )
         
-        print(f"✅ DocumentOrchestrator initialized with {len(self.tools)} tools")
-        print(f"📋 Available tools: {[tool.name for tool in self.tools]}")
+        print(f"✅ DocumentOrchestrator initialized")
+        print(f"🤖 Model: {self.orchestrator_config.model_name}")
+        print(f"🔧 Mode: {self.orchestrator_config.processing_mode.value}")
+        print(f"📋 Tools: {len(self.tools)} ({[tool.name for tool in self.tools]})")
+        print(f"🚀 Workflow: {self.orchestrator_config.default_workflow.value}")
     
-    async def process_document(self, file_path: str) -> Dict[str, Any]:
-        """Process a single document through the LangGraph agent"""
+    def _initialize_tools(self) -> List:
+        """Initialize tools based on configuration"""
+        all_tools = [llamaparse_pdf] + SharedToolRegistry.get_all_tools()
+        enabled_tool_configs = self.orchestrator_config.get_enabled_tools()
+        enabled_names = [config.name for config in enabled_tool_configs]
+        
+        # Filter tools based on configuration
+        selected_tools = [
+            tool for tool in all_tools 
+            if tool.name in enabled_names
+        ]
+        
+        # Sort by priority (lower number = higher priority)
+        tool_priority_map = {
+            config.name: config.priority 
+            for config in enabled_tool_configs
+        }
+        
+        selected_tools.sort(key=lambda t: tool_priority_map.get(t.name, 999))
+        
+        return selected_tools
+    
+    async def process_document(self, file_path: str, workflow_type: WorkflowType = None) -> Dict[str, Any]:
+        """Process a single document through the LangGraph agent using configured workflows"""
         try:
             file_path = Path(file_path)
             if not file_path.exists():
@@ -50,25 +75,22 @@ class DocumentOrchestrator:
             
             print(f"🔄 Processing document: {file_path.name}")
             
-            # Create processing instruction for the agent
-            processing_instruction = f"""
-            Process the PDF document at: {file_path}
+            # Determine workflow to use
+            workflow_type = workflow_type or self.orchestrator_config.default_workflow
+            workflow = self.orchestrator_config.get_workflow(workflow_type)
             
-            Follow these steps:
-            1. Use llamaparse_pdf to extract content from the PDF
-               - Use API key: {self.config.llamaparse_api_key}
-               - Get structured text content from the PDF
+            print(f"📋 Using workflow: {workflow.name}")
             
-            2. Use extract_and_store_entities to analyze the extracted content
-               - Pass the PDF content as the 'content' parameter
-               - Use document_info with title from the filename and type 'pdf'
-               - This will extract entities, relationships, and store them in Neo4j
+            # Create processing instruction using workflow template
+            processing_instruction = self._build_processing_instruction(
+                file_path, workflow
+            )
             
-            Return a summary of:
-            - PDF processing results (pages, content length)
-            - Entity extraction results (entities found, relationships mapped)
-            - Storage confirmation (what was stored in Neo4j)
-            """
+            # Add custom instructions if configured
+            if self.orchestrator_config.custom_instructions:
+                processing_instruction += f"\n\nAdditional Instructions:\n{self.orchestrator_config.custom_instructions}"
+            
+            print(f"🤖 Executing agent with {len(self.tools)} tools...")
             
             # Execute through LangGraph agent
             response = await self.agent.ainvoke(
@@ -79,13 +101,28 @@ class DocumentOrchestrator:
             # Extract final message from agent response
             final_message = response.get("messages", [])[-1].content if response.get("messages") else "Processing completed"
             
+            # Build result based on configuration
             result = {
                 "success": True,
                 "file_path": str(file_path),
+                "workflow_used": workflow.name,
+                "workflow_type": workflow_type.value,
                 "agent_response": final_message,
                 "processing_steps": len(response.get("messages", [])),
-                "message": f"Document {file_path.name} processed through LangGraph agent"
+                "message": f"Document {file_path.name} processed using {workflow.name}",
+                "tools_used": [tool.name for tool in self.tools]
             }
+            
+            # Include intermediate results if configured
+            if self.orchestrator_config.include_intermediate_results:
+                result["intermediate_messages"] = [
+                    msg.content for msg in response.get("messages", [])
+                ]
+            
+            # Check success criteria
+            result["success_criteria_met"] = self._check_success_criteria(
+                result, workflow.success_criteria
+            )
             
             print(f"✅ Completed processing: {file_path.name}")
             return result
@@ -95,8 +132,41 @@ class DocumentOrchestrator:
             return {
                 "success": False,
                 "file_path": str(file_path),
+                "workflow_type": workflow_type.value if workflow_type else "unknown",
                 "error": str(e)
             }
+    
+    def _build_processing_instruction(self, file_path: Path, workflow) -> str:
+        """Build processing instruction from workflow template"""
+        if workflow.prompt_template.instruction_template:
+            # Use workflow-specific template
+            instruction = workflow.prompt_template.instruction_template.format(
+                file_path=file_path,
+                llamaparse_api_key=self.config.llamaparse_api_key
+            )
+        else:
+            # Fallback to basic instruction
+            instruction = f"""
+            Process the document at: {file_path}
+            
+            Available tools: {[tool.name for tool in self.tools]}
+            Tool sequence (if specified): {workflow.tool_sequence}
+            
+            Extract key information and relationships from the document.
+            Use the available tools in the most effective order.
+            """
+        
+        return instruction
+    
+    def _check_success_criteria(self, result: Dict[str, Any], criteria: List[str]) -> List[str]:
+        """Check which success criteria were met"""
+        met_criteria = []
+        
+        for criterion in criteria:
+            if criterion.lower() in result.get("agent_response", "").lower():
+                met_criteria.append(criterion)
+        
+        return met_criteria
     
     def process_document_sync(self, file_path: str) -> Dict[str, Any]:
         """Synchronous wrapper for document processing"""

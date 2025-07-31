@@ -1,0 +1,209 @@
+model_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.05
+  max_tokens: 4096
+  timeout_seconds: 90
+
+extraction_settings:
+  extraction_mode: academic
+  global_confidence_threshold: 0.8
+  max_content_length: 4000
+  enable_fallback_extraction: true
+
+entity_types:
+  enabled_types:
+    - person
+    - organization
+    - concept
+    - publication
+    - methodology
+  type_configs:
+    person:
+      enabled: true
+      confidence_threshold: 0.85
+      max_entities: null
+      required_properties:
+        - affiliation
+        - role
+      example_entities:
+        - Dr. Geoffrey Hinton
+        - Prof. Yann LeCun
+        - Yoshua Bengio
+      extraction_hints:
+        - Focus on authors, researchers, academic figures
+        - Include full names and institutional affiliations
+        - Identify corresponding authors and principal investigators
+    organization:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: null
+      required_properties:
+        - type
+        - location
+      example_entities:
+        - Stanford University
+        - Google DeepMind
+        - Nature Communications
+        - NeurIPS
+      extraction_hints:
+        - Universities and research institutions
+        - Academic journals and conferences
+        - Research laboratories and centers
+    concept:
+      enabled: true
+      confidence_threshold: 0.75
+      max_entities: 25
+      required_properties:
+        - domain
+      example_entities:
+        - transformer architecture
+        - self-attention mechanism
+        - gradient descent
+        - reinforcement learning
+      extraction_hints:
+        - Key theoretical concepts and frameworks
+        - Technical terminology and definitions
+        - Research methodologies and approaches
+        - Novel contributions and innovations
+    publication:
+      enabled: true
+      confidence_threshold: 0.9
+      max_entities: null
+      required_properties:
+        - year
+        - venue
+        - type
+      example_entities:
+        - Attention Is All You Need
+        - Nature 2023
+        - ICML 2022
+      extraction_hints:
+        - Paper titles and publication venues
+        - Citation information with years
+        - Conference proceedings and journal articles
+    methodology:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: 15
+      required_properties:
+        - domain
+        - type
+      example_entities:
+        - cross-validation
+        - randomized controlled trial
+        - statistical significance testing
+      extraction_hints:
+        - Research methods and experimental designs
+        - Statistical techniques and analytical approaches
+        - Evaluation metrics and validation procedures
+
+relationships:
+  enabled_types:
+    - AUTHORED
+    - WORKS_AT
+    - CITES
+    - BASED_ON
+    - APPLIED
+  max_per_entity: 15
+  confidence_threshold: 0.7
+
+prompts:
+  system_prompt: |
+    You are an expert academic research assistant specializing in comprehensive document analysis.
+    Your goal is to extract maximum knowledge value from research papers for academic use.
+    
+    Focus Areas:
+    - Author names and affiliations
+    - Key concepts, theories, and terminology
+    - Research methodologies and experimental design
+    - Results, findings, and conclusions
+    - Citations and references to other work
+    - Relationships between concepts and findings
+    
+    Maintain academic rigor and precision in all extractions.
+  instruction_template: |
+    Perform comprehensive academic analysis of the following document content.
+
+    TARGET ENTITY TYPES: person, organization, concept, publication, methodology
+    TARGET RELATIONSHIP TYPES: AUTHORED, WORKS_AT, CITES, BASED_ON, APPLIED
+
+    ACADEMIC EXTRACTION GUIDELINES:
+    {entity_guidelines}
+
+    RELATIONSHIP GUIDELINES:  
+    {relationship_guidelines}
+
+    QUALITY REQUIREMENTS:
+    - Maintain high confidence thresholds (≥0.8 for most entities)
+    - Extract complete author names with affiliations
+    - Identify key research contributions and novel concepts
+    - Map citation networks and methodological relationships
+    - Focus on academically significant entities
+
+    {context_instructions}
+
+    Return ONLY valid JSON format:
+    {{
+      "entities": [
+        {{
+          "id": "unique_entity_id",
+          "name": "Standardized Entity Name", 
+          "type": "entity_type",
+          "properties": {{"key": "value"}},
+          "confidence": 0.0-1.0
+        }}
+      ],
+      "relationships": [
+        {{
+          "source": "source_entity_id",
+          "target": "target_entity_id", 
+          "type": "RELATIONSHIP_TYPE",
+          "context": "Brief explanation of relationship",
+          "confidence": 0.0-1.0
+        }}
+      ],
+      "metadata": {{
+        "total_entities": 0,
+        "total_relationships": 0,
+        "extraction_mode": "academic",
+        "confidence_threshold": 0.8
+      }}
+    }}
+
+    Document content:
+    {{content}}
+  entity_guidelines:
+    person: Extract academic authors, researchers, and scholars. Always include institutional affiliations and academic roles when available.
+    organization: Extract universities, research institutions, academic journals, and conferences. Include location and institutional type.
+    concept: Extract key theoretical concepts, technical terminology, and research frameworks. Focus on domain-specific academic concepts.
+    publication: Extract cited papers, books, and academic publications. Include full bibliographic information when available.
+    methodology: Extract research methods, experimental designs, and analytical approaches. Include methodological frameworks and evaluation metrics.
+  relationship_guidelines:
+    AUTHORED: Person -> Publication (authored or co-authored academic work)
+    WORKS_AT: Person -> Organization (academic affiliation or employment)
+    CITES: Publication -> Publication (academic citation or reference)
+    BASED_ON: Concept/Method -> Publication (theoretical foundation or methodological basis)
+    APPLIED: Method -> Concept (application of methodology to research problem)
+  context_instructions:
+    - Prioritize author names and institutional affiliations
+    - Extract research methodologies and experimental approaches
+    - Identify key contributions and novel concepts
+    - Map citation relationships between publications
+    - Focus on technical terminology and domain concepts
+  custom_instructions:
+    - Always prioritize academic accuracy and completeness
+    - Extract citation information with full bibliographic details
+    - Identify concept hierarchies and research methodologies
+    - Map author collaborations and institutional affiliations
+  domain_context: Academic research paper analysis
+
+output:
+  include_metadata: true
+  include_confidence_scores: true
+  include_extraction_reasoning: true
+  validate_json_output: true
+
+performance:
+  retry_on_json_error: true
+  max_retry_attempts: 3
+  enable_caching: false

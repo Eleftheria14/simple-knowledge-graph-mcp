@@ -1,0 +1,5 @@
+
+    GPT-4 is a multimodal model by OpenAI that shows human-level performance 
+    on professional benchmarks. Built on GPT-3.5, it uses RLHF training 
+    similar to ChatGPT and achieves 90th percentile on the Bar Exam.
+    

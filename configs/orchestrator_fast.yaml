@@ -1,0 +1,80 @@
+agent_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.2
+  max_tokens: 1024
+  processing_mode: fast
+
+tools:
+  enabled_tools:
+    - llamaparse_pdf
+  tool_configs:
+    llamaparse_pdf:
+      enabled: true
+      priority: 1
+      required: true
+      parameters:
+        parsing_instruction: Quick text extraction, basic structure
+    extract_and_store_entities:
+      enabled: false
+      priority: 2
+      required: false
+    store_vectors:
+      enabled: false
+      priority: 3
+      required: false
+
+workflows:
+  fast:
+    description: Quick document processing for rapid content access
+    tool_sequence:
+      - llamaparse_pdf
+    prompt_template:
+      system_prompt: You are a fast document processing assistant. Provide quick, concise summaries.
+      instruction_template: |
+        Quick processing of: {file_path}
+        
+        Task:
+        1. Use llamaparse_pdf to extract the document content
+        2. Provide a brief summary covering:
+           - Document type and main topic
+           - Key points or findings (3-5 bullet points)
+           - Document length and structure
+        
+        Keep the response concise and actionable.
+      response_format: brief_summary
+    success_criteria:
+      - PDF extracted
+      - Summary provided
+
+  general_document:
+    description: Standard fast processing
+    tool_sequence:
+      - llamaparse_pdf
+    prompt_template:
+      system_prompt: You provide quick document summaries.
+      instruction_template: |
+        Extract and summarize: {file_path}
+        
+        Use llamaparse_pdf to get the content, then provide:
+        - Main topic
+        - Key points
+        - Document overview
+      response_format: quick_overview
+    success_criteria:
+      - Content extracted
+      - Overview provided
+
+prompts:
+  system_prompt: You are a fast document processing assistant focused on speed and efficiency.
+  custom_instructions: Prioritize speed over depth. Provide concise, actionable summaries.
+  response_format: brief_summary
+
+processing:
+  timeout_seconds: 60
+  retry_attempts: 1
+  parallel_processing: false
+
+output:
+  include_intermediate_results: false
+  detailed_logging: false
+  save_processing_trace: false

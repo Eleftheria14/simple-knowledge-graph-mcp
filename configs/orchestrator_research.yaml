@@ -1,0 +1,111 @@
+agent_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.05
+  max_tokens: 4096
+  processing_mode: thorough
+
+tools:
+  enabled_tools:
+    - llamaparse_pdf
+    - extract_and_store_entities
+    - store_vectors
+  tool_configs:
+    llamaparse_pdf:
+      enabled: true
+      priority: 1
+      required: true
+      parameters:
+        parsing_instruction: Extract all text, preserve citations, maintain document structure
+    extract_and_store_entities:
+      enabled: true  
+      priority: 1
+      required: true
+      parameters:
+        confidence_threshold: 0.8
+        focus_areas: ["authors", "concepts", "methodologies", "results", "citations"]
+    store_vectors:
+      enabled: true
+      priority: 2
+      required: true
+      parameters:
+        chunk_size: 300
+        overlap: 75
+        preserve_citations: true
+
+workflows:
+  research_paper:
+    description: Deep academic analysis for research papers
+    tool_sequence:
+      - llamaparse_pdf
+      - extract_and_store_entities  
+      - store_vectors
+    prompt_template:
+      system_prompt: |
+        You are an expert academic research assistant specializing in comprehensive document analysis.
+        Your goal is to extract maximum knowledge value from research papers for academic use.
+        
+        Focus Areas:
+        - Author names and affiliations
+        - Key concepts, theories, and terminology
+        - Research methodologies and experimental design
+        - Results, findings, and conclusions
+        - Citations and references to other work
+        - Relationships between concepts and findings
+        
+        Maintain academic rigor and precision in all extractions.
+      instruction_template: |
+        Perform comprehensive academic analysis of: {file_path}
+        
+        Phase 1 - Document Extraction:
+        Use llamaparse_pdf with high-quality settings to extract:
+        - Complete text with preserved formatting
+        - All citations and references
+        - Author information and affiliations
+        - Abstract, methodology, results, conclusions
+        
+        Phase 2 - Knowledge Extraction:
+        Use extract_and_store_entities to identify and map:
+        - Research concepts and terminology
+        - Author relationships and collaborations  
+        - Methodological approaches
+        - Key findings and contributions
+        - Citation networks and influences
+        
+        Phase 3 - Content Indexing:
+        Use store_vectors to create searchable chunks:
+        - Preserve citation context
+        - Maintain concept relationships
+        - Enable future academic queries
+        
+        Provide detailed academic summary with:
+        - Research contribution assessment
+        - Key concept hierarchy
+        - Citation network analysis
+        - Knowledge graph statistics
+      response_format: comprehensive_academic_report
+    success_criteria:
+      - Complete PDF extraction
+      - Author entities identified
+      - Research concepts mapped
+      - Citation network built
+      - Vector storage completed
+      - Academic summary generated
+
+prompts:
+  system_prompt: You are an expert academic research assistant.
+  custom_instructions: |
+    Always prioritize academic accuracy and completeness.
+    Extract citation information with full bibliographic details.
+    Identify concept hierarchies and research methodologies.
+    Map author collaborations and institutional affiliations.
+  response_format: comprehensive_academic_report
+
+processing:
+  timeout_seconds: 600
+  retry_attempts: 3
+  parallel_processing: false
+
+output:
+  include_intermediate_results: true
+  detailed_logging: true
+  save_processing_trace: true

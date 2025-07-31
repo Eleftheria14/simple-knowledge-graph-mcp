@@ -1,0 +1,138 @@
+model_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.2
+  max_tokens: 2048
+  timeout_seconds: 30
+
+extraction_settings:
+  extraction_mode: focused
+  global_confidence_threshold: 0.8
+  max_content_length: 2000
+  enable_fallback_extraction: true
+
+entity_types:
+  enabled_types:
+    - person
+    - organization
+    - concept
+  type_configs:
+    person:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: 10
+      required_properties: []
+      example_entities:
+        - John Smith
+        - Dr. Jane Doe
+      extraction_hints:
+        - Focus on key people mentioned
+        - Authors and main figures only
+    organization:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: 10
+      required_properties: []
+      example_entities:
+        - Google
+        - MIT
+        - Microsoft
+      extraction_hints:
+        - Major organizations and institutions
+        - Companies and universities only
+    concept:
+      enabled: true
+      confidence_threshold: 0.8
+      max_entities: 15
+      required_properties: []
+      example_entities:
+        - artificial intelligence
+        - machine learning
+        - algorithm
+      extraction_hints:
+        - Main topics and key concepts
+        - Most important technical terms only
+
+relationships:
+  enabled_types:
+    - WORKS_AT
+    - RELATED_TO
+  max_per_entity: 5
+  confidence_threshold: 0.8
+
+prompts:
+  system_prompt: |
+    You are a fast document processing assistant focused on speed and efficiency.
+    Extract only the most important and obvious entities with high confidence.
+    Prioritize speed over comprehensiveness.
+  instruction_template: |
+    Quick entity extraction from the following document content.
+
+    TARGET ENTITY TYPES: person, organization, concept (ONLY the most important ones)
+    TARGET RELATIONSHIP TYPES: WORKS_AT, RELATED_TO
+
+    FAST EXTRACTION GUIDELINES:
+    - Extract only HIGH CONFIDENCE entities (≥0.8)
+    - Focus on the most obvious and important entities
+    - Limit to key people, organizations, and main concepts
+    - Skip minor details and less certain entities
+
+    {entity_guidelines}
+
+    RELATIONSHIP GUIDELINES:  
+    {relationship_guidelines}
+
+    Return ONLY valid JSON format (keep it concise):
+    {{
+      "entities": [
+        {{
+          "id": "entity_id",
+          "name": "Entity Name", 
+          "type": "person|organization|concept",
+          "properties": {{}},
+          "confidence": 0.8-1.0
+        }}
+      ],
+      "relationships": [
+        {{
+          "source": "source_id",
+          "target": "target_id", 
+          "type": "WORKS_AT|RELATED_TO",
+          "context": "Brief context",
+          "confidence": 0.8-1.0
+        }}
+      ],
+      "metadata": {{
+        "total_entities": 0,
+        "total_relationships": 0,
+        "extraction_mode": "focused"
+      }}
+    }}
+
+    Document content:
+    {{content}}
+  entity_guidelines:
+    person: Extract only key people (authors, main figures). Skip minor mentions.
+    organization: Extract major companies, universities, institutions. Skip small organizations.
+    concept: Extract main topics and key technical concepts. Skip details and sub-concepts.
+  relationship_guidelines:
+    WORKS_AT: Person -> Organization (clear employment/affiliation only)
+    RELATED_TO: General relationship between main concepts
+  context_instructions:
+    - Focus only on entities central to the main topic
+    - Skip entities mentioned only once or in passing
+    - Prioritize obvious, high-confidence extractions
+  custom_instructions:
+    - Prioritize speed over depth
+    - Provide concise, actionable summaries
+  domain_context: Fast processing for quick content access
+
+output:
+  include_metadata: false
+  include_confidence_scores: true
+  include_extraction_reasoning: false
+  validate_json_output: true
+
+performance:
+  retry_on_json_error: true
+  max_retry_attempts: 1
+  enable_caching: true

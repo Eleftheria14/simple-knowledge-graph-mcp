@@ -1,5 +1,5 @@
 """Enhanced entity storage tool that works for both MCP and LangChain."""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import uuid
 from langchain_core.tools import tool
@@ -9,81 +9,45 @@ from pydantic import BaseModel
 import os
 
 from storage.neo4j import Neo4jStorage
+from processor.entity_extractor_config import EntityExtractorConfig, create_default_config
 
 # Reuse existing data models
 from tools.storage.entity_storage import EntityData, RelationshipData, DocumentInfo
 
-# Entity extraction prompt
-ENTITY_EXTRACTION_PROMPT = """
-Analyze the following document content and extract entities and relationships.
+# Global entity extractor configuration
+_global_entity_config: Optional[EntityExtractorConfig] = None
 
-Extract:
-1. **People**: Authors, researchers, historical figures
-2. **Organizations**: Companies, universities, institutions  
-3. **Concepts**: Technical terms, theories, methodologies
-4. **Technologies**: Tools, frameworks, systems, algorithms
-5. **Publications**: Papers, books, journals referenced
+def set_global_entity_config(config: EntityExtractorConfig):
+    """Set global entity extractor configuration"""
+    global _global_entity_config
+    _global_entity_config = config
 
-For each entity, provide:
-- id: Short unique identifier (lowercase, underscores)
-- name: Clear, standardized name
-- type: One of [person, organization, concept, technology, publication]
-- properties: Key attributes (affiliation, year, domain, etc.)
-- confidence: 0.0-1.0 confidence score
-
-For relationships, identify:
-- source: Source entity id
-- target: Target entity id  
-- type: Relationship type [AUTHORED, WORKS_AT, USES, CITES, RELATED_TO, DEVELOPED, APPLIED]
-- context: Brief context explaining the relationship
-- confidence: 0.0-1.0 confidence score
-
-Return ONLY valid JSON format:
-{{
-  "entities": [
-    {{
-      "id": "entity_id",
-      "name": "Entity Name",
-      "type": "concept|person|organization|technology|publication",
-      "properties": {{"key": "value"}},
-      "confidence": 0.9
-    }}
-  ],
-  "relationships": [
-    {{
-      "source": "source_entity_id",
-      "target": "target_entity_id",
-      "type": "RELATIONSHIP_TYPE",
-      "context": "Brief explanation",
-      "confidence": 0.8
-    }}
-  ],
-  "metadata": {{
-    "total_entities": 0,
-    "total_relationships": 0,
-    "extraction_method": "llm_analysis"
-  }}
-}}
-
-Document content (first 4000 chars):
-{content}
-"""
+def get_global_entity_config() -> EntityExtractorConfig:
+    """Get global entity extractor configuration"""
+    global _global_entity_config
+    if _global_entity_config is None:
+        _global_entity_config = create_default_config()
+    return _global_entity_config
 
 @tool
-def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> Dict[str, Any]:
+def extract_and_store_entities(content: str, document_info: Dict[str, Any], extractor_config: Optional[EntityExtractorConfig] = None) -> Dict[str, Any]:
     """
-    Extract entities and relationships from content using LLM analysis, then store in Neo4j.
+    Extract entities and relationships from content using configurable LLM analysis, then store in Neo4j.
     
     Works for both MCP clients and LangGraph agents.
     
     Args:
         content: Document text content to analyze
         document_info: Document metadata (title, type, path, etc.)
+        extractor_config: Optional custom configuration (uses global config if not provided)
         
     Returns:
         Dictionary with extraction results and storage confirmation
     """
     try:
+        # Get configuration
+        config = extractor_config or get_global_entity_config()
+        
         # Validate inputs
         if not content or len(content.strip()) < 50:
             return {
@@ -93,9 +57,11 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
                 "relationships_found": 0
             }
         
-        print(f"🧠 Analyzing content for entity extraction: {len(content)} characters")
+        print(f"🧠 Analyzing content with {config.extraction_mode.value} mode: {len(content)} characters")
+        print(f"🔧 Entity types: {[et.value for et in config.get_enabled_entity_types()]}")
+        print(f"🎯 Confidence threshold: {config.global_confidence_threshold}")
         
-        # Initialize Groq LLM for extraction
+        # Initialize Groq LLM with configuration
         groq_api_key = os.getenv('GROQ_API_KEY')
         if not groq_api_key:
             return {
@@ -106,58 +72,129 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
             }
         
         llm = ChatGroq(
-            model="llama-3.1-8b-instant",
-            temperature=0.1,
+            model=config.model_name,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
             groq_api_key=groq_api_key
         )
         
-        # Extract entities using LLM
-        extraction_prompt = ENTITY_EXTRACTION_PROMPT.format(content=content[:4000])
+        # Build extraction prompt using configuration
+        extraction_prompt = config.build_extraction_prompt(content)
+        
+        print(f"🤖 Using model: {config.model_name} (temp: {config.temperature})")
+        
+        # Extract entities using configured LLM
         response = llm.invoke(extraction_prompt)
         
-        # Parse LLM response
-        try:
-            # Find JSON in response
-            content_text = response.content if hasattr(response, 'content') else str(response)
-            json_start = content_text.find('{')
-            json_end = content_text.rfind('}') + 1
+        # Parse LLM response with retry logic
+        extraction_data = None
+        for attempt in range(config.max_retry_attempts + 1):
+            try:
+                # Find JSON in response
+                content_text = response.content if hasattr(response, 'content') else str(response)
+                json_start = content_text.find('{')
+                json_end = content_text.rfind('}') + 1
+                
+                if json_start >= 0 and json_end > json_start:
+                    json_str = content_text[json_start:json_end]
+                    extraction_data = json.loads(json_str)
+                    break
+                else:
+                    raise json.JSONDecodeError("No JSON found in response", content_text, 0)
             
-            if json_start >= 0 and json_end > json_start:
-                json_str = content_text[json_start:json_end]
-                extraction_data = json.loads(json_str)
-            else:
-                # Fallback if no JSON found
-                extraction_data = {
-                    "entities": [],
-                    "relationships": [],
-                    "metadata": {"extraction_method": "fallback"}
-                }
+            except json.JSONDecodeError as e:
+                print(f"⚠️ JSON parsing failed (attempt {attempt + 1}): {e}")
+                
+                if attempt < config.max_retry_attempts and config.retry_on_json_error:
+                    print(f"🔄 Retrying extraction with simplified prompt...")
+                    # Retry with simpler prompt
+                    simple_prompt = f"""Extract entities from this text and return only JSON:
+{{"entities": [{{"id": "id", "name": "name", "type": "type", "confidence": 0.8}}], "relationships": []}}
+
+Text: {content[:2000]}"""
+                    response = llm.invoke(simple_prompt)
+                    continue
+                else:
+                    # Final fallback
+                    if config.enable_fallback_extraction:
+                        extraction_data = {
+                            "entities": [
+                                {
+                                    "id": "extracted_content",
+                                    "name": f"Content from {document_info.get('title', 'document')}",
+                                    "type": "concept",
+                                    "properties": {"source": "fallback_extraction"},
+                                    "confidence": 0.5
+                                }
+                            ],
+                            "relationships": [],
+                            "metadata": {"extraction_method": "fallback_due_to_parse_error"}
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"JSON parsing failed after {config.max_retry_attempts} attempts",
+                            "entities_found": 0,
+                            "relationships_found": 0
+                        }
         
-        except json.JSONDecodeError as e:
-            print(f"⚠️ JSON parsing failed: {e}")
-            # Create fallback extraction
-            extraction_data = {
-                "entities": [
-                    {
-                        "id": "extracted_content",
-                        "name": f"Content from {document_info.get('title', 'document')}",
-                        "type": "concept",
-                        "properties": {"source": "fallback_extraction"},
-                        "confidence": 0.5
-                    }
-                ],
-                "relationships": [],
-                "metadata": {"extraction_method": "fallback_due_to_parse_error"}
+        if extraction_data is None:
+            return {
+                "success": False,
+                "error": "Failed to extract valid data",
+                "entities_found": 0,
+                "relationships_found": 0
             }
         
         entities_raw = extraction_data.get("entities", [])
         relationships_raw = extraction_data.get("relationships", [])
         
-        print(f"📊 Extracted {len(entities_raw)} entities, {len(relationships_raw)} relationships")
+        print(f"📊 Raw extraction: {len(entities_raw)} entities, {len(relationships_raw)} relationships")
+        
+        # Filter entities by configuration
+        filtered_entities = []
+        enabled_types = {et.value for et in config.get_enabled_entity_types()}
+        
+        for entity_data in entities_raw:
+            entity_type = entity_data.get("type", "concept")
+            confidence = entity_data.get("confidence", 0.0)
+            
+            # Check if entity type is enabled
+            if entity_type not in enabled_types:
+                continue
+                
+            # Check confidence threshold
+            type_config = config.get_entity_config(config.enabled_entity_types.__class__(entity_type) if entity_type in [et.value for et in config.enabled_entity_types] else None)
+            min_confidence = type_config.confidence_threshold if type_config else config.global_confidence_threshold
+            
+            if confidence < min_confidence:
+                continue
+                
+            filtered_entities.append(entity_data)
+        
+        # Filter relationships by configuration  
+        filtered_relationships = []
+        enabled_rel_types = {rt.value for rt in config.enabled_relationship_types}
+        
+        for rel_data in relationships_raw:
+            rel_type = rel_data.get("type", "RELATED_TO")
+            confidence = rel_data.get("confidence", 0.0)
+            
+            # Check if relationship type is enabled
+            if rel_type not in enabled_rel_types:
+                continue
+                
+            # Check confidence threshold
+            if confidence < config.relationship_confidence_threshold:
+                continue
+                
+            filtered_relationships.append(rel_data)
+        
+        print(f"🔍 After filtering: {len(filtered_entities)} entities, {len(filtered_relationships)} relationships")
         
         # Convert to Pydantic models for validation
         entities = []
-        for entity_data in entities_raw:
+        for entity_data in filtered_entities:
             try:
                 # Flatten properties to avoid Neo4j nested object issues
                 properties = entity_data.get("properties", {})
@@ -180,7 +217,7 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
                 print(f"⚠️ Skipping invalid entity: {e}")
         
         relationships = []
-        for rel_data in relationships_raw:
+        for rel_data in filtered_relationships:
             try:
                 relationship = RelationshipData(
                     source=rel_data.get("source", ""),
@@ -213,15 +250,32 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
             "document_id": doc_info.id
         }
         
-        return {
+        result = {
             "success": True,
             "message": f"Extracted and stored {len(entities)} entities, {len(relationships)} relationships",
             "entities_found": len(entities),
             "relationships_found": len(relationships),
             "extraction_method": extraction_data.get("metadata", {}).get("extraction_method", "llm_analysis"),
             "document_id": storage_result.get("document_id"),
-            "storage_result": storage_result
+            "storage_result": storage_result,
+            "configuration_used": {
+                "extraction_mode": config.extraction_mode.value,
+                "model_name": config.model_name,
+                "temperature": config.temperature,
+                "confidence_threshold": config.global_confidence_threshold,
+                "enabled_entity_types": [et.value for et in config.get_enabled_entity_types()],
+                "enabled_relationship_types": [rt.value for rt in config.enabled_relationship_types]
+            }
         }
+        
+        # Include additional metadata if configured
+        if config.include_metadata:
+            result["metadata"] = extraction_data.get("metadata", {})
+            result["raw_entities_count"] = len(entities_raw)
+            result["raw_relationships_count"] = len(relationships_raw)
+            result["filtering_applied"] = True
+        
+        return result
         
     except Exception as e:
         print(f"❌ Error in extract_and_store_entities: {e}")
