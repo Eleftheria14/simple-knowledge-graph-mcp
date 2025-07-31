@@ -1,0 +1,131 @@
+agent_settings:
+  model_name: llama-3.1-8b-instant
+  temperature: 0.05
+  max_tokens: 4096
+  processing_mode: thorough
+
+tools:
+  enabled_tools:
+    - grobid_extract              # GROBID academic PDF processing
+    - extract_and_store_entities
+    - store_vectors
+  tool_configs:
+    grobid_extract:
+      enabled: true
+      priority: 1
+      required: true
+      parameters:
+        consolidate_header: true    # Improve header extraction
+        consolidate_citations: true # Improve citation quality
+        include_raw_citations: true # Keep original citation text
+        include_coordinates: true   # Track PDF positions
+    extract_and_store_entities:
+      enabled: true  
+      priority: 1
+      required: true
+      parameters:
+        confidence_threshold: 0.8
+        focus_areas: ["authors", "concepts", "methodologies", "results", "citations", "references"]
+    store_vectors:
+      enabled: true
+      priority: 2
+      required: true
+      parameters:
+        chunk_size: 300
+        overlap: 75
+        preserve_citations: true
+
+workflows:
+  research_paper:
+    description: GROBID-powered academic analysis for research papers
+    tool_sequence:
+      - grobid_extract
+      - extract_and_store_entities  
+      - store_vectors
+    prompt_template:
+      system_prompt: |
+        You are an expert academic research assistant using GROBID for comprehensive document analysis.
+        GROBID provides structured academic data including authors, citations, and references.
+        
+        Focus Areas:
+        - Author names, affiliations, and collaboration networks
+        - Research concepts, theories, and academic terminology
+        - Methodologies and experimental approaches
+        - Results, findings, and quantitative data
+        - Citation networks and bibliographic relationships
+        - Tables, figures, and structured academic content
+        - Reference extraction and academic lineage
+        
+        Leverage GROBID's structured output for superior academic knowledge graphs.
+      instruction_template: |
+        Perform comprehensive academic analysis of: {file_path}
+        
+        Phase 1 - GROBID Academic Extraction:
+        Use grobid_extract to get structured academic content:
+        - Title, authors, and institutional affiliations
+        - Abstract and keywords with academic context
+        - Full text with preserved academic structure
+        - References and citations with bibliographic details
+        - Tables and figures with captions
+        - Academic metadata and document structure
+        
+        Phase 2 - Enhanced Knowledge Extraction:
+        Use extract_and_store_entities leveraging GROBID's structured data:
+        - Author collaboration networks and institutional connections
+        - Research concept hierarchies and academic terminology
+        - Methodological approaches and experimental designs
+        - Citation networks and academic lineage mapping
+        - Cross-references between findings and related work
+        - Table and figure content with contextual relationships
+        
+        Phase 3 - Academic Content Indexing:
+        Use store_vectors to create searchable academic chunks:
+        - Preserve citation context and academic references
+        - Maintain author-concept-methodology relationships
+        - Enable cross-paper academic queries and comparisons
+        - Index tables and figures with surrounding context
+        
+        Provide comprehensive academic analysis with:
+        - Research contribution assessment and novelty analysis
+        - Academic concept hierarchy and knowledge mapping
+        - Citation network analysis and research lineage
+        - Author collaboration and institutional mapping
+        - Knowledge graph statistics with academic metrics
+        
+        Leverage GROBID's superior academic parsing for maximum knowledge extraction.
+      response_format: comprehensive_academic_report
+    success_criteria:
+      - GROBID extraction successful with academic structure
+      - Author entities and affiliations identified
+      - Research concepts and methodologies mapped
+      - Citation network established with references
+      - Vector storage completed with academic context
+      - Academic analysis report generated
+
+prompts:
+  system_prompt: You are an expert academic research assistant using GROBID for structured document analysis.
+  custom_instructions: |
+    Prioritize academic accuracy and structured data extraction.
+    Leverage GROBID's bibliographic parsing for superior citation networks.
+    Extract author collaboration patterns and institutional relationships.
+    Map concept hierarchies specific to academic disciplines.
+    Build comprehensive citation networks linking papers and authors.
+    Use GROBID's table and figure extraction for data relationships.
+  response_format: comprehensive_academic_report
+
+processing:
+  timeout_seconds: 600
+  retry_attempts: 3
+  parallel_processing: false
+
+output:
+  include_intermediate_results: true
+  detailed_logging: true
+  save_processing_trace: true
+  
+grobid:
+  service_url: "http://localhost:8070"
+  consolidate_header: true
+  consolidate_citations: true
+  include_raw_citations: true
+  include_coordinates: true

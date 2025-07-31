@@ -30,7 +30,7 @@ def get_global_entity_config() -> EntityExtractorConfig:
     return _global_entity_config
 
 @tool
-def extract_and_store_entities(content: str, document_info: Dict[str, Any], extractor_config: Optional[EntityExtractorConfig] = None) -> Dict[str, Any]:
+def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract entities and relationships from content using configurable LLM analysis, then store in Neo4j.
     
@@ -39,14 +39,13 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any], extr
     Args:
         content: Document text content to analyze
         document_info: Document metadata (title, type, path, etc.)
-        extractor_config: Optional custom configuration (uses global config if not provided)
         
     Returns:
         Dictionary with extraction results and storage confirmation
     """
     try:
-        # Get configuration
-        config = extractor_config or get_global_entity_config()
+        # Get configuration from global config (set by process)
+        config = get_global_entity_config()
         
         # Validate inputs
         if not content or len(content.strip()) < 50:
@@ -82,9 +81,11 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any], extr
         extraction_prompt = config.build_extraction_prompt(content)
         
         print(f"🤖 Using model: {config.model_name} (temp: {config.temperature})")
+        print(f"📤 Sending extraction request to LLM...")
         
         # Extract entities using configured LLM
         response = llm.invoke(extraction_prompt)
+        print(f"📥 Received LLM response - Length: {len(str(response))} chars")
         
         # Parse LLM response with retry logic
         extraction_data = None

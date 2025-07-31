@@ -5,6 +5,10 @@ from fastmcp import FastMCP
 
 # Import enhanced tools
 from tools.storage.enhanced_entity_storage import extract_and_store_entities, register_enhanced_entity_tools
+from tools.storage.neo4j_vector_storage import store_vectors, register_vector_storage_tools
+
+# Import PDF processing tools
+from processor.tools.grobid_tool import grobid_extract
 
 # Import existing MCP tools that need to be made dual-purpose
 from tools.storage.text_storage import register_text_tools
@@ -22,8 +26,9 @@ class SharedToolRegistry:
     def get_all_tools() -> List[BaseTool]:
         """Get all tools for LangChain agent use"""
         return [
+            grobid_extract,         # Academic PDF processing (GROBID)
             extract_and_store_entities,
-            # TODO: Add other dual-purpose tools as we enhance them
+            store_vectors,
         ]
     
     @staticmethod
@@ -31,7 +36,7 @@ class SharedToolRegistry:
         """Get storage-focused tools"""
         return [
             extract_and_store_entities,
-            # TODO: Add enhanced text storage tool
+            store_vectors,
         ]
     
     @staticmethod
@@ -52,6 +57,9 @@ class SharedToolRegistry:
         
         # Register enhanced entity tools (dual-purpose)
         register_enhanced_entity_tools(mcp, neo4j_storage)
+        
+        # Register enhanced vector storage tools (dual-purpose)
+        register_vector_storage_tools(mcp, neo4j_storage)
         
         # Register existing MCP tools (MCP-only for now)
         register_text_tools(mcp, neo4j_storage)
@@ -74,7 +82,7 @@ class SharedToolRegistry:
             "tool_names": [tool.name for tool in all_tools],
             "capabilities": {
                 "entity_extraction": True,
-                "text_storage": False,  # TODO: Enhance
+                "text_storage": True,  # Neo4j vector storage
                 "knowledge_search": False,  # TODO: Enhance
                 "literature_review": False,  # TODO: Enhance
             }

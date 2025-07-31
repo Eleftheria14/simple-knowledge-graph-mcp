@@ -9,7 +9,6 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from processor.config import ProcessorConfig
 from processor.orchestrator_config import OrchestratorConfig, WorkflowType, ProcessingMode
-from processor.tools.llamaparse_tool import llamaparse_pdf
 from tools.shared_registry import SharedToolRegistry
 
 class DocumentOrchestrator:
@@ -46,7 +45,7 @@ class DocumentOrchestrator:
     
     def _initialize_tools(self) -> List:
         """Initialize tools based on configuration"""
-        all_tools = [llamaparse_pdf] + SharedToolRegistry.get_all_tools()
+        all_tools = SharedToolRegistry.get_all_tools()
         enabled_tool_configs = self.orchestrator_config.get_enabled_tools()
         enabled_names = [config.name for config in enabled_tool_configs]
         
@@ -91,12 +90,27 @@ class DocumentOrchestrator:
                 processing_instruction += f"\n\nAdditional Instructions:\n{self.orchestrator_config.custom_instructions}"
             
             print(f"🤖 Executing agent with {len(self.tools)} tools...")
+            print(f"📝 Processing instruction preview: {processing_instruction[:200]}...")
             
-            # Execute through LangGraph agent
+            # Execute through LangGraph agent with step-by-step output
+            print(f"🔄 Starting LangGraph agent execution...")
             response = await self.agent.ainvoke(
                 {"messages": [{"role": "user", "content": processing_instruction}]},
                 config={"configurable": {"thread_id": str(file_path)}}
             )
+            
+            # Show intermediate steps
+            messages = response.get("messages", [])
+            print(f"\n📋 Agent Execution Steps ({len(messages)} messages):")
+            for i, msg in enumerate(messages):
+                print(f"   Step {i+1}: {msg.type if hasattr(msg, 'type') else 'message'}")
+                if hasattr(msg, 'content') and msg.content:
+                    content_preview = str(msg.content)[:150].replace('\n', ' ')
+                    print(f"            {content_preview}...")
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        print(f"            🔧 Tool: {tool_call.get('name', 'unknown')}")
+            print()
             
             # Extract final message from agent response
             final_message = response.get("messages", [])[-1].content if response.get("messages") else "Processing completed"

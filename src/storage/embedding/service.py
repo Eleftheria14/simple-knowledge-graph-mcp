@@ -26,3 +26,7 @@ class EmbeddingService:
     def encode_text(self, text: str) -> np.ndarray:
         """Generate embedding for single text."""
         return self.encode_texts([text])[0]
+    
+    def generate_embedding(self, text: str) -> np.ndarray:
+        """Generate embedding for single text (compatible with Neo4j storage)."""
+        return self.encode_text(text)

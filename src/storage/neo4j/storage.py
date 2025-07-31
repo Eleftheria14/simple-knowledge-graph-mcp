@@ -83,28 +83,45 @@ class Neo4jStorage:
             
             with self.driver.session() as session:
                 # Store as TextVector node with embedding
-                session.run("""
-                    MERGE (tv:TextVector {id: $vector_id})
+                # Flatten metadata to primitive types only
+                flattened_metadata = {}
+                for key, value in metadata.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        flattened_metadata[key] = value
+                    else:
+                        flattened_metadata[key] = str(value)
+                
+                # Build dynamic SET clause for metadata
+                metadata_sets = []
+                for key in flattened_metadata.keys():
+                    metadata_sets.append(f"tv.{key} = $metadata_{key}")
+                metadata_set_clause = ", ".join(metadata_sets) if metadata_sets else ""
+                
+                query = f"""
+                    MERGE (tv:TextVector {{id: $vector_id}})
                     SET tv.content = $content,
                         tv.embedding = $embedding,
-                        tv.document_id = $document_id,
-                        tv.document_title = $document_title,
-                        tv.vector_type = $vector_type,
-                        tv.stored_at = $stored_at,
-                        tv.metadata = $metadata
+                        tv.stored_at = $stored_at
+                    {', ' + metadata_set_clause if metadata_set_clause else ''}
                     WITH tv
-                    MATCH (d:Document {id: $document_id})
+                    MATCH (d:Document {{id: $document_id}})
                     MERGE (tv)-[:FROM_DOCUMENT]->(d)
-                """,
-                    vector_id=vector_id,
-                    content=content,
-                    embedding=embedding.tolist(),  # Convert numpy array to list
-                    document_id=metadata.get("document_id"),
-                    document_title=metadata.get("document_title"),
-                    vector_type=metadata.get("vector_type"),
-                    stored_at=metadata.get("stored_at"),
-                    metadata=metadata
-                )
+                """
+                
+                # Prepare parameters
+                params = {
+                    'vector_id': vector_id,
+                    'content': content,
+                    'embedding': embedding.tolist() if hasattr(embedding, 'tolist') else embedding,
+                    'stored_at': metadata.get('stored_at', ''),
+                    'document_id': metadata.get('document_id', '')
+                }
+                
+                # Add flattened metadata parameters
+                for key, value in flattened_metadata.items():
+                    params[f'metadata_{key}'] = value
+                
+                session.run(query, **params)
                 
                 return {
                     "success": True,

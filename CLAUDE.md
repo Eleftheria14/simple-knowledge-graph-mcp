@@ -9,6 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Modern UV-based setup (RECOMMENDED - Python 3.11+)
 ./scripts/setup.sh
 
+# Start GROBID service for academic PDF processing
+docker run -d --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
+
 # Activate UV environment for manual commands
 uv run python <command>
 ```
