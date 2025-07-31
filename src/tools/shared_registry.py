@@ -3,15 +3,14 @@ from typing import List, Dict, Any
 from langchain_core.tools import BaseTool
 from fastmcp import FastMCP
 
-# Import enhanced tools
+# Import dual-purpose tools (work for both MCP and LangChain)
 from tools.storage.enhanced_entity_storage import extract_and_store_entities, register_enhanced_entity_tools
 from tools.storage.neo4j_vector_storage import store_vectors, register_vector_storage_tools
 
 # Import PDF processing tools
 from processor.tools.grobid_tool import grobid_extract
 
-# Import existing MCP tools that need to be made dual-purpose
-from tools.storage.text_storage import register_text_tools
+# Import MCP-only tools
 from tools.query.knowledge_search import register_search_tools
 from tools.query.literature_generation import register_literature_tools
 from tools.storage.database_management import register_management_tools
@@ -55,14 +54,11 @@ class SharedToolRegistry:
         """Register all tools with MCP server"""
         print("📋 Registering shared tools with MCP server...")
         
-        # Register enhanced entity tools (dual-purpose)
+        # Register dual-purpose tools (work for both MCP and LangChain)
         register_enhanced_entity_tools(mcp, neo4j_storage)
-        
-        # Register enhanced vector storage tools (dual-purpose)
         register_vector_storage_tools(mcp, neo4j_storage)
         
-        # Register existing MCP tools (MCP-only for now)
-        register_text_tools(mcp, neo4j_storage)
+        # Register MCP-only tools
         register_search_tools(mcp, neo4j_query, neo4j_storage)
         register_literature_tools(mcp, neo4j_query, neo4j_storage)
         register_management_tools(mcp, neo4j_storage)

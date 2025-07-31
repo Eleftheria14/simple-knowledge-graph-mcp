@@ -9,6 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Modern UV-based setup (RECOMMENDED - Python 3.11+)
 ./scripts/setup.sh
 
+# Start required services (Neo4j + GROBID)
+./scripts/start_services.sh
+
 # Start GROBID service for academic PDF processing
 docker run -d --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
 
@@ -16,19 +19,25 @@ docker run -d --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
 uv run python <command>
 ```
 
-### Service Management
+### Academic Document Processing
 ```bash
-# Start required services (Neo4j)
-./scripts/start_services.sh
+# Process PDFs using GROBID for superior academic extraction
+python process_literature.py
 
-# Check system status and connections
-./scripts/check_status.sh
+# Test GROBID service status
+curl http://localhost:8070/api/isalive
 
-# Stop all services
-./scripts/stop_services.sh
+# Test GROBID extraction on single PDF
+uv run python -c "
+import sys; sys.path.insert(0, 'src')
+from processor.tools.grobid_tool import grobid_extract
+result = grobid_extract.invoke({'file_path': 'Literature/test.pdf'})
+print('Success:', result.get('success'))
+print('Authors:', len(result.get('metadata', {}).get('authors', [])))
+"
 ```
 
-### MCP Server Operations
+### MCP Server Operations  
 ```bash
 # Start HTTP MCP server (easy GUI setup)
 ./scripts/start_http_server.sh
@@ -36,8 +45,8 @@ uv run python <command>
 # Start STDIO MCP server (advanced JSON config)
 ./scripts/start_mcp_server.sh
 
-# Test specific components
-uv run python -c "import sys; sys.path.insert(0, 'src'); from server.main import mcp; print('✅ Server imports work')"
+# Test MCP server with current tools
+cd src && uv run python -c "from server.main import mcp; print(f'MCP server has {len(mcp._tools)} tools registered')"
 
 # Manual server startup (for development)
 cd src && uv run python server/main.py
@@ -49,91 +58,132 @@ cd src && uv run python server/main.py --http  # HTTP mode
 # Clear all data (fresh start)
 ./scripts/clear_databases.sh
 
-# Test database connections
-uv run python -c "from neo4j import GraphDatabase; print('✅ Neo4j library works')"
+# Check Neo4j data
+uv run python -c "
+import sys; sys.path.insert(0, 'src')
+from neo4j import GraphDatabase; import config
+driver = GraphDatabase.driver(config.NEO4J_URI, auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD))
+with driver.session() as session:
+    result = session.run('MATCH (n) RETURN labels(n) as labels, count(*) as count ORDER BY count DESC LIMIT 5')
+    for record in result: print(f'{record[\"labels\"]}: {record[\"count\"]} nodes')
+driver.close()
+"
 ```
 
-### Testing and Validation
+### System Validation
 ```bash
-# Test import structure (Neo4j-only system)
+# Test core imports and tool registry
 cd src && uv run python -c "
-from storage.neo4j import Neo4jStorage, Neo4jQuery
-from tools.storage.entity_storage import register_entity_tools
-from server.main import mcp
-print('✅ All imports successful')
+from tools.shared_registry import SharedToolRegistry
+tools = SharedToolRegistry.get_all_tools()
+print(f'✅ Available tools: {[t.name for t in tools]}')
 "
 
-# Test MCP tools registration
-cd src && uv run python -c "from server.main import mcp; print(f'MCP server has {len(mcp._tools)} tools registered')"
-
-# Test LangChain ecosystem (if implementing document processor)
+# Test LangGraph document pipeline
 uv run python -c "from langchain_groq import ChatGroq; from langgraph.prebuilt import create_react_agent; print('✅ LangChain stack ready')"
+
+# Validate Neo4j and GROBID integration  
+uv run python -c "
+import sys; sys.path.insert(0, 'src')
+from storage.neo4j import Neo4jStorage, Neo4jQuery
+from processor.tools.grobid_tool import GrobidProcessor
+print('✅ Neo4j storage:', Neo4jStorage())
+print('✅ GROBID service:', GrobidProcessor().is_alive())
+"
 ```
 
 ## System Architecture
 
-### Neo4j-Only Knowledge Graph MCP System
-This is a **modular FastMCP server** that provides 5 core tools for building and querying knowledge graphs from documents. The system uses a unified Neo4j storage backend:
+### GROBID-Powered Academic Knowledge Graph System
+This is a **dual-mode MCP system** combining interactive knowledge graph tools with automated academic document processing. The system uses Neo4j for unified storage and GROBID for superior academic PDF extraction.
 
-- **Neo4j**: Graph database for entities, relationships, and vector storage with local embeddings (sentence-transformers)
+**Core Components:**
+- **Neo4j**: Graph database for entities, relationships, and vector storage with local embeddings
+- **GROBID**: Academic PDF processing service (Docker) for extracting structured research data
+- **LangGraph**: Intelligent document orchestration for automated processing workflows
+- **FastMCP**: Server providing 5 core tools for Claude Desktop integration
 
-### Core MCP Tools Available
-1. `store_entities` - Store entities and relationships in Neo4j graph database
-2. `store_vectors` - Store any content as vectors with embeddings in Neo4j
-3. `query_knowledge_graph` - Query Neo4j for both graph and vector search results
-4. `generate_literature_review` - Format results for academic writing with citations
-5. `clear_knowledge_graph` - Clear all data from Neo4j database
+### Current MCP Tools Available
+1. `extract_and_store_entities` - Enhanced entity extraction with academic focus
+2. `store_vectors` - Store text chunks as vectors with embeddings in Neo4j
+3. `query_knowledge_graph` - Search both graph and vector data for comprehensive results
+4. `generate_literature_review` - Format academic results with proper citations
+5. `clear_knowledge_graph` - Reset all data for fresh start
+
+### Academic Processing Pipeline
+```
+PDF → GROBID → Structured Academic Data → LangGraph Agent → Neo4j Storage
+```
+- **Authors/Affiliations**: Extracted with institutional relationships
+- **Citations/References**: Parsed bibliographic networks  
+- **Academic Structure**: Sections, abstracts, methodologies preserved
+- **Tables/Figures**: Content with captions and context
 
 ### Modular Architecture Pattern
 
 #### Storage Layer (`src/storage/`)
 ```
 storage/
-├── neo4j/           # Graph database operations
-│   ├── storage.py   # Entity, relationship, and vector storage
-│   └── query.py     # Graph queries and traversal
+├── neo4j/           # Unified graph and vector database
+│   ├── storage.py   # Entities, relationships, and vector storage
+│   └── query.py     # Graph queries and semantic search
 └── embedding/       # Local embedding generation
-    └── service.py   # sentence-transformers integration
+    └── service.py   # sentence-transformers integration (privacy-focused)
 ```
 
 #### Tools Layer (`src/tools/`)
 ```
 tools/
 ├── storage/         # Data persistence tools
-│   ├── entity_storage.py      # register_entity_tools()
-│   ├── text_storage.py        # register_text_tools()  
-│   └── database_management.py # register_management_tools()
-└── query/           # Data retrieval tools
-    ├── knowledge_search.py     # register_search_tools()
-    └── literature_generation.py # register_literature_tools()
+│   ├── enhanced_entity_storage.py   # Academic entity extraction
+│   ├── neo4j_vector_storage.py      # Vector storage in Neo4j
+│   └── database_management.py       # Database operations
+├── query/           # Data retrieval tools
+│   ├── knowledge_search.py          # Graph + vector search
+│   └── literature_generation.py     # Academic formatting
+└── shared_registry.py               # Dual MCP/LangChain tool registry
+```
+
+#### Academic Processing Layer (`src/processor/`)
+```  
+processor/
+├── document_pipeline.py        # LangGraph orchestrator
+├── tools/
+│   ├── grobid_tool.py          # GROBID academic PDF extraction
+│   └── storage_tool.py         # Neo4j integration for pipeline
+├── config.py                   # Processing configuration
+├── orchestrator_config.py      # Workflow definitions
+└── entity_extractor_config.py  # Academic extraction settings
 ```
 
 #### Server Layer (`src/server/`)
-- `main.py` - FastMCP server orchestration and tool registration
+- `main.py` - FastMCP server with all MCP tools registered
 
 #### Configuration (`src/config/`)
 - `settings.py` - Environment variables and database configuration
 
-### Tool Registration Pattern
-Each tool module follows this pattern:
+### Dual Tool Registry Pattern
+The system supports both MCP and LangChain tools through a shared registry:
+
 ```python
-def register_*_tools(mcp: FastMCP, *managers):
-    @mcp.tool()
-    def tool_name(params) -> Dict[str, Any]:
-        # Tool implementation
-        pass
+# Shared registry for both MCP and LangChain usage
+from tools.shared_registry import SharedToolRegistry
+
+# Get tools for LangChain agents (document processing)
+langchain_tools = SharedToolRegistry.get_all_tools()
+# Returns: [grobid_extract, extract_and_store_entities, store_vectors]
+
+# Register tools with MCP server (Claude Desktop integration)
+SharedToolRegistry.register_with_mcp(mcp, neo4j_storage, neo4j_query)
 ```
 
-The main server imports and registers all tools:
+**Tool Architecture Benefits:**
 ```python
-# Initialize storage managers
-neo4j_storage = Neo4jStorage()
-neo4j_query = Neo4jQuery()
-
-# Register tools from modules
-register_entity_tools(mcp, neo4j_storage)
-register_text_tools(mcp, neo4j_storage)  # Now uses Neo4j for vectors too
-register_search_tools(mcp, neo4j_query, neo4j_storage)
+@tool  # LangChain decorator
+def grobid_extract(file_path: str) -> Dict[str, Any]:
+    """Extract academic content using GROBID"""
+    # Works in both LangGraph agents AND as MCP tool
+    return grobid_processor.process_fulltext(file_path)
 ```
 
 ### Import Structure Requirements
@@ -175,66 +225,101 @@ See `src/prompts/entity_extraction.md` for detailed guidance patterns.
 4. **Production deployment**: Use `./scripts/start_mcp_server.sh` which handles paths correctly
 
 ### Configuration Management
-- Environment variables in `.env` file
-- Required: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`
-- Required for document processor: `GROQ_API_KEY`, `LLAMAPARSE_API_KEY`
-- Optional: `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` (for LangSmith monitoring)
-- Embedding model configurable via `EMBEDDING_MODEL`
+**Required Environment Variables (`.env` file):**
+- `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` - Neo4j database connection
+- `GROQ_API_KEY` - Required for LLM-based entity extraction and orchestration
+
+**Optional Configurations:**
+- `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` - LangSmith monitoring
+- `EMBEDDING_MODEL` - Local embedding model (default: all-MiniLM-L6-v2)
 - Citation styles: APA, IEEE, Nature, MLA (in `config.CITATION_STYLES`)
 
-### Architecture Design
-- **Core MCP tools** - Interactive knowledge graph operations via Claude Desktop
-- **Document processor** - Automated PDF processing pipeline (planned)
-- **Local embeddings** - sentence-transformers for privacy
-- **Unified storage** - Neo4j for both graph and vectors
-- **Extensible** - Add new processors or storage backends easily
+**Academic Processing Configs (`configs/`):**
+- `orchestrator_grobid.yaml` - GROBID-powered document processing workflows
+- `entity_extractor_academic.yaml` - Academic entity extraction settings
+
+### Architecture Design Principles
+- **Academic-focused** - GROBID provides superior research paper understanding vs generic PDF tools
+- **Dual-mode operation** - Interactive MCP tools + automated LangGraph processing
+- **Privacy-first** - Local embeddings, self-hosted GROBID, no external APIs for PDF processing  
+- **Unified storage** - Neo4j handles both graph entities and vector embeddings
+- **Zero API costs** - GROBID replaces expensive services like LlamaParse
 
 ## Common Development Patterns
 
-### Adding New MCP Tools
-1. Create tool function in appropriate module (`tools/storage/` or `tools/query/`)
-2. Follow the `register_*_tools(mcp, *managers)` pattern
-3. Import and register in `src/server/main.py`
-4. Use absolute imports within `src/`
+### Adding Dual-Purpose Tools (MCP + LangChain)
+1. Create tool with `@tool` decorator in appropriate module
+2. Add to `SharedToolRegistry.get_all_tools()` for LangChain access
+3. Register with MCP via `SharedToolRegistry.register_with_mcp()`
+4. Test both modes: LangGraph agents and MCP server
 
-### Database Manager Development
-1. Neo4j storage handles both graph operations and vector storage
-2. Share `EmbeddingService` between storage and query classes  
-3. Use dependency injection pattern in tool registration
-4. Vector storage uses `TextVector` nodes with embedding arrays
+### GROBID Integration Pattern
+```python
+from processor.tools.grobid_tool import GrobidProcessor
 
-### Testing New Components
+# Check service availability
+processor = GrobidProcessor()
+if not processor.is_alive():
+    # Start GROBID: docker run -d -p 8070:8070 lfoppiano/grobid:0.8.0
+    
+# Process academic PDFs
+result = processor.process_fulltext(pdf_path)
+# Returns: structured academic data (authors, citations, content)
+```
+
+### Academic Workflow Configuration
+```yaml
+# configs/orchestrator_grobid.yaml
+tools:
+  enabled_tools:
+    - grobid_extract              # Academic PDF processing  
+    - extract_and_store_entities  # Entity extraction
+    - store_vectors              # Vector storage
+```
+
+### Testing Academic Processing
 ```bash
-# Test individual storage components
-cd src && uv run python -c "from storage.neo4j import Neo4jStorage; print('Neo4j ready')"
+# Test GROBID extraction
+uv run python -c "
+import sys; sys.path.insert(0, 'src')
+from processor.tools.grobid_tool import grobid_extract
+result = grobid_extract.invoke({'file_path': 'Literature/test.pdf'})
+print('Title:', result.get('metadata', {}).get('title', 'Unknown'))
+print('Authors:', len(result.get('metadata', {}).get('authors', [])))
+"
 
-# Test tool registration
-cd src && uv run python -c "from tools.storage.entity_storage import register_entity_tools; print('Tools ready')"
+# Test complete academic workflow  
+python process_literature.py
 
-# Test full server
-./scripts/start_mcp_server.sh
-
-# Test vector storage
-cd src && uv run python -c "from storage.neo4j import Neo4jStorage; s = Neo4jStorage(); print('Vector storage ready')"
+# Verify Neo4j data storage
+uv run python -c "
+import sys; sys.path.insert(0, 'src')
+from neo4j import GraphDatabase; import config
+driver = GraphDatabase.driver(config.NEO4J_URI, auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD))
+with driver.session() as session:
+    result = session.run('MATCH (tv:TextVector) RETURN count(*) as count')
+    print('TextVectors stored:', result.single()['count'])
+driver.close()
+"
 ```
 
-## LangGraph Document Processing Pipeline
+## GROBID-Powered Document Processing 
 
-### Architecture Overview
-The system includes an intelligent document processing orchestrator using LangGraph:
+### Academic Processing Architecture
+The system uses LangGraph for intelligent academic document orchestration:
 
 ```
-Watch Folder → LangGraph Agent → LlamaParse → Entity/Citation Extraction → Neo4j Storage
+PDF → GROBID (Docker) → Structured Academic Data → LangGraph Agent → Neo4j Storage
 ```
 
-### Modern LangChain Stack
-The document processor uses the modern LangChain ecosystem:
-- **LangGraph**: Stateful orchestration with intelligent decision-making
-- **Groq**: Fast AI inference (Llama 3.1 70B) for orchestration decisions
-- **LangSmith**: Production monitoring, tracing, and cost analysis
-- **LlamaParse**: Premium PDF processing for complex documents
+### Modern Academic Processing Stack
+- **GROBID**: Self-hosted academic PDF parsing (87-90% F1-score accuracy)
+- **LangGraph**: Stateful orchestration with intelligent academic workflows
+- **Groq**: Fast LLM inference (Llama 3.1 8B) for entity extraction decisions
+- **Neo4j**: Unified storage for both graph entities and vector embeddings
+- **Local Embeddings**: sentence-transformers for complete privacy
 
-### Tech Stack Dependencies
+### Current Dependencies
 ```toml
 # Core LangChain Ecosystem
 "langchain>=0.3.0"        # Core framework
@@ -242,51 +327,48 @@ The document processor uses the modern LangChain ecosystem:
 "langchain-groq>=0.2.0"   # Groq LLM integration
 "langsmith>=0.1.0"        # Production monitoring
 
-# Document Processing
-"llamaparse>=0.5.0"       # Premium PDF extraction
+# Academic Processing (GROBID-based)
+"requests>=2.31.0"        # GROBID API communication
 "watchdog>=3.0.0"         # Folder monitoring
 ```
 
-### Agent Architecture Pattern
+### Academic Agent Pattern
 ```python
-# Modern LangGraph pattern
+# GROBID-powered LangGraph agent
 from langgraph.prebuilt import create_react_agent
 from langchain_groq import ChatGroq
+from tools.shared_registry import SharedToolRegistry
 
 agent = create_react_agent(
-    model=ChatGroq(model="llama-3.1-70b-versatile"),
-    tools=[llamaparse_pdf, extract_citations, store_in_neo4j],
+    model=ChatGroq(model="llama-3.1-8b-instant"),
+    tools=SharedToolRegistry.get_all_tools(),  # [grobid_extract, extract_and_store_entities, store_vectors]
     checkpointer=MemorySaver()
 )
 ```
 
-### Processing Tools Structure
-```
-src/processor/
-├── document_pipeline.py    # LangGraph orchestrator
-├── tools/
-│   ├── llamaparse_tool.py  # PDF processing tool
-│   ├── citation_tool.py    # Citation extraction
-│   └── storage_tool.py     # Neo4j integration
-└── folder_watcher.py       # File system monitoring
-```
-
-### Key Design Decisions
-- **LLM-driven orchestration**: Agent makes intelligent processing decisions rather than linear workflows
-- **Reuse existing Neo4j storage** from MCP tools
-- **Streaming processing**: Real-time feedback via LangGraph
-- **Comprehensive monitoring**: LangSmith tracks all operations, costs, and performance
-- **Tool integration**: Document processor tools integrate seamlessly with MCP tools
+### Processing Workflow
+1. **GROBID Extraction**: Structured academic data (authors, citations, abstracts)  
+2. **Entity Analysis**: LLM extracts academic relationships and concepts
+3. **Vector Storage**: Text chunks with academic context preserved
+4. **Knowledge Graph**: Authors, papers, and concepts linked in Neo4j
 
 ## Project Context
 
-This is a **production-ready MCP toolkit** for building knowledge graphs from documents using Claude Desktop. The system enables researchers to:
+This is a **GROBID-powered academic research toolkit** that transforms research papers into queryable knowledge graphs via Claude Desktop. The system specializes in academic document processing and provides superior citation network analysis.
 
-1. **Interactive mode**: Upload PDFs to Claude Desktop for immediate analysis
-2. **Automated mode**: Watch folders for automatic document processing (planned)
-3. Extract entities and relationships via natural language
-4. Store everything in Neo4j (both graph and vector data)
-5. Query the knowledge base for research insights and connections
-6. Generate formatted literature reviews with citations
+### Core Capabilities
+1. **Academic PDF Processing**: GROBID extracts structured data (authors, affiliations, citations) with 87-90% accuracy
+2. **Interactive MCP Mode**: Upload PDFs to Claude Desktop for immediate academic analysis  
+3. **Automated Processing**: LangGraph workflows for batch academic document processing
+4. **Knowledge Graph Storage**: Authors, papers, concepts, and citations stored in Neo4j
+5. **Semantic Search**: Vector embeddings enable cross-paper concept discovery
+6. **Literature Reviews**: Generate formatted academic reviews with proper citations
 
-The architecture emphasizes **simplicity, modularity, and unified storage** while providing both interactive and automated research capabilities through comprehensive MCP protocol integration.
+### Academic Focus
+- **Research Paper Optimization**: Built specifically for academic papers vs generic documents
+- **Citation Network Analysis**: Maps author collaborations and paper relationships  
+- **Institutional Tracking**: University and research organization affiliations
+- **Zero API Costs**: Self-hosted GROBID eliminates expensive PDF processing fees
+- **Privacy-First**: Local processing ensures research data stays confidential
+
+The system transforms academic document collections into intelligent, queryable knowledge bases that reveal hidden connections and research patterns across papers, authors, and institutions.
