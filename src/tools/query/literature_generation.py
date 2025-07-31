@@ -3,11 +3,10 @@ from typing import Dict, Any
 from datetime import datetime
 from fastmcp import FastMCP
 
-from storage.neo4j import Neo4jQuery
-from storage.chroma import ChromaDBQuery
+from storage.neo4j import Neo4jQuery, Neo4jStorage
 import config
 
-def register_literature_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query: ChromaDBQuery):
+def register_literature_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, neo4j_storage: Neo4jStorage):
     """Register literature generation tools with the MCP server."""
     
     @mcp.tool()
@@ -34,8 +33,6 @@ def register_literature_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_qu
                 citation_style = "APA"
             
             # Query knowledge graph for relevant content
-            # Note: This would normally call the query_knowledge_graph tool,
-            # but for modularity we'll implement the search directly here
             results = {
                 "query": topic,
                 "entities": [],
@@ -52,13 +49,28 @@ def register_literature_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_qu
                 relationships = neo4j_query.get_entity_relationships(entity["id"])
                 entity["relationships"] = relationships
             
-            # Search text content in ChromaDB
-            text_results = chromadb_query.query_similar_text(topic, max_sources)
+            # Search text content using vector similarity in Neo4j
+            text_results = neo4j_storage.search_similar_vectors(topic, max_sources)
             results["text_results"] = text_results
             
-            # Get relevant citations
-            citations = chromadb_query.get_citations_for_topic(topic, max_sources)
-            results["citations"] = citations
+            # Extract citations from text results
+            citations = []
+            document_titles = set()
+            
+            # Get unique documents and create citations
+            for text_result in text_results:
+                doc_title = text_result.get("document_title")
+                if doc_title and doc_title not in document_titles:
+                    document_titles.add(doc_title)
+                    metadata = text_result.get("metadata", {})
+                    citations.append({
+                        "title": doc_title,
+                        "type": metadata.get("document_type", "document"),
+                        "relevance_score": text_result.get("similarity", 0.0),
+                        "authors": metadata.get("authors", []),
+                        "year": metadata.get("year", ""),
+                        "citation_style": citation_style
+                    })
             
             if not results.get("success"):
                 return results
@@ -66,7 +78,6 @@ def register_literature_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_qu
             # Organize results by themes
             entities = results.get("entities", [])
             text_results = results.get("text_results", [])
-            citations = results.get("citations", [])
             
             # Group entities by type for organization
             entity_types = {}

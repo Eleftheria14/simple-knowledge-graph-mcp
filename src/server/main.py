@@ -7,7 +7,7 @@ and querying knowledge graphs. This server orchestrates storage and query tools
 to provide a complete research assistant interface.
 
 Architecture:
-- Storage tools: Entity and text storage in Neo4j and ChromaDB
+- Storage tools: Entity and text storage in Neo4j (with vector search)
 - Query tools: Knowledge graph search and literature review generation  
 - Management tools: Database utilities and cleanup operations
 
@@ -19,7 +19,6 @@ from fastmcp import FastMCP
 
 # Import our storage managers
 from storage.neo4j import Neo4jStorage, Neo4jQuery
-from storage.chroma import ChromaDBStorage, ChromaDBQuery
 import config
 
 # Import tool registration functions
@@ -32,18 +31,16 @@ from tools.query.literature_generation import register_literature_tools
 # Initialize MCP server
 mcp = FastMCP("Knowledge Graph Research Assistant")
 
-# Initialize storage managers
+# Initialize Neo4j storage managers
 neo4j_storage = Neo4jStorage()
 neo4j_query = Neo4jQuery()
-chromadb_storage = ChromaDBStorage()
-chromadb_query = ChromaDBQuery()
 
 # Register all tools from separate modules
 register_entity_tools(mcp, neo4j_storage)
-register_text_tools(mcp, chromadb_storage)
-register_management_tools(mcp, neo4j_storage, chromadb_storage)
-register_search_tools(mcp, neo4j_query, chromadb_query)
-register_literature_tools(mcp, neo4j_query, chromadb_query)
+register_text_tools(mcp, neo4j_storage)  # Now uses Neo4j for vectors too
+register_management_tools(mcp, neo4j_storage)
+register_search_tools(mcp, neo4j_query, neo4j_storage)  # Updated to use Neo4j for vector search
+register_literature_tools(mcp, neo4j_query, neo4j_storage)
 
 
 if __name__ == "__main__":

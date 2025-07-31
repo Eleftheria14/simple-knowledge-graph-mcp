@@ -1,11 +1,11 @@
-"""Text storage tool for MCP knowledge graph."""
+"""Text storage tool for MCP knowledge graph using Neo4j vector storage."""
 from typing import List, Dict, Any
 import uuid
 from datetime import datetime
 from fastmcp import FastMCP
 from pydantic import BaseModel
 
-from storage.chroma import ChromaDBStorage
+from storage.neo4j import Neo4jStorage
 
 # Data models
 
@@ -22,7 +22,7 @@ class DocumentInfo(BaseModel):
     path: str = None  # Optional file path or URL
 
 class VectorData(BaseModel):
-    """Represents any type of data to be stored as vectors in ChromaDB.
+    """Represents any type of data to be stored as vectors in Neo4j.
     
     Examples:
     - Entity embeddings: {"id": "transformer_2017", "content": "Transformer Architecture", 
@@ -35,7 +35,7 @@ class VectorData(BaseModel):
     type: str  # Type: entity, text_chunk, relationship, concept, etc.
     properties: Dict[str, Any] = {}  # Additional metadata
     
-def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
+def register_text_tools(mcp: FastMCP, neo4j_storage: Neo4jStorage):
     """Register vector storage tools with the MCP server."""
     
     @mcp.tool()
@@ -44,7 +44,7 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
         document_info: DocumentInfo
     ) -> Dict[str, Any]:
         """
-        Store any type of content as vectors in ChromaDB.
+        Store any type of content as vectors in Neo4j.
         
         Args:
             vectors: List of content items to embed and store
@@ -58,13 +58,12 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
             if not document_info.id:
                 document_info.id = str(uuid.uuid4())
             
-            # Prepare content for embedding
-            contents = [vector.content for vector in vectors]
-            vector_ids = [f"{document_info.id}_{vector.id}" for vector in vectors]
-            
-            # Prepare metadata
-            metadatas = []
+            # Store vectors in Neo4j with embeddings
+            stored_count = 0
             for vector in vectors:
+                vector_id = f"{document_info.id}_{vector.id}"
+                
+                # Prepare metadata
                 metadata = {
                     "document_id": document_info.id,
                     "document_title": document_info.title,
@@ -74,20 +73,23 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
                     "stored_at": datetime.now().isoformat(),
                     **vector.properties
                 }
-                metadatas.append(metadata)
-            
-            # Store in ChromaDB with embeddings
-            result = chromadb_storage.store_vectors(
-                contents,
-                vector_ids,
-                metadatas
-            )
+                
+                # Store vector in Neo4j (will handle embedding generation)
+                result = neo4j_storage.store_text_vector(
+                    content=vector.content,
+                    vector_id=vector_id,
+                    metadata=metadata
+                )
+                
+                if result.get("success"):
+                    stored_count += 1
             
             return {
                 "success": True,
-                "message": f"Stored {result['vectors_stored']} vectors of types: {set(v.type for v in vectors)}",
-                "document_id": result["document_id"],
-                **result
+                "message": f"Stored {stored_count} vectors of types: {set(v.type for v in vectors)}",
+                "document_id": document_info.id,
+                "vectors_stored": stored_count,
+                "vector_types": list(set(v.type for v in vectors))
             }
             
         except Exception as e:
@@ -96,4 +98,3 @@ def register_text_tools(mcp: FastMCP, chromadb_storage: ChromaDBStorage):
                 "error": str(e),
                 "message": "Failed to store vectors"
             }
-    

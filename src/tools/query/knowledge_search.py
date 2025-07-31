@@ -2,10 +2,9 @@
 from typing import Dict, Any
 from fastmcp import FastMCP
 
-from storage.neo4j import Neo4jQuery
-from storage.chroma import ChromaDBQuery
+from storage.neo4j import Neo4jQuery, Neo4jStorage
 
-def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query: ChromaDBQuery):
+def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, neo4j_storage: Neo4jStorage):
     """Register knowledge search tools with the MCP server."""
     
     @mcp.tool()
@@ -16,7 +15,7 @@ def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query:
         limit: int = 10
     ) -> Dict[str, Any]:
         """
-        Search Neo4j and ChromaDB for matching content.
+        Search Neo4j for matching entities and text content.
         
         Args:
             query: Search query
@@ -45,15 +44,27 @@ def register_search_tools(mcp: FastMCP, neo4j_query: Neo4jQuery, chromadb_query:
                     relationships = neo4j_query.get_entity_relationships(entity["id"])
                     entity["relationships"] = relationships
             
-            # Search text content in ChromaDB
+            # Search text content using vector similarity in Neo4j
             if include_text:
-                text_results = chromadb_query.query_similar_text(query, limit)
+                text_results = neo4j_storage.search_similar_vectors(query, limit)
                 results["text_results"] = text_results
             
-            # Get relevant citations
-            citations = chromadb_query.get_citations_for_topic(query, limit)
-            results["citations"] = citations
+            # Get document citations from found content
+            citations = []
+            document_titles = set()
             
+            # Extract unique documents from results
+            for text_result in results["text_results"]:
+                doc_title = text_result.get("document_title")
+                if doc_title and doc_title not in document_titles:
+                    document_titles.add(doc_title)
+                    citations.append({
+                        "title": doc_title,
+                        "type": text_result.get("metadata", {}).get("document_type", "document"),
+                        "relevance_score": text_result.get("similarity", 0.0)
+                    })
+            
+            results["citations"] = citations
             results["message"] = f"Found {len(results['entities'])} entities, {len(results['text_results'])} text matches, {len(citations)} citations"
             
             return results
