@@ -1,0 +1,1747 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  HiDocumentText, 
+  HiPlus, 
+  HiTrash, 
+  HiChevronLeft, 
+  HiChevronRight,
+  HiChevronDown,
+  HiChevronUp,
+  HiRefresh,
+  HiSearch,
+  HiFilter,
+  HiX,
+  HiCheck,
+  HiExclamation,
+  HiCollection,
+  HiLightBulb,
+  HiCog,
+  HiClipboardList,
+  HiDocument,
+  HiTable,
+  HiPhotograph,
+  HiBookOpen,
+  HiClock,
+  HiUpload,
+  HiEye,
+  HiEyeOff
+} from 'react-icons/hi';
+
+function App() {
+  const [grobidConnected, setGrobidConnected] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingSteps, setProcessingSteps] = useState([]);
+  const [results, setResults] = useState([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [batchQueue, setBatchQueue] = useState([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
+  const [expandedResults, setExpandedResults] = useState(new Set());
+  const [filters, setFilters] = useState({
+    search: '',
+    author: '',
+    journal: '',
+    yearFrom: '',
+    yearTo: '',
+    success: 'all', // 'all', 'success', 'failed'
+    hasReferences: 'all', // 'all', 'yes', 'no'
+    fileRenamed: 'all' // 'all', 'yes', 'no'
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Session management state
+  const [sessions, setSessions] = useState([]);
+  const [currentSession, setCurrentSession] = useState(null);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [newSessionName, setNewSessionName] = useState('');
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState(null);
+  
+  // Workflow state - tabs for the main workflow
+  const [currentTab, setCurrentTab] = useState('upload'); // 'upload', 'extraction', 'knowledge-graph'
+  
+  // Entity extraction state
+  const [selectedDocuments, setSelectedDocuments] = useState(new Set());
+  const [extractingEntities, setExtractingEntities] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
+  const [extractionLogs, setExtractionLogs] = useState([]);
+  const [currentExtractionDoc, setCurrentExtractionDoc] = useState(null);
+  const [extractionConfig, setExtractionConfig] = useState('academic');
+  const [entityResults, setEntityResults] = useState([]);
+  const [createNewSessionOnUpload, setCreateNewSessionOnUpload] = useState(false);
+
+  // Check GROBID connection and load sessions on startup
+  useEffect(() => {
+    checkGrobidConnection();
+    loadSessions();
+  }, []);
+
+  // Load session documents when current session changes
+  useEffect(() => {
+    if (currentSession) {
+      loadSessionDocuments(currentSession.id);
+    } else {
+      setResults([]);
+    }
+  }, [currentSession]);
+
+  const checkGrobidConnection = async () => {
+    try {
+      const isAlive = await window.electronAPI?.api?.checkGrobidHealth();
+      setGrobidConnected(isAlive);
+    } catch (error) {
+      setGrobidConnected(false);
+      console.error('GROBID connection failed:', error);
+    }
+  };
+
+  const loadSessions = async () => {
+    try {
+      const sessionList = await window.electronAPI?.api?.getSessions();
+      setSessions(sessionList || []);
+      
+      // Set current session to the most recent one, or create new if none exist
+      if (sessionList && sessionList.length > 0) {
+        setCurrentSession(sessionList[0]);
+      } else {
+        // Create a default session
+        await createNewSession('New Session');
+      }
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+    }
+  };
+
+  const loadSessionDocuments = async (sessionId) => {
+    try {
+      const sessionResults = await window.electronAPI?.api?.getSessionDocuments(sessionId);
+      setResults(sessionResults || []);
+    } catch (error) {
+      console.error('Failed to load session documents:', error);
+      setResults([]);
+    }
+  };
+
+  const createNewSession = async (sessionName = null) => {
+    if (creatingSession) return null;
+    
+    try {
+      setCreatingSession(true);
+      
+      const result = await window.electronAPI?.api?.createSession(sessionName);
+      
+      if (result?.success) {
+        // Add the new session to the list
+        setSessions(prev => [result.session, ...prev]);
+        setCurrentSession(result.session);
+        setResults([]); // Clear results for new session
+        setNewSessionName('');
+        return result.session;
+      } else {
+        console.error('Session creation failed:', result?.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    } finally {
+      setCreatingSession(false);
+    }
+    return null;
+  };
+
+  const deleteSession = async (sessionId, deleteDocuments = false) => {
+    if (deletingSessionId) return { success: false, error: 'Already deleting a session' };
+    
+    try {
+      setDeletingSessionId(sessionId);
+      
+      // Perform backend deletion first
+      const result = await window.electronAPI?.api?.deleteSession(sessionId, deleteDocuments);
+      
+      if (result?.success) {
+        // Only update UI after successful backend deletion
+        const remainingSessions = sessions.filter(s => s.id !== sessionId);
+        setSessions(remainingSessions);
+        
+        // If we deleted the current session, switch to another one
+        if (currentSession?.id === sessionId) {
+          if (remainingSessions.length > 0) {
+            setCurrentSession(remainingSessions[0]);
+            loadSessionDocuments(remainingSessions[0].id);
+          } else {
+            setCurrentSession(null);
+            setResults([]);
+          }
+        }
+      } else {
+        console.error('Backend deletion failed:', result?.error);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      return { success: false, error: error.message };
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (window.confirm('Are you sure you want to clear all processed PDF data? This cannot be undone.')) {
+      try {
+        await window.electronAPI?.api?.clearAllPDFResults();
+        setResults([]);
+      } catch (error) {
+        console.error('Failed to clear data:', error);
+      }
+    }
+  };
+
+  // Entity extraction functions
+  const startEntityExtraction = async () => {
+    console.log('🚀 Start Extraction clicked!');
+    console.log('Selected documents:', selectedDocuments);
+    console.log('Current results:', results);
+    
+    if (selectedDocuments.size === 0) {
+      console.log('❌ No documents selected');
+      alert('Please select at least one document for entity extraction.');
+      return;
+    }
+
+    const documentsToExtract = results.filter(doc => selectedDocuments.has(doc.id));
+    console.log('📄 Documents to extract:', documentsToExtract);
+    
+    console.log('🔄 Setting extraction state...');
+    setExtractingEntities(true);
+    setExtractionProgress({ current: 0, total: documentsToExtract.length });
+    setExtractionLogs([]);
+    console.log('✅ State set - starting extraction process');
+    
+    const extractedResults = [];
+    
+    for (let i = 0; i < documentsToExtract.length; i++) {
+      const doc = documentsToExtract[i];
+      setCurrentExtractionDoc(doc);
+      setExtractionProgress({ current: i + 1, total: documentsToExtract.length });
+      
+      // Add log entry for starting extraction
+      setExtractionLogs(prev => [...prev, {
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'info',
+        message: `Starting entity extraction for "${doc.title}"`
+      }]);
+      
+      try {
+        // Call backend entity extraction
+        const result = await window.electronAPI?.api?.extractEntities(doc.id, extractionConfig);
+        
+        if (result?.success) {
+          setExtractionLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'success',
+            message: `Found ${result.entities_found || 0} entities and ${result.relationships_found || 0} relationships`
+          }]);
+          
+          extractedResults.push({
+            documentId: doc.id,
+            documentTitle: doc.title,
+            entity_count: result.entities_found || 0,
+            relationship_count: result.relationships_found || 0,
+            entities: result.entities || [],
+            relationships: result.relationships || [],
+            success: true
+          });
+        } else {
+          setExtractionLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'error',
+            message: `Failed: ${result?.error || 'Unknown error'}`
+          }]);
+        }
+      } catch (error) {
+        setExtractionLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString(),
+          type: 'error',
+          message: `Error: ${error.message}`
+        }]);
+      }
+      
+      // Small delay between extractions
+      if (i < documentsToExtract.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    setEntityResults(extractedResults);
+    setExtractingEntities(false);
+    setCurrentExtractionDoc(null);
+    
+    // Final log entry
+    setExtractionLogs(prev => [...prev, {
+      timestamp: new Date().toLocaleTimeString(),
+      type: 'info',
+      message: `Entity extraction completed for ${extractedResults.length} documents`
+    }]);
+  };
+
+  const toggleDocumentSelection = (docId) => {
+    console.log('🔄 Toggling document selection for:', docId);
+    setSelectedDocuments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(docId)) {
+        newSet.delete(docId);
+        console.log('➖ Removed document from selection');
+      } else {
+        newSet.add(docId);
+        console.log('➕ Added document to selection');
+      }
+      console.log('📋 New selection set:', newSet);
+      return newSet;
+    });
+  };
+
+  const selectAllDocuments = () => {
+    const successfulDocs = results.filter(doc => doc.success).map(doc => doc.id);
+    setSelectedDocuments(new Set(successfulDocs));
+  };
+
+  const clearDocumentSelection = () => {
+    setSelectedDocuments(new Set());
+  };
+
+  const handleFiles = async (files, forceRestart = false) => {
+    if (!files || files.length === 0) return;
+    
+    // If already processing and new files are added, stop current and start fresh
+    if (isProcessing && forceRestart) {
+      setIsProcessing(false);
+      // Brief delay to ensure cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Create new session if no current session exists OR user wants to create new session
+    if (!currentSession || createNewSessionOnUpload) {
+      const timestamp = new Date();
+      const sessionName = `Session ${timestamp.toLocaleDateString()} ${timestamp.toLocaleTimeString()}`;
+      const newSession = await createNewSession(sessionName);
+      if (!newSession) {
+        console.error('Failed to create new session');
+        return;
+      }
+      // Reset the flag after creating session
+      setCreateNewSessionOnUpload(false);
+    }
+    
+    setIsProcessing(true);
+    setProcessingProgress(0);
+    setBatchQueue(files);
+    setCurrentFileIndex(0);
+    setBatchProgress({ completed: 0, total: files.length });
+    
+    setProcessingSteps([
+      { id: 1, name: 'Reading file', status: 'pending' },
+      { id: 2, name: 'Connecting to GROBID', status: 'pending' },
+      { id: 3, name: 'Processing with GROBID', status: 'pending' },
+      { id: 4, name: 'Parsing results', status: 'pending' },
+      { id: 5, name: 'Saving to database', status: 'pending' },
+    ]);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentFileIndex(i);
+      try {
+        
+        // Step 1: Reading file (quick)
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 1 ? { ...step, status: 'in_progress' } : step
+        ));
+        setProcessingStep(`Reading ${file.path.split('/').pop()}...`);
+        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate brief delay
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 1 ? { ...step, status: 'completed' } : step
+        ));
+        
+        // Step 2: Connecting to GROBID (quick)
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 2 ? { ...step, status: 'in_progress' } : step
+        ));
+        setProcessingStep('Connecting to GROBID server...');
+        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate brief delay
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 2 ? { ...step, status: 'completed' } : step
+        ));
+        
+        // Step 3: Processing with GROBID (main time-consuming step)
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 3 ? { ...step, status: 'in_progress' } : step
+        ));
+        setProcessingStep('Processing with GROBID (this may take a while)...');
+        setProcessingProgress(0); // Reset for GROBID progress
+        
+        // Simulate GROBID progress (since we can't get real progress from backend)
+        const progressInterval = setInterval(() => {
+          setProcessingProgress(prev => {
+            if (prev >= 95) return prev;
+            return prev + Math.random() * 5;
+          });
+        }, 500);
+        
+        const result = await window.electronAPI.api.processWithGrobid(file.path);
+        
+        clearInterval(progressInterval);
+        setProcessingProgress(100);
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 3 ? { ...step, status: 'completed' } : step
+        ));
+        
+        // Step 4: Parsing results (quick)
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 4 ? { ...step, status: 'in_progress' } : step
+        ));
+        setProcessingStep('Parsing academic content...');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        
+        const newResult = {
+          id: Date.now() + Math.random(),
+          fileName: file.path.split('/').pop(),
+          filePath: file.path,
+          timestamp: new Date().toLocaleString(),
+          ...result
+        };
+        
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 4 ? { ...step, status: 'completed' } : step
+        ));
+        
+        // Step 5: Saving to backend (quick)
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 5 ? { ...step, status: 'in_progress' } : step
+        ));
+        setProcessingStep('Saving to database...');
+        
+        // Save to backend with current session
+        try {
+          await window.electronAPI?.api?.savePDFResult(newResult, currentSession?.id);
+        } catch (error) {
+          console.error('Failed to save to backend:', error);
+        }
+        
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 5 ? { ...step, status: 'completed' } : step
+        ));
+        setProcessingStep('Processing complete!');
+        
+        setResults(prev => [...prev, newResult]);
+        setBatchProgress(prev => ({ ...prev, completed: i + 1 }));
+        
+        // Reset steps for next file if there are more files
+        if (i < files.length - 1) {
+          setProcessingSteps([
+            { id: 1, name: 'Reading file', status: 'pending' },
+            { id: 2, name: 'Connecting to GROBID', status: 'pending' },
+            { id: 3, name: 'Processing with GROBID', status: 'pending' },
+            { id: 4, name: 'Parsing results', status: 'pending' },
+            { id: 5, name: 'Saving to database', status: 'pending' },
+          ]);
+        }
+        
+        // Short delay between files
+        if (i < files.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+      } catch (error) {
+        console.error('Processing failed:', error);
+        
+        const errorResult = {
+          id: Date.now() + Math.random(),
+          fileName: file.path.split('/').pop(),
+          filePath: file.path,
+          timestamp: new Date().toLocaleString(),
+          success: false,
+          error: error.message
+        };
+        
+        // Save error result to backend too
+        try {
+          await window.electronAPI?.api?.savePDFResult(errorResult, currentSession?.id);
+        } catch (saveError) {
+          console.error('Failed to save error to backend:', saveError);
+        }
+        
+        setResults(prev => [...prev, errorResult]);
+        setBatchProgress(prev => ({ ...prev, completed: i + 1 }));
+      }
+    }
+    
+    // Reset processing state
+    setIsProcessing(false);
+    setProcessingStep('Batch processing complete!');
+    setProcessingProgress(0);
+    setBatchQueue([]);
+    setCurrentFileIndex(0);
+    
+    // Show completion message briefly then clear
+    setTimeout(() => {
+      setProcessingStep('');
+      setProcessingSteps([]);
+      setBatchProgress({ completed: 0, total: 0 });
+    }, 3000);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    
+    const files = Array.from(e.dataTransfer.files)
+      .filter(file => file.type === 'application/pdf')
+      .map(file => ({ path: file.path || file.name }));
+    
+    if (files.length > 0) {
+      // Force restart only if currently processing
+      await handleFiles(files, isProcessing);
+    }
+  };
+
+  const handleFileSelect = async () => {
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+      });
+      
+      if (!result.canceled && result.filePaths.length > 0) {
+        const files = result.filePaths.map(path => ({ path }));
+        await handleFiles(files, false); // Don't force restart for manual selection
+      }
+    } catch (error) {
+      console.error('File selection failed:', error);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+
+  const toggleResultExpanded = (resultId) => {
+    setExpandedResults(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(resultId)) {
+        newExpanded.delete(resultId);
+      } else {
+        newExpanded.add(resultId);
+      }
+      return newExpanded;
+    });
+  };
+
+  const expandAllResults = () => {
+    setExpandedResults(new Set(filteredResults.map(r => r.id)));
+  };
+
+  const collapseAllResults = () => {
+    setExpandedResults(new Set());
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      search: '',
+      author: '',
+      journal: '',
+      yearFrom: '',
+      yearTo: '',
+      success: 'all',
+      hasReferences: 'all',
+      fileRenamed: 'all'
+    });
+  };
+
+  // Filter results based on current filter criteria
+  const filteredResults = results.filter(result => {
+    // Text search in title, filename, abstract, and full text
+    if (filters.search) {
+      const searchTerm = filters.search.toLowerCase();
+      const searchableText = [
+        result.title || '',
+        result.fileName || '',
+        result.abstract || '',
+        result.fullText || '',
+        ...(result.authors || []),
+        ...(result.keywords || [])
+      ].join(' ').toLowerCase();
+      
+      if (!searchableText.includes(searchTerm)) {
+        return false;
+      }
+    }
+
+    // Author filter - search in document authors and citation authors
+    if (filters.author) {
+      const authorTerm = filters.author.toLowerCase();
+      const documentAuthors = (result.authors || []).join(' ').toLowerCase();
+      const citationAuthors = (result.citations || [])
+        .flatMap(citation => citation.authors || [])
+        .join(' ').toLowerCase();
+      
+      if (!documentAuthors.includes(authorTerm) && !citationAuthors.includes(authorTerm)) {
+        return false;
+      }
+    }
+
+    // Journal filter - search in citations
+    if (filters.journal) {
+      const journalTerm = filters.journal.toLowerCase();
+      const citationJournals = (result.citations || [])
+        .map(citation => citation.journal || '')
+        .join(' ').toLowerCase();
+      
+      if (!citationJournals.includes(journalTerm)) {
+        return false;
+      }
+    }
+
+    // Year range filter - search in citations and document date
+    if (filters.yearFrom || filters.yearTo) {
+      const yearFrom = filters.yearFrom ? parseInt(filters.yearFrom) : 0;
+      const yearTo = filters.yearTo ? parseInt(filters.yearTo) : 9999;
+      
+      const citationYears = (result.citations || [])
+        .map(citation => {
+          const year = citation.year || '';
+          const yearNum = parseInt(year.match(/\d{4}/)?.[0] || '0');
+          return yearNum;
+        })
+        .filter(year => year > 0);
+      
+      // Also check document timestamp year
+      const docYear = new Date(result.timestamp || '').getFullYear();
+      const allYears = [...citationYears, docYear].filter(year => year > 1900);
+      
+      if (allYears.length > 0) {
+        const hasYearInRange = allYears.some(year => year >= yearFrom && year <= yearTo);
+        if (!hasYearInRange) {
+          return false;
+        }
+      }
+    }
+
+    // Success filter
+    if (filters.success !== 'all') {
+      if (filters.success === 'success' && !result.success) {
+        return false;
+      }
+      if (filters.success === 'failed' && result.success) {
+        return false;
+      }
+    }
+
+    // References filter
+    if (filters.hasReferences !== 'all') {
+      const hasRefs = (result.references || 0) > 0;
+      if (filters.hasReferences === 'yes' && !hasRefs) {
+        return false;
+      }
+      if (filters.hasReferences === 'no' && hasRefs) {
+        return false;
+      }
+    }
+
+    // File renamed filter
+    if (filters.fileRenamed !== 'all') {
+      if (filters.fileRenamed === 'yes' && !result.fileRenamed) {
+        return false;
+      }
+      if (filters.fileRenamed === 'no' && result.fileRenamed) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
+    if (key === 'success' || key === 'hasReferences' || key === 'fileRenamed') {
+      return value !== 'all';
+    }
+    return value !== '';
+  }).length;
+
+  return (
+    <div className="min-h-screen max-h-screen bg-gray-900 text-white flex">
+      {/* Sidebar */}
+      <div className={`${showSidebar ? 'w-80' : 'w-12'} bg-gray-800 border-r border-gray-700 flex-shrink-0 transition-all duration-300`}>
+        {/* Sidebar Header */}
+        <div className="pt-8 pb-4 px-4 border-b border-gray-700">
+          <div className="flex items-center justify-between">
+            {showSidebar && (
+              <h2 className="text-lg font-semibold flex items-center space-x-2">
+                <HiCollection className="w-5 h-5 text-blue-400" />
+                <span>PDF Sessions</span>
+              </h2>
+            )}
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="p-2 hover:bg-gray-700 rounded-lg transition-colors group"
+            >
+              {showSidebar ? (
+                <HiChevronLeft className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
+              ) : (
+                <HiChevronRight className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {showSidebar && (
+          <div className="flex-1 overflow-y-auto">
+            {/* New Session Button */}
+            <div className="p-4 border-b border-gray-700">
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  placeholder="Session name..."
+                  disabled={creatingSession}
+                  className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 ${
+                    creatingSession
+                      ? 'bg-gray-600 border-gray-500 cursor-not-allowed'
+                      : 'bg-gray-700 border-gray-600'
+                  }`}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !creatingSession) {
+                      createNewSession(newSessionName || null);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    createNewSession(newSessionName || null);
+                  }}
+                  disabled={creatingSession}
+                  className={`w-full px-3 py-2 rounded text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
+                    creatingSession 
+                      ? 'bg-gray-600 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {creatingSession ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <HiPlus className="w-4 h-4" />
+                      <span>New Session</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Sessions List */}
+            <div className="p-2">
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={`p-3 mb-2 rounded cursor-pointer transition-colors ${
+                    currentSession?.id === session.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                  onClick={() => {
+                    setCurrentSession(session);
+                  }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium truncate">{session.name}</h3>
+                      <div className="text-xs text-gray-300 mt-1">
+                        <div>{session.document_count} documents</div>
+                        <div>{new Date(session.last_updated).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Delete this session? Documents will be kept.')) {
+                          deleteSession(session.id, false);
+                        }
+                      }}
+                      disabled={deletingSessionId === session.id}
+                      className={`ml-2 p-1 rounded transition-colors ${
+                        deletingSessionId === session.id
+                          ? 'text-gray-400 cursor-not-allowed'
+                          : 'text-red-400 hover:text-red-300 hover:bg-red-900/20'
+                      }`}
+                    >
+                      {deletingSessionId === session.id ? (
+                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <HiTrash className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        <div className="p-8">
+      {/* Header */}
+      <div className="max-w-4xl mx-auto mb-8">
+        <h1 className="text-3xl font-bold mb-4">PDF Academic Parser</h1>
+        <div className="flex items-center space-x-4">
+          <div className={`w-3 h-3 rounded-full ${grobidConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <span className="text-sm">
+            GROBID Server: {grobidConnected ? 'Connected' : 'Disconnected'}
+          </span>
+          <button 
+            onClick={checkGrobidConnection}
+            className="text-sm px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 flex items-center space-x-1"
+          >
+            <HiRefresh className="w-4 h-4" />
+            <span>Refresh</span>
+          </button>
+          {results.length > 0 && (
+            <>
+              <button 
+                onClick={() => setCurrentTab('extraction')}
+                className="text-sm px-3 py-1 bg-green-600 rounded hover:bg-green-700 flex items-center space-x-1"
+                disabled={results.length === 0}
+              >
+                <HiLightBulb className="w-4 h-4" />
+                <span>Extract Entities</span>
+              </button>
+              <button 
+                onClick={handleClearAllData}
+                className="text-sm px-3 py-1 bg-red-600 rounded hover:bg-red-700 flex items-center space-x-1"
+              >
+                <HiTrash className="w-4 h-4" />
+                <span>Clear All Data</span>
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Workflow Tabs */}
+        <div className="max-w-4xl mx-auto mb-8">
+          <div className="border-b border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setCurrentTab('upload')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  currentTab === 'upload'
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                1. Upload & Parse
+              </button>
+              <button
+                onClick={() => setCurrentTab('extraction')}
+                disabled={results.length === 0}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  currentTab === 'extraction'
+                    ? 'border-green-500 text-green-400'
+                    : results.length === 0
+                    ? 'border-transparent text-gray-600 cursor-not-allowed'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                2. Extract Entities
+              </button>
+              <button
+                onClick={() => setCurrentTab('knowledge-graph')}
+                disabled={entityResults.length === 0}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  currentTab === 'knowledge-graph'
+                    ? 'border-purple-500 text-purple-400'
+                    : entityResults.length === 0
+                    ? 'border-transparent text-gray-600 cursor-not-allowed'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                3. Knowledge Graph
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {currentTab === 'upload' && (
+        <div className="p-8">
+      {/* Upload Area */}
+      <div className="max-w-4xl mx-auto mb-8">
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+            dragActive 
+              ? 'border-blue-400 bg-blue-900/20' 
+              : 'border-gray-600 hover:border-gray-500'
+          } ${!grobidConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          onClick={grobidConnected ? handleFileSelect : undefined}
+        >
+          {isProcessing ? (
+            <div className="w-full max-w-lg mx-auto">
+              <div className="text-4xl mb-4">
+                <HiClock className="w-16 h-16 mx-auto text-blue-400 animate-spin" />
+              </div>
+              <div className="mb-6">
+                {batchProgress.total > 1 ? (
+                  <div>
+                    <p className="text-lg mb-2">Batch Processing PDFs with GROBID</p>
+                    <div className="bg-gray-700 rounded-full h-4 mb-3">
+                      <div 
+                        className="bg-green-500 h-4 rounded-full transition-all duration-500"
+                        style={{ width: `${(batchProgress.completed / batchProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-400 mb-2">
+                      <span>File {currentFileIndex + 1} of {batchProgress.total}</span>
+                      <span>{batchProgress.completed} completed</span>
+                    </div>
+                    {batchQueue[currentFileIndex] && (
+                      <p className="text-sm text-blue-300 mb-4">
+                        Current: {batchQueue[currentFileIndex].path.split('/').pop()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-lg mb-6">Processing PDF with GROBID</p>
+                )}
+              </div>
+              
+              {/* Step Status List */}
+              <div className="space-y-3 mb-6">
+                {processingSteps.map((step) => (
+                  <div key={step.id} className="flex items-center space-x-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      step.status === 'completed' 
+                        ? 'bg-green-500 text-white' 
+                        : step.status === 'in_progress'
+                        ? 'bg-blue-500 text-white animate-pulse'
+                        : 'bg-gray-600 text-gray-300'
+                    }`}>
+                      {step.status === 'completed' ? <HiCheck className="w-4 h-4" /> : step.id}
+                    </div>
+                    <span className={`text-sm ${
+                      step.status === 'completed' 
+                        ? 'text-green-300 line-through' 
+                        : step.status === 'in_progress'
+                        ? 'text-blue-300 font-medium'
+                        : 'text-gray-400'
+                    }`}>
+                      {step.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              
+              {/* GROBID Progress Bar (only shown during step 3) */}
+              {processingSteps.find(s => s.id === 3)?.status === 'in_progress' && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm text-gray-400 mb-2">
+                    <span>GROBID Processing</span>
+                    <span>{Math.round(processingProgress)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-3">
+                    <div 
+                      className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${processingProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Current Step Description */}
+              {processingStep && (
+                <p className="text-sm text-blue-300 text-center">
+                  {processingStep}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="text-4xl mb-4">
+                <HiUpload className="w-16 h-16 mx-auto text-gray-400" />
+              </div>
+              <p className="text-lg mb-2">
+                {grobidConnected 
+                  ? 'Drop PDF files here or click to select'
+                  : 'GROBID server not connected'
+                }
+              </p>
+              <p className="text-sm text-gray-400 mb-4">
+                Supports: Single PDFs or batch processing multiple files
+              </p>
+              <div className="flex items-center justify-center space-x-2 text-sm">
+                <input
+                  type="checkbox"
+                  id="createNewSession"
+                  checked={createNewSessionOnUpload}
+                  onChange={(e) => setCreateNewSessionOnUpload(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="createNewSession" className="text-gray-400">
+                  Create new session for uploaded files
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filters */}
+      {results.length > 0 && (
+        <div className="max-w-6xl mx-auto mb-6">
+          <div className="bg-gray-800 rounded-lg border border-gray-700">
+            {/* Filter Header */}
+            <div 
+              className="p-4 cursor-pointer hover:bg-gray-750 transition-colors border-b border-gray-700"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <h3 className="text-lg font-semibold flex items-center space-x-2">
+                    <HiFilter className="text-blue-400" />
+                    <span>Filters & Search</span>
+                  </h3>
+                  {activeFilterCount > 0 && (
+                    <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                      {activeFilterCount} active
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetFilters();
+                      }}
+                      className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 rounded flex items-center space-x-1"
+                    >
+                      <HiX className="w-3 h-3" />
+                      <span>Clear All</span>
+                    </button>
+                  )}
+                  <div className="text-gray-400">
+                    {showFilters ? <HiChevronDown /> : <HiChevronRight />}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Controls */}
+            {showFilters && (
+              <div className="p-4 bg-gray-850">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* General Search */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">General Search</label>
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      placeholder="Search title, content, authors..."
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Author Search */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Author</label>
+                    <input
+                      type="text"
+                      value={filters.author}
+                      onChange={(e) => setFilters(prev => ({ ...prev, author: e.target.value }))}
+                      placeholder="Search authors (doc + citations)"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Journal Search */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Journal</label>
+                    <input
+                      type="text"
+                      value={filters.journal}
+                      onChange={(e) => setFilters(prev => ({ ...prev, journal: e.target.value }))}
+                      placeholder="Search journals in citations"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Year Range */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Year From</label>
+                    <input
+                      type="number"
+                      value={filters.yearFrom}
+                      onChange={(e) => setFilters(prev => ({ ...prev, yearFrom: e.target.value }))}
+                      placeholder="e.g., 2020"
+                      min="1900"
+                      max="2030"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Year To</label>
+                    <input
+                      type="number"
+                      value={filters.yearTo}
+                      onChange={(e) => setFilters(prev => ({ ...prev, yearTo: e.target.value }))}
+                      placeholder="e.g., 2024"
+                      min="1900"
+                      max="2030"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Processing Status */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Processing Status</label>
+                    <select
+                      value={filters.success}
+                      onChange={(e) => setFilters(prev => ({ ...prev, success: e.target.value }))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="all">All Documents</option>
+                      <option value="success">Successfully Processed</option>
+                      <option value="failed">Failed Processing</option>
+                    </select>
+                  </div>
+
+                  {/* Has References */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">References</label>
+                    <select
+                      value={filters.hasReferences}
+                      onChange={(e) => setFilters(prev => ({ ...prev, hasReferences: e.target.value }))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="all">All Documents</option>
+                      <option value="yes">Has References</option>
+                      <option value="no">No References</option>
+                    </select>
+                  </div>
+
+                  {/* File Renamed */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">File Renamed</label>
+                    <select
+                      value={filters.fileRenamed}
+                      onChange={(e) => setFilters(prev => ({ ...prev, fileRenamed: e.target.value }))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="all">All Files</option>
+                      <option value="yes">Renamed Files</option>
+                      <option value="no">Original Names</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Filter Summary */}
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="flex items-center justify-between text-sm text-gray-400">
+                    <span>
+                      Showing {filteredResults.length} of {results.length} documents
+                    </span>
+                    {activeFilterCount > 0 && (
+                      <span>
+                        {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} applied
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold">Processing Results</h2>
+          <div className="flex items-center space-x-3">
+            {isProcessing && batchProgress.total > 1 && (
+              <span className="text-sm text-blue-400 bg-blue-900 px-3 py-1 rounded-full animate-pulse">
+                Batch: {batchProgress.completed}/{batchProgress.total}
+              </span>
+            )}
+            {results.length > 0 && (
+              <>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={expandAllResults}
+                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded flex items-center space-x-1"
+                  >
+                    <HiEye className="w-3 h-3" />
+                    <span>Expand All</span>
+                  </button>
+                  <button
+                    onClick={collapseAllResults}
+                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded flex items-center space-x-1"
+                  >
+                    <HiEyeOff className="w-3 h-3" />
+                    <span>Collapse All</span>
+                  </button>
+                </div>
+                <span className="text-sm text-gray-400 bg-gray-800 px-3 py-1 rounded-full">
+                  {filteredResults.length === results.length 
+                    ? `${results.length} document${results.length !== 1 ? 's' : ''}`
+                    : `${filteredResults.length} of ${results.length} documents`
+                  }
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {results.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-4xl mb-4">
+              <HiClipboardList className="w-16 h-16 mx-auto" />
+            </div>
+            <p>No PDFs processed yet</p>
+          </div>
+        ) : filteredResults.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-4xl mb-4">
+              <HiSearch className="w-16 h-16 mx-auto" />
+            </div>
+            <p>No documents match the current filters</p>
+            <button
+              onClick={resetFilters}
+              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm flex items-center space-x-2 mx-auto"
+            >
+              <HiX className="w-4 h-4" />
+              <span>Clear Filters</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredResults.map((result) => {
+              const isExpanded = expandedResults.has(result.id);
+              return (
+              <div key={result.id} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-gray-600 transition-colors">
+                {/* Compact Header - Always Visible */}
+                <div 
+                  className="p-4 cursor-pointer hover:bg-gray-750 transition-colors"
+                  onClick={() => toggleResultExpanded(result.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          result.success ? 'bg-green-500' : 'bg-red-500'
+                        }`}></div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-medium truncate">
+                            {result.title || 'Untitled Document'}
+                          </h3>
+                          <div className="flex items-center space-x-3 text-xs text-gray-400 mt-1">
+                            {result.authors && result.authors.length > 0 && (
+                              <span className="truncate">
+                                {result.authors.slice(0, 2).join(', ')}
+                                {result.authors.length > 2 && ` et al.`}
+                              </span>
+                            )}
+                            <span>{new Date(result.timestamp).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-4 flex-shrink-0">
+                      {result.success && (
+                        <div className="flex items-center space-x-4 text-xs text-gray-400">
+                          <span className="flex items-center space-x-1">
+                            <HiBookOpen className="w-3 h-3" />
+                            <span>{result.references || result.references_count || 0}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <HiPhotograph className="w-3 h-3" />
+                            <span>{result.figures?.length || result.figures_count || 0}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <HiTable className="w-3 h-3" />
+                            <span>{result.tables?.length || result.tables_count || 0}</span>
+                          </span>
+                        </div>
+                      )}
+                      
+                      <div className={`px-2 py-1 rounded text-xs ${
+                        result.success 
+                          ? 'bg-green-900 text-green-300' 
+                          : 'bg-red-900 text-red-300'
+                      }`}>
+                        {result.success ? 'Success' : 'Failed'}
+                      </div>
+                      
+                      <div className="text-gray-400">
+                        {isExpanded ? <HiChevronDown /> : <HiChevronRight />}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Expandable Details */}
+                {isExpanded && (
+                  <div className="border-t border-gray-700 bg-gray-850 p-4">
+                    {result.success ? (
+                      <div className="space-y-6">
+                        {/* Metadata */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <h4 className="font-semibold mb-3">Citation Information</h4>
+                            <div className="bg-gray-700 p-3 rounded border-l-4 border-blue-500">
+                              <div className="text-sm space-y-2">
+                                {result.title && (
+                                  <div className="font-medium text-blue-300">"{result.title}"</div>
+                                )}
+                                {result.authors && result.authors.length > 0 && (
+                                  <div className="text-gray-300">
+                                    <span className="text-gray-400">Authors:</span> {result.authors.join(', ')}
+                                  </div>
+                                )}
+                                <div className="flex items-center space-x-4 text-xs text-gray-400 pt-2">
+                                  <span className="flex items-center space-x-1">
+                                    <HiBookOpen className="w-3 h-3" />
+                                    <span>{result.references || 0} references</span>
+                                  </span>
+                                  <span className="flex items-center space-x-1">
+                                    <HiPhotograph className="w-3 h-3" />
+                                    <span>{result.figures?.length || 0} figures</span>
+                                  </span>
+                                  <span className="flex items-center space-x-1">
+                                    <HiTable className="w-3 h-3" />
+                                    <span>{result.tables?.length || 0} tables</span>
+                                  </span>
+                                  <span className="flex items-center space-x-1">
+                                    <HiDocument className="w-3 h-3" />
+                                    <span>{(result.fullText?.length || 0).toLocaleString()} chars</span>
+                                  </span>
+                                </div>
+                                {result.keywords && result.keywords.length > 0 && (
+                                  <div className="text-xs text-gray-400 pt-2">
+                                    <span className="text-gray-400">Keywords:</span> {result.keywords.join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <h4 className="font-semibold mb-2">File Information</h4>
+                            <div className="space-y-2 text-sm">
+                              <div>
+                                <strong>Current File:</strong> 
+                                <span className="ml-2 font-mono text-xs bg-gray-700 px-2 py-1 rounded break-all">
+                                  {result.fileName}
+                                </span>
+                              </div>
+                              <div><strong>Path:</strong> 
+                                <span className="text-xs text-gray-400 ml-1 break-all">
+                                  {result.filePath}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Abstract */}
+                        {result.abstract && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Abstract</h4>
+                            <p className="text-sm text-gray-300 max-h-32 overflow-y-auto">
+                              {result.abstract}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Keywords */}
+                        {result.keywords && result.keywords.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Keywords</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {result.keywords.map((keyword, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-green-900 text-green-300 rounded text-xs">
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Complete Document Body */}
+                        {result.fullText && (
+                          <div>
+                            <h4 className="font-semibold mb-2">
+                              Complete Document Text ({result.fullText.length.toLocaleString()} characters)
+                              <span className="ml-2 text-sm font-normal text-gray-400">- Full paper content from GROBID</span>
+                            </h4>
+                            <div className="bg-gray-800 p-4 rounded max-h-[600px] overflow-y-auto">
+                              <pre className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed font-mono">
+                                {result.fullText}
+                              </pre>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500 flex items-center space-x-1">
+                              <HiLightBulb className="w-3 h-3" />
+                              <span>This is the complete structured text extracted by GROBID from the PDF - all {result.fullText.length.toLocaleString()} characters</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Complete References List */}
+                        {result.citations && result.citations.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Complete References List ({result.citations.length})</h4>
+                            <div className="bg-gray-800 p-4 rounded max-h-96 overflow-y-auto space-y-2">
+                              {result.citations.map((ref, idx) => (
+                                <div key={idx} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-3 pb-2">
+                                  <div className="font-medium text-blue-300 mb-1">
+                                    [{idx + 1}] {ref.title || 'Untitled Reference'}
+                                  </div>
+                                  {ref.authors && ref.authors.length > 0 && (
+                                    <div className="text-gray-400 mb-1">
+                                      <span className="font-medium">Authors:</span> {ref.authors.join(', ')}
+                                    </div>
+                                  )}
+                                  <div className="text-gray-400">
+                                    {ref.journal && (
+                                      <span>
+                                        <span className="font-medium">Journal:</span> <span className="italic">{ref.journal}</span>
+                                      </span>
+                                    )}
+                                    {ref.year && (
+                                      <span className="ml-3">
+                                        <span className="font-medium">Year:</span> {ref.year}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Additional Structured Data */}
+                        {result.metadata && (result.figures?.length > 0 || result.tables?.length > 0) && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Document Structure</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Figures with Full Details */}
+                              {result.figures && result.figures.length > 0 && (
+                                <div>
+                                  <h5 className="font-medium mb-2 text-red-300">Figures ({result.figures.length})</h5>
+                                  <div className="bg-gray-800 p-3 rounded max-h-64 overflow-y-auto space-y-3">
+                                    {result.figures.map((figure, idx) => (
+                                      <div key={idx} className="text-xs text-gray-300 border-l-2 border-red-500 pl-2">
+                                        <div className="font-medium text-red-300 mb-1">Figure {idx + 1}</div>
+                                        {figure.caption && (
+                                          <div className="text-gray-400 leading-relaxed">{figure.caption}</div>
+                                        )}
+                                        {figure.type && (
+                                          <div className="text-gray-500 mt-1">Type: {figure.type}</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Tables with Full Content */}
+                              {result.tables && result.tables.length > 0 && (
+                                <div>
+                                  <h5 className="font-medium mb-2 text-green-300">Tables ({result.tables.length})</h5>
+                                  <div className="bg-gray-800 p-3 rounded max-h-64 overflow-y-auto space-y-3">
+                                    {result.tables.map((table, idx) => (
+                                      <div key={idx} className="text-xs text-gray-300 border-l-2 border-green-500 pl-2">
+                                        <div className="font-medium text-green-300 mb-1">Table {idx + 1}</div>
+                                        {table.caption && (
+                                          <div className="text-gray-400 mb-2 leading-relaxed">{table.caption}</div>
+                                        )}
+                                        {table.content && (
+                                          <div className="text-gray-300 mt-2 p-2 bg-gray-900 rounded font-mono text-xxs leading-relaxed">
+                                            {table.content}
+                                          </div>
+                                        )}
+                                        {table.type && (
+                                          <div className="text-gray-500 mt-1">Type: {table.type}</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-red-300">
+                        <strong>Error:</strong> {result.error || 'Unknown error'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+            })}
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Entity Extraction Tab */}
+      {currentTab === 'extraction' && (
+        <div className="p-8">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
+              <HiLightBulb className="w-6 h-6 text-green-400" />
+              <span>Entity Extraction</span>
+            </h2>
+
+            {!extractingEntities && entityResults.length === 0 && (
+              <>
+                {/* Extraction Configuration */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Extraction Mode</label>
+                  <select 
+                    value={extractionConfig}
+                    onChange={(e) => setExtractionConfig(e.target.value)}
+                    className="w-full max-w-md px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="academic">Academic (Comprehensive research focus)</option>
+                    <option value="business">Business (Organizations & partnerships)</option>
+                    <option value="technical">Technical (Methods & technologies)</option>
+                    <option value="focused">Focused (Key entities only)</option>
+                    <option value="comprehensive">Comprehensive (All entities)</option>
+                  </select>
+                </div>
+
+                {/* Document Selection Controls */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-300">
+                      {selectedDocuments.size} of {results.filter(doc => doc.success).length} documents selected
+                    </span>
+                    <button 
+                      onClick={selectAllDocuments}
+                      className="text-sm px-3 py-1 bg-blue-600 rounded hover:bg-blue-700"
+                    >
+                      Select All
+                    </button>
+                    <button 
+                      onClick={clearDocumentSelection}
+                      className="text-sm px-3 py-1 bg-gray-600 rounded hover:bg-gray-700"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <button 
+                    onClick={startEntityExtraction}
+                    disabled={selectedDocuments.size === 0}
+                    className={`px-6 py-3 rounded-lg font-medium flex items-center space-x-2 ${
+                      selectedDocuments.size === 0 
+                        ? 'bg-gray-600 cursor-not-allowed' 
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  >
+                    <HiLightBulb className="w-5 h-5" />
+                    <span>Start Extraction</span>
+                  </button>
+                </div>
+
+                {/* Document List */}
+                <div className="space-y-3">
+                  {results.filter(doc => doc.success).map((doc) => (
+                    <div 
+                      key={doc.id}
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        selectedDocuments.has(doc.id)
+                          ? 'border-green-500 bg-green-900/20'
+                          : 'border-gray-600 hover:border-gray-500'
+                      }`}
+                      onClick={() => toggleDocumentSelection(doc.id)}
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
+                          selectedDocuments.has(doc.id)
+                            ? 'border-green-500 bg-green-500'
+                            : 'border-gray-400'
+                        }`}>
+                          {selectedDocuments.has(doc.id) && (
+                            <HiCheck className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium truncate">{doc.title}</h3>
+                          <div className="flex items-center space-x-3 text-sm text-gray-400 mt-1">
+                            {doc.authors && doc.authors.length > 0 && (
+                              <span className="truncate">
+                                {doc.authors.slice(0, 2).join(', ')}
+                                {doc.authors.length > 2 && ` et al.`}
+                              </span>
+                            )}
+                            <span>{new Date(doc.timestamp).toLocaleDateString()}</span>
+                            <span>{doc.content_length?.toLocaleString()} chars</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Extraction Progress */}
+            {extractingEntities && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold mb-4 flex items-center space-x-2">
+                  <HiCog className="w-5 h-5 text-blue-400 animate-spin" />
+                  <span>Extracting Entities</span>
+                </h3>
+
+                {/* Progress Bar */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-300">
+                      Document {extractionProgress.current} of {extractionProgress.total}
+                    </span>
+                    <span className="text-sm text-gray-300">
+                      {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(extractionProgress.current / extractionProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Current Document */}
+                {currentExtractionDoc && (
+                  <div className="mb-6 p-4 bg-gray-700 rounded-lg">
+                    <h4 className="font-medium text-green-400 mb-1">Currently Processing:</h4>
+                    <p className="text-sm truncate">{currentExtractionDoc.title}</p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <span className="text-xs text-gray-300">Analyzing content with LLM...</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Live Logs */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2 flex items-center space-x-2">
+                    <HiClipboardList className="w-4 h-4" />
+                    <span>Extraction Log</span>
+                  </h4>
+                  <div className="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto text-sm font-mono">
+                    {extractionLogs.map((log, index) => (
+                      <div key={index} className="mb-1">
+                        <span className="text-gray-500">[{log.timestamp}]</span>
+                        <span className={`ml-2 ${
+                          log.type === 'success' ? 'text-green-400' :
+                          log.type === 'error' ? 'text-red-400' :
+                          'text-gray-300'
+                        }`}>
+                          {log.message}
+                        </span>
+                      </div>
+                    ))}
+                    {extractionLogs.length === 0 && (
+                      <div className="text-gray-500">Waiting for extraction to begin...</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Extraction Results */}
+            {entityResults.length > 0 && !extractingEntities && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center space-x-2">
+                  <HiCheck className="w-5 h-5 text-green-400" />
+                  <span>Extraction Complete</span>
+                </h3>
+
+                {/* Results Summary */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gray-700 p-4 rounded-lg">
+                    <div className="text-2xl font-bold text-green-400">
+                      {entityResults.reduce((sum, result) => sum + (result.entity_count || 0), 0)}
+                    </div>
+                    <div className="text-sm text-gray-300">Total Entities</div>
+                  </div>
+                  <div className="bg-gray-700 p-4 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-400">
+                      {entityResults.reduce((sum, result) => sum + (result.relationship_count || 0), 0)}
+                    </div>
+                    <div className="text-sm text-gray-300">Total Relationships</div>
+                  </div>
+                  <div className="bg-gray-700 p-4 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-400">
+                      {entityResults.length}
+                    </div>
+                    <div className="text-sm text-gray-300">Documents Processed</div>
+                  </div>
+                </div>
+
+                {/* Next Step Button */}
+                <div className="flex justify-end">
+                  <button 
+                    onClick={() => setCurrentTab('knowledge-graph')}
+                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium flex items-center space-x-2"
+                  >
+                    <span>Continue to Knowledge Graph</span>
+                    <HiChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Graph Tab */}
+      {currentTab === 'knowledge-graph' && (
+        <div className="p-8">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 flex items-center space-x-2">
+              <HiCollection className="w-6 h-6 text-purple-400" />
+              <span>Knowledge Graph</span>
+            </h2>
+            <p className="text-gray-300">Knowledge graph interface coming soon...</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
