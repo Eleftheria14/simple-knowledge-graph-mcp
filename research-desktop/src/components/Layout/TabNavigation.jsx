@@ -13,7 +13,7 @@ const TabNavigation = ({
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setCurrentTab('upload')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-2 px-1 border-b-2 font-medium text-lg ${
               currentTab === 'upload'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
@@ -24,7 +24,7 @@ const TabNavigation = ({
           <button
             onClick={() => setCurrentTab('extraction')}
             disabled={results.length === 0}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-2 px-1 border-b-2 font-medium text-lg ${
               currentTab === 'extraction'
                 ? 'border-green-500 text-green-400'
                 : results.length === 0
@@ -37,7 +37,7 @@ const TabNavigation = ({
           <button
             onClick={() => setCurrentTab('knowledge-graph')}
             disabled={entityResults.length === 0}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-2 px-1 border-b-2 font-medium text-lg ${
               currentTab === 'knowledge-graph'
                 ? 'border-purple-500 text-purple-400'
                 : entityResults.length === 0
@@ -52,7 +52,7 @@ const TabNavigation = ({
           <div className="flex-1"></div>
           <button
             onClick={() => setCurrentTab('settings')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-1 ${
+            className={`py-2 px-1 border-b-2 font-medium text-lg flex items-center space-x-1 ${
               currentTab === 'settings'
                 ? 'border-orange-500 text-orange-400'
                 : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
