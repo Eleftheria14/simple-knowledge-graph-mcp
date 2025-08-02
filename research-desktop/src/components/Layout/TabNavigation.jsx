@@ -5,7 +5,8 @@ const TabNavigation = ({
   currentTab, 
   setCurrentTab, 
   results, 
-  entityResults 
+  entityResults,
+  extractingEntities
 }) => {
   return (
     <div className="max-w-6xl mx-auto mb-8">
@@ -35,6 +36,22 @@ const TabNavigation = ({
             2. Extract Entities
           </button>
           <button
+            onClick={() => setCurrentTab('processing')}
+            disabled={!extractingEntities && entityResults.length === 0}
+            className={`py-2 px-1 border-b-2 font-medium text-lg ${
+              currentTab === 'processing'
+                ? 'border-yellow-500 text-yellow-400'
+                : (!extractingEntities && entityResults.length === 0)
+                ? 'border-transparent text-gray-600 cursor-not-allowed'
+                : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+            }`}
+          >
+            3. Processing
+            {extractingEntities && (
+              <span className="ml-2 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+            )}
+          </button>
+          <button
             onClick={() => setCurrentTab('knowledge-graph')}
             disabled={entityResults.length === 0}
             className={`py-2 px-1 border-b-2 font-medium text-lg ${
@@ -45,7 +62,7 @@ const TabNavigation = ({
                 : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
             }`}
           >
-            3. Knowledge Graph
+            4. Knowledge Graph
           </button>
           
           {/* Settings Tab - Always available */}

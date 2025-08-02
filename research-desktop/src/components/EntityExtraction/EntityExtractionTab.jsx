@@ -26,9 +26,7 @@ const EntityExtractionTab = ({
           <span>Entity Extraction</span>
         </h2>
 
-        {!extractingEntities && entityResults.length === 0 && (
-          <>
-            {/* Extraction Configuration */}
+        {/* Extraction Configuration */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Prompt Template</label>
               <select 
@@ -246,103 +244,6 @@ const EntityExtractionTab = ({
                 </div>
               ))}
             </div>
-          </>
-        )}
-
-        {/* Extraction Progress */}
-        {extractingEntities && (
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <HiClock className="w-6 h-6 text-blue-400 animate-spin" />
-              <h3 className="text-lg font-medium">Extracting Entities...</h3>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>Processing documents with Groq LLM</span>
-                <span className="text-blue-400">Please wait...</span>
-              </div>
-              
-              <div className="bg-gray-700 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full w-1/3 animate-pulse"></div>
-              </div>
-            </div>
-
-            {currentExtractionDoc && (
-              <div className="mt-4 p-3 bg-gray-900 rounded">
-                <p className="text-sm text-gray-300">
-                  <strong>Current:</strong> {currentExtractionDoc}
-                </p>
-              </div>
-            )}
-
-            {/* LLM Response Console */}
-            <div className="mt-6">
-              <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
-                <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-                Live LLM Analysis (Groq Llama 3.1 8B)
-              </h4>
-              <div className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-64 overflow-y-auto border border-gray-600">
-                {extractionLogs.length === 0 ? (
-                  <div className="text-green-400">
-                    <div className="flex items-center">
-                      <span className="text-blue-400">[SYSTEM]</span>
-                      <span className="ml-2">Initializing Groq LLM connection...</span>
-                    </div>
-                    <div className="flex items-center mt-1">
-                      <span className="text-purple-400">[CONFIG]</span>
-                      <span className="ml-2">Model: llama-3.1-8b-instant | Temperature: 0.1 | Strategy: {chunkingStrategy}</span>
-                    </div>
-                    <div className="flex items-center mt-1">
-                      <span className="text-yellow-400">[PIPELINE]</span>
-                      <span className="ml-2">Preparing extraction pipeline...</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {extractionLogs.map((log, index) => (
-                      <div key={index} className="flex items-start">
-                        <span className={`text-${log.type === 'info' ? 'blue' : log.type === 'success' ? 'green' : log.type === 'warning' ? 'yellow' : 'red'}-400 flex-shrink-0`}>
-                          [{log.type.toUpperCase()}]
-                        </span>
-                        <span className="ml-2 text-gray-300 break-words">{log.message}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center mt-2 text-green-400">
-                      <span className="animate-pulse">▊</span>
-                      <span className="ml-1">Processing...</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Entity Results */}
-        {entityResults.length > 0 && !extractingEntities && (
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h3 className="text-lg font-medium mb-4 flex items-center space-x-2">
-              <HiCheck className="w-5 h-5 text-green-400" />
-              <span>Extraction Complete</span>
-            </h3>
-            
-            <div className="space-y-4">
-              {entityResults.map((result, index) => (
-                <div key={index} className="border-l-4 border-green-500 pl-4">
-                  <h4 className="font-medium text-green-400">{result.document_title}</h4>
-                  <div className="text-sm text-gray-300 mt-1">
-                    <span className="mr-4">Entities: {result.entities_found}</span>
-                    <span>Relationships: {result.relationships_found}</span>
-                  </div>
-                  {result.message && (
-                    <p className="text-xs text-gray-400 mt-2">{result.message}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -158,6 +158,15 @@ async def get_document_details(document_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/documents/{document_id}/extractions")
+async def get_document_extractions(document_id: str):
+    """Get all entity extractions for a specific document."""
+    try:
+        result = session_manager.get_document_extractions(document_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/api/documents/{document_id}")
 async def delete_document(document_id: str):
     """Delete a specific document."""
@@ -240,7 +249,7 @@ async def extract_entities_stream(document_id: str, extraction_mode: str = "acad
             yield f"data: {json_lib.dumps({'type': 'document_info', 'title': doc_title, 'length': len(full_text)})}\n\n"
             
             # Import and use the actual entity extraction system
-            from tools.storage.enhanced_entity_storage import extract_and_store_entities
+            from tools.storage.enhanced_entity_storage import _extract_and_store_entities_impl, _extract_and_store_entities_streaming
             from processor.chunking_strategies import get_chunking_strategy
             
             # Create document info for entity extraction
@@ -260,17 +269,35 @@ async def extract_entities_stream(document_id: str, extraction_mode: str = "acad
             
             total_entities = 0
             total_relationships = 0
+            accumulated_llm_tokens = ""  # Accumulate LLM tokens across all chunks
             
             # Process each chunk with entity extraction
             for i, chunk in enumerate(chunks):
                 try:
                     yield f"data: {json_lib.dumps({'type': 'chunk_start', 'chunk_number': i+1, 'total_chunks': len(chunks), 'chunk_length': len(chunk)})}\n\n"
                     
-                    # Run entity extraction on this chunk using proper tool invocation
-                    result = extract_and_store_entities.invoke({
-                        "content": chunk, 
-                        "document_info": document_info
-                    })
+                    # Use the streaming version of entity extraction
+                    result = None
+                    chunk_tokens = ""  # Accumulate tokens for this chunk
+                    
+                    for stream_data in _extract_and_store_entities_streaming(chunk, document_info):
+                        # Accumulate LLM tokens
+                        if stream_data.get("type") == "llm_token":
+                            token = stream_data.get("token", "")
+                            chunk_tokens += token
+                            accumulated_llm_tokens += token
+                        
+                        # Yield streaming events BUT skip extraction_complete (we'll send our own)
+                        if stream_data.get("type") != "extraction_complete":
+                            yield f"data: {json_lib.dumps(stream_data)}\n\n"
+                        
+                        # Check if this is the final result
+                        if stream_data.get("type") == "extraction_complete":
+                            result = stream_data.get("result", {})
+                    
+                    # If no extraction_complete event, create a fallback result
+                    if result is None:
+                        result = {"success": False, "entities_found": 0, "relationships_found": 0}
                     
                     if result.get("success"):
                         entities_count = result.get("entities_found", 0)
@@ -278,7 +305,7 @@ async def extract_entities_stream(document_id: str, extraction_mode: str = "acad
                         total_entities += entities_count
                         total_relationships += relationships_count
                         
-                        yield f"data: {json_lib.dumps({'type': 'chunk_complete', 'chunk_number': i+1, 'entities_found': entities_count, 'relationships_found': relationships_count, 'message': result.get('message', '')})}\n\n"
+                        yield f"data: {json_lib.dumps({'type': 'chunk_complete', 'chunk_number': i+1, 'entities_found': entities_count, 'relationships_found': relationships_count, 'message': result.get('message', ''), 'chunk_tokens': len(chunk_tokens)})}\n\n"
                     else:
                         yield f"data: {json_lib.dumps({'type': 'chunk_error', 'chunk_number': i+1, 'error': result.get('error', 'Unknown error')})}\n\n"
                         
@@ -286,13 +313,22 @@ async def extract_entities_stream(document_id: str, extraction_mode: str = "acad
                     yield f"data: {json_lib.dumps({'type': 'chunk_error', 'chunk_number': i+1, 'error': str(chunk_error)})}\n\n"
                     continue
             
-            # Send final results
-            yield f"data: {json_lib.dumps({'type': 'extraction_complete', 'total_entities': total_entities, 'total_relationships': total_relationships, 'document_id': document_id, 'document_title': doc_title})}\n\n"
+            # Send final results with accumulated LLM tokens
+            yield f"data: {json_lib.dumps({'type': 'extraction_complete', 'total_entities': total_entities, 'total_relationships': total_relationships, 'document_id': document_id, 'document_title': doc_title, 'llm_tokens': accumulated_llm_tokens, 'token_count': len(accumulated_llm_tokens)})}\n\n"
             
         except Exception as e:
             yield f"data: {json_lib.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
-    return StreamingResponse(generate_extraction_stream(), media_type="text/plain")
+    return StreamingResponse(
+        generate_extraction_stream(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )
 
 @app.post("/api/documents/{document_id}/extract-entities")
 async def extract_entities(document_id: str, request: EntityExtractionRequest):
@@ -309,7 +345,7 @@ async def extract_entities(document_id: str, request: EntityExtractionRequest):
             raise HTTPException(status_code=400, detail="No document content found")
         
         # Import and use the actual entity extraction system
-        from tools.storage.enhanced_entity_storage import extract_and_store_entities
+        from tools.storage.enhanced_entity_storage import _extract_and_store_entities_impl
         from processor.chunking_strategies import get_chunking_strategy
         
         # Get document metadata for context
@@ -334,11 +370,8 @@ async def extract_entities(document_id: str, request: EntityExtractionRequest):
         # Process each chunk with entity extraction
         for i, chunk in enumerate(chunks):
             try:
-                # Run entity extraction on this chunk using proper tool invocation
-                result = extract_and_store_entities.invoke({
-                    "content": chunk, 
-                    "document_info": document_info
-                })
+                # Run entity extraction on this chunk directly (not using tool invocation)
+                result = _extract_and_store_entities_impl(chunk, document_info)
                 
                 if result.get("success"):
                     entities_count = result.get("entities_found", 0)
@@ -370,6 +403,29 @@ async def extract_entities(document_id: str, request: EntityExtractionRequest):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/{document_id}/entities")
+async def get_document_entities(document_id: str):
+    """Get extracted entities and relationships for a document."""
+    try:
+        from storage.neo4j.query import Neo4jQuery
+        
+        neo4j_query = Neo4jQuery()
+        result = neo4j_query.get_entities_by_document(document_id)
+        neo4j_query.close()
+        
+        return {
+            "success": True,
+            "document_id": document_id,
+            "entities": result["entities"],
+            "relationships": result["relationships"],
+            "total_entities": len(result["entities"]),
+            "total_relationships": len(result["relationships"])
+        }
+        
+    except Exception as e:
+        print(f"❌ Error fetching entities for document {document_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Health check

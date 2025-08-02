@@ -16,5 +16,8 @@ VECTOR_INDEX_NAME = os.getenv("VECTOR_INDEX_NAME", "text_vector_index")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
 
+# LLM Configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 # Citation Styles
 CITATION_STYLES = ["APA", "IEEE", "Nature", "MLA"]

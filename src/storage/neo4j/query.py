@@ -43,6 +43,41 @@ class Neo4jQuery:
             
             return [dict(record) for record in result]
     
+    def get_entities_by_document(self, document_id: str) -> Dict[str, Any]:
+        """Get all entities and relationships for a specific document."""
+        with self.driver.session() as session:
+            # Get entities for this document via EntityExtraction nodes
+            entities_result = session.run("""
+                MATCH (d:Document {id: $document_id})
+                MATCH (ex:EntityExtraction)-[:EXTRACTED_FROM]->(d)
+                MATCH (e:ExtractedEntity)-[:EXTRACTED_IN]->(ex)
+                RETURN e.id as id, e.name as name, e.type as type, 
+                       e.properties as properties, e.confidence as confidence
+                ORDER BY e.confidence DESC
+            """, document_id=document_id)
+            
+            entities = [dict(record) for record in entities_result]
+            
+            # Get relationships between entities in this document
+            relationships_result = session.run("""
+                MATCH (d:Document {id: $document_id})
+                MATCH (ex:EntityExtraction)-[:EXTRACTED_FROM]->(d)
+                MATCH (r:ExtractedRelationship)-[:EXTRACTED_IN]->(ex)
+                RETURN r.source as source_id, r.source as source_name,
+                       r.target as target_id, r.target as target_name,
+                       r.type as relationship_type, r.confidence as confidence,
+                       r.context as context
+                ORDER BY r.confidence DESC
+            """, document_id=document_id)
+            
+            relationships = [dict(record) for record in relationships_result]
+            
+            return {
+                "entities": entities,
+                "relationships": relationships,
+                "document_id": document_id
+            }
+    
     def close(self):
         """Close Neo4j connection."""
         if self.driver:

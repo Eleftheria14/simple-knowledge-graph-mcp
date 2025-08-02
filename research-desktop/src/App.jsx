@@ -5,6 +5,7 @@ import Sidebar from './components/Layout/Sidebar';
 import TabNavigation from './components/Layout/TabNavigation';
 import UploadTab from './components/Upload/UploadTab';
 import EntityExtractionTab from './components/EntityExtraction/EntityExtractionTab';
+import ProcessingTab from './components/Processing/ProcessingTab';
 import KnowledgeGraphTab from './components/KnowledgeGraph/KnowledgeGraphTab';
 import PromptTemplateEditor from './components/Settings/PromptTemplateEditor';
 
@@ -47,10 +48,13 @@ function App() {
   const [extractingEntities, setExtractingEntities] = useState(false);
   const [entityResults, setEntityResults] = useState([]);
   const [extractionConfig, setExtractionConfig] = useState('academic');
+  const [llmTokens, setLlmTokens] = useState(''); // Real-time token accumulation
+  const [llmStreaming, setLlmStreaming] = useState(false); // Track if LLM is actively streaming
   const [selectedDocuments, setSelectedDocuments] = useState(new Set());
   const [currentExtractionDoc, setCurrentExtractionDoc] = useState('');
   const [extractionLogs, setExtractionLogs] = useState([]);
   const [chunkingStrategy, setChunkingStrategy] = useState('hierarchical');
+  const [currentDocumentTokens, setCurrentDocumentTokens] = useState(''); // Store tokens for current document
 
   // === Prompt Template State ===
   const [promptTemplates, setPromptTemplates] = useState({
@@ -578,6 +582,9 @@ Document content:
     console.log('📋 extractionConfig:', extractionConfig);
     console.log('🔧 promptTemplates:', promptTemplates);
     
+    // Switch to processing tab when extraction starts
+    setCurrentTab('processing');
+    
     setExtractingEntities(true);
     setEntityResults([]);
     setExtractionLogs([]);
@@ -604,10 +611,71 @@ Document content:
             eventSource.onmessage = (event) => {
               try {
                 const data = JSON.parse(event.data);
-                console.log('📡 SSE received:', data);
+                console.log('📡 SSE received:', data.type, data);
                 
-                // Add log entry based on message type
+                // Handle streaming tokens and other events
                 switch (data.type) {
+                  case 'llm_start':
+                    console.log('🟢 Setting llmStreaming to true');
+                    setLlmStreaming(true);
+                    setLlmTokens('');
+                    setCurrentDocumentTokens(''); // Reset for new document
+                    // Clear tokens using global function
+                    if (window.clearStreamTokens) {
+                      window.clearStreamTokens();
+                    }
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'info',
+                      message: '🤖 Starting LLM generation...',
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'llm_token':
+                    // Use direct DOM update via global function
+                    if (window.addStreamToken) {
+                      window.addStreamToken(data.token);
+                    }
+                    
+                    // Accumulate tokens for this document (silently)
+                    setLlmTokens(prev => prev + data.token);
+                    setCurrentDocumentTokens(prev => prev + data.token);
+                    break;
+                    
+                  case 'llm_complete':
+                    setLlmStreaming(false);
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'success',
+                      message: `✅ ${data.message}`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'llm_error':
+                    setLlmStreaming(false);
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'error',
+                      message: `❌ LLM Error: ${data.message}`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'parsing_start':
+                  case 'parsing_progress':
+                  case 'json_found':
+                  case 'json_parsed':
+                  case 'processing_start':
+                  case 'raw_data':
+                  case 'filtering_complete':
+                  case 'storage_start':
+                  case 'storage_complete':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'info',
+                      message: `🔧 ${data.message}`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
                   case 'status':
                     setExtractionLogs(prev => [...prev, {
                       type: 'info',
@@ -657,23 +725,70 @@ Document content:
                     break;
                     
                   case 'extraction_complete':
+                    // Debug: Log the raw data received
+                    console.log('🔴 RAW extraction_complete data:', data);
+                    
+                    // Safe access to result data
+                    const result = data.result || {};
+                    const totalEntities = result.total_entities || data.total_entities || 0;
+                    const totalRelationships = result.total_relationships || data.total_relationships || 0;
+                    const documentId = result.document_id || data.document_id || 'unknown';
+                    
+                    // Get document title from the original document data
+                    const originalDoc = results.find(r => r.id === documentId);
+                    const documentTitle = result.document_title || data.document_title || originalDoc?.title || originalDoc?.fileName || 'Unknown Document';
+                    
+                    // Use LLM tokens from backend response (preferred) or fallback to accumulated tokens
+                    const backendTokens = data.llm_tokens || result.llm_tokens || '';
+                    const finalTokens = backendTokens || currentDocumentTokens || '';
+                    const tokenCount = data.token_count || result.token_count || finalTokens.length;
+                    
+                    console.log('🔴 TOKEN DEBUG:', {
+                      data_has_llm_tokens: 'llm_tokens' in data,
+                      data_has_token_count: 'token_count' in data,
+                      result_has_llm_tokens: 'llm_tokens' in result,
+                      result_has_token_count: 'token_count' in result,
+                      backendTokens_length: backendTokens.length,
+                      currentDocumentTokens_length: (currentDocumentTokens || '').length,
+                      finalTokens_length: finalTokens.length
+                    });
+                    
                     setExtractionLogs(prev => [...prev, {
                       type: 'success',
-                      message: `🎉 Complete! Total: ${data.total_entities} entities, ${data.total_relationships} relationships`,
+                      message: `🎉 Complete! Total: ${totalEntities} entities, ${totalRelationships} relationships (${tokenCount} token chars)`,
                       timestamp: new Date().toLocaleTimeString()
                     }]);
                     
-                    // Add to results
-                    setEntityResults(prev => [...prev, {
+                    // Add to results with LLM tokens
+                    const resultData = {
                       success: true,
-                      document_id: data.document_id,
-                      document_title: data.document_title,
-                      entities_found: data.total_entities,
-                      relationships_found: data.total_relationships,
+                      document_id: documentId,
+                      document_title: documentTitle,
+                      entities_found: totalEntities,
+                      relationships_found: totalRelationships,
                       extraction_mode: extractionConfig,
                       chunking_strategy: chunkingStrategy,
-                      message: `Extracted ${data.total_entities} entities and ${data.total_relationships} relationships`
-                    }]);
+                      message: `Extracted ${totalEntities} entities and ${totalRelationships} relationships`,
+                      llm_tokens: finalTokens, // Use tokens from backend or fallback
+                      token_count: tokenCount
+                    };
+                    
+                    console.log('🔵 Storing extraction result with tokens:', {
+                      document_id: documentId,
+                      token_count: resultData.token_count,
+                      has_tokens: !!resultData.llm_tokens,
+                      backend_tokens_length: backendTokens.length,
+                      accumulated_tokens_length: (currentDocumentTokens || '').length,
+                      final_tokens_length: finalTokens.length,
+                      token_preview: finalTokens.substring(0, 100) + '...'
+                    });
+                    
+                    setEntityResults(prev => [...prev, resultData]);
+                    
+                    // Clear streaming state when extraction completes
+                    setLlmStreaming(false);
+                    setLlmTokens('');
+                    setCurrentDocumentTokens(''); // Clear for next document
                     
                     eventSource.close();
                     resolve();
@@ -685,6 +800,10 @@ Document content:
                       message: `❌ Error: ${data.message}`,
                       timestamp: new Date().toLocaleTimeString()
                     }]);
+                    // Clear streaming state on error
+                    setLlmStreaming(false);
+                    setLlmTokens('');
+                    
                     eventSource.close();
                     reject(new Error(data.message));
                     break;
@@ -728,6 +847,8 @@ Document content:
     } finally {
       setExtractingEntities(false);
       setCurrentExtractionDoc('');
+      setLlmStreaming(false);
+      setLlmTokens('');
     }
   };
 
@@ -825,6 +946,7 @@ Document content:
             setCurrentTab={setCurrentTab}
             results={results}
             entityResults={entityResults}
+            extractingEntities={extractingEntities}
           />
 
           {/* Tab Content */}
@@ -871,6 +993,18 @@ Document content:
               promptTemplates={promptTemplates}
               chunkingStrategy={chunkingStrategy}
               setChunkingStrategy={setChunkingStrategy}
+            />
+          )}
+
+          {currentTab === 'processing' && (
+            <ProcessingTab
+              extractingEntities={extractingEntities}
+              entityResults={entityResults}
+              currentExtractionDoc={currentExtractionDoc}
+              extractionLogs={extractionLogs}
+              chunkingStrategy={chunkingStrategy}
+              llmTokens={llmTokens}
+              llmStreaming={llmStreaming}
             />
           )}
 

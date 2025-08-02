@@ -432,6 +432,48 @@ class SessionManager:
             print(f"❌ Error loading document details: {e}")
             return {"success": False, "error": str(e)}
 
+    def get_document_extractions(self, document_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all entity extractions for a specific document.
+        
+        Args:
+            document_id: Document ID
+            
+        Returns:
+            List of extraction sessions with their entities and relationships
+        """
+        try:
+            query = """
+            MATCH (doc:Document {id: $document_id})<-[:EXTRACTED_FROM]-(extraction:EntityExtraction)
+            OPTIONAL MATCH (extraction)<-[:EXTRACTED_IN]-(entity:ExtractedEntity)
+            OPTIONAL MATCH (extraction)<-[:EXTRACTED_IN]-(rel:ExtractedRelationship)
+            RETURN extraction, 
+                   collect(DISTINCT entity) as entities,
+                   collect(DISTINCT rel) as relationships
+            ORDER BY extraction.extraction_timestamp DESC
+            """
+            
+            results, _, _ = self.neo4j_storage.driver.execute_query(query, {"document_id": document_id})
+            
+            extractions = []
+            for record in results:
+                extraction_node = record['extraction']
+                entities = record['entities']
+                relationships = record['relationships']
+                
+                # Convert to dictionaries
+                extraction_data = dict(extraction_node)
+                extraction_data['entities'] = [dict(entity) for entity in entities if entity is not None]
+                extraction_data['relationships'] = [dict(rel) for rel in relationships if rel is not None]
+                
+                extractions.append(extraction_data)
+            
+            return {"success": True, "extractions": extractions}
+            
+        except Exception as e:
+            print(f"Error getting document extractions: {e}")
+            return {"success": False, "error": str(e), "extractions": []}
+
     def delete_document(self, document_id: str) -> Dict[str, Any]:
         """
         Delete a specific document and all its related data.
