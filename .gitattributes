@@ -1,0 +1,6 @@
+# GROBID Integration Protection
+src/processor/tools/grobid_tool.py -diff
+src/processor/tools/README_GROBID.md -diff
+
+# Mark GROBID files as protected
+src/processor/tools/grobid_tool.py text eol=lf

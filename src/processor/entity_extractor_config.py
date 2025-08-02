@@ -165,15 +165,15 @@ class EntityExtractorConfig:
         relationship_types_str = ", ".join([rt.value for rt in self.enabled_relationship_types])
         
         self.prompt_template = PromptTemplate(
-            system_prompt=f"""You are an expert entity extraction agent specialized in analyzing document content.
+            system_prompt="""You are an expert entity extraction agent specialized in analyzing document content.
 Your task is to identify and extract structured knowledge from text with high accuracy.
 
-Extraction Mode: {self.extraction_mode.value}
-Domain Context: {self.domain_context or 'General document analysis'}
+Extraction Mode: {extraction_mode}
+Domain Context: {domain_context}
 
 Focus on precision and relevance. Only extract entities you are confident about.""",
             
-            instruction_template=f"""Analyze the following document content and extract entities and relationships.
+            instruction_template="""Analyze the following document content and extract entities and relationships.
 
 TARGET ENTITY TYPES: {entity_types_str}
 TARGET RELATIONSHIP TYPES: {relationship_types_str}
@@ -185,43 +185,19 @@ RELATIONSHIP GUIDELINES:
 {{relationship_guidelines}}
 
 QUALITY REQUIREMENTS:
-- Only extract entities with confidence >= {self.global_confidence_threshold}
+- Only extract entities with confidence >= {confidence_threshold}
 - Provide clear, standardized entity names
 - Include relevant properties for context
 - Ensure relationships are meaningful and accurate
 
 {{context_instructions}}
 
-IMPORTANT: Return ONLY valid JSON format with no additional text, explanations, or markdown formatting. Do not use backticks or code blocks. Start directly with {{ and end with }}.
-{{
-  "entities": [
-    {{
-      "id": "unique_entity_id",
-      "name": "Standardized Entity Name", 
-      "type": "entity_type",
-      "properties": {{"key": "value"}},
-      "confidence": 0.0-1.0
-    }}
-  ],
-  "relationships": [
-    {{
-      "source": "source_entity_id",
-      "target": "target_entity_id", 
-      "type": "RELATIONSHIP_TYPE",
-      "context": "Brief explanation of relationship",
-      "confidence": 0.0-1.0
-    }}
-  ],
-  "metadata": {{
-    "total_entities": 0,
-    "total_relationships": 0,
-    "extraction_mode": "{self.extraction_mode.value}",
-    "confidence_threshold": {self.global_confidence_threshold}
-  }}
-}}
+IMPORTANT: Return ONLY valid JSON format with no additional text, explanations, or markdown formatting. Do not use backticks or code blocks.
+
+Return a JSON object with "entities", "relationships", and "metadata" arrays following the schema described above.
 
 Document content:
-{{content}}""",
+{content}""",
             
             entity_guidelines={
                 EntityType.PERSON.value: "Extract authors, researchers, historical figures. Include affiliation when available.",
@@ -277,13 +253,25 @@ Document content:
             all_instructions = self.prompt_template.context_instructions + self.custom_instructions
             context_instructions = "ADDITIONAL INSTRUCTIONS:\n" + "\n".join([f"- {inst}" for inst in all_instructions])
         
-        # Build complete prompt
-        prompt = self.prompt_template.instruction_template.format(
+        # Build complete prompt parts
+        system_prompt = self.prompt_template.system_prompt.format(
+            extraction_mode=self.extraction_mode.value,
+            domain_context=self.domain_context or 'General document analysis'
+        )
+        
+        instruction_prompt = self.prompt_template.instruction_template.format(
             entity_guidelines=entity_guidelines,
             relationship_guidelines=relationship_guidelines,
             context_instructions=context_instructions,
-            content=content[:self.max_content_length]
+            content=content[:self.max_content_length],
+            extraction_mode=self.extraction_mode.value,
+            confidence_threshold=self.global_confidence_threshold,
+            entity_types_str=", ".join([et.value for et in self.enabled_entity_types]),
+            relationship_types_str=", ".join([rt.value for rt in self.enabled_relationship_types])
         )
+        
+        # Combine system and instruction prompts
+        prompt = f"{system_prompt}\n\n{instruction_prompt}"
         
         return prompt
     

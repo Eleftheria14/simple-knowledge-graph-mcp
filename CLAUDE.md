@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ PROTECTED FILES - DO NOT MODIFY
+
+The following files are **READ-ONLY** and must not be modified:
+
+- `src/processor/tools/grobid_tool.py` - GROBID HTTP client (chmod 444)
+- Uses official GROBID Docker image: `lfoppiano/grobid:0.8.0`
+- Any changes to GROBID functionality should create separate wrapper modules
+- See `src/processor/tools/README_GROBID.md` for details
+
 ## Essential Development Commands
 
 ### Environment Setup

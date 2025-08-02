@@ -1,0 +1,19 @@
+PROTECTED FILES - DO NOT MODIFY
+
+The following files are READ-ONLY and should not be modified:
+
+1. grobid_tool.py
+   - File permissions: 444 (read-only)
+   - Purpose: HTTP client for official GROBID service
+   - Protection reason: Maintains compatibility with original GROBID API
+   - If changes needed: Create separate wrapper/parser modules
+
+To verify protection:
+$ ls -la grobid_tool.py
+-r--r--r-- ... grobid_tool.py
+
+To remove protection (if absolutely necessary):
+$ chmod 644 grobid_tool.py
+
+To restore protection:
+$ chmod 444 grobid_tool.py

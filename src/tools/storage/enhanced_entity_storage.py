@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import json
 import uuid
 import re
+import sys
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from fastmcp import FastMCP
@@ -90,6 +91,25 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
         # Get configuration from global config (set by process)
         config = get_global_entity_config()
         
+        # Check if custom template configuration is provided
+        if isinstance(document_info, dict) and "template_config" in document_info:
+            template_config = document_info["template_config"]
+            print(f"🎨 Using custom template: {template_config.get('template_name', 'Unknown')}", file=sys.stderr)
+            
+            # Override config with custom template settings
+            if template_config.get("system_prompt"):
+                config.prompt_template.system_prompt = template_config["system_prompt"]
+            if template_config.get("instruction_template"):
+                config.prompt_template.instruction_template = template_config["instruction_template"]
+            if template_config.get("confidence_threshold"):
+                config.global_confidence_threshold = template_config["confidence_threshold"]
+            if template_config.get("temperature"):
+                config.temperature = template_config["temperature"]
+            if template_config.get("max_tokens"):
+                config.max_tokens = template_config["max_tokens"]
+            
+            print(f"✅ Applied custom template overrides: conf={config.global_confidence_threshold}, temp={config.temperature}", file=sys.stderr)
+        
         # Validate inputs
         if not content or len(content.strip()) < 50:
             return {
@@ -99,9 +119,9 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
                 "relationships_found": 0
             }
         
-        print(f"🧠 Analyzing content with {config.extraction_mode.value} mode: {len(content)} characters")
-        print(f"🔧 Entity types: {[et.value for et in config.get_enabled_entity_types()]}")
-        print(f"🎯 Confidence threshold: {config.global_confidence_threshold}")
+        print(f"🧠 Analyzing content with {config.extraction_mode.value} mode: {len(content)} characters", file=sys.stderr)
+        print(f"🔧 Entity types: {[et.value for et in config.get_enabled_entity_types()]}", file=sys.stderr)
+        print(f"🎯 Confidence threshold: {config.global_confidence_threshold}", file=sys.stderr)
         
         # Initialize Groq LLM with configuration
         groq_api_key = os.getenv('GROQ_API_KEY')
@@ -120,15 +140,15 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
             groq_api_key=groq_api_key
         )
         
-        # Build extraction prompt using configuration
+        # Build extraction prompt using configuration  
         extraction_prompt = config.build_extraction_prompt(content)
         
-        print(f"🤖 Using model: {config.model_name} (temp: {config.temperature})")
-        print(f"📤 Sending extraction request to LLM...")
+        print(f"🤖 Using model: {config.model_name} (temp: {config.temperature})", file=sys.stderr)
+        print(f"📤 Sending extraction request to LLM...", file=sys.stderr)
         
         # Extract entities using configured LLM
         response = llm.invoke(extraction_prompt)
-        print(f"📥 Received LLM response - Length: {len(str(response))} chars")
+        print(f"📥 Received LLM response - Length: {len(str(response))} chars", file=sys.stderr)
         
         # Parse LLM response with improved retry logic and better JSON extraction
         extraction_data = None
@@ -136,7 +156,7 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
             try:
                 # Get response content
                 content_text = response.content if hasattr(response, 'content') else str(response)
-                print(f"🔍 LLM Response content (attempt {attempt + 1}): {content_text[:500]}...")
+                print(f"🔍 LLM Response content (attempt {attempt + 1}): {content_text[:500]}...", file=sys.stderr)
                 
                 # Try multiple JSON extraction strategies
                 json_str = None
@@ -172,23 +192,23 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
                         json_str = json_match.group(1)
                 
                 if json_str:
-                    print(f"📝 Extracted JSON string: {json_str[:200]}...")
+                    print(f"📝 Extracted JSON string: {json_str[:200]}...", file=sys.stderr)
                     # Clean up common JSON issues
                     json_str = json_str.strip()
                     # Remove any trailing commas before closing braces/brackets
                     json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
                     
                     extraction_data = json.loads(json_str)
-                    print(f"✅ Successfully parsed JSON with {len(extraction_data.get('entities', []))} entities")
+                    print(f"✅ Successfully parsed JSON with {len(extraction_data.get('entities', []))} entities", file=sys.stderr)
                     break
                 else:
                     raise json.JSONDecodeError("No JSON found in response", content_text, 0)
             
             except json.JSONDecodeError as e:
-                print(f"⚠️ JSON parsing failed (attempt {attempt + 1}): {e}")
+                print(f"⚠️ JSON parsing failed (attempt {attempt + 1}): {e}", file=sys.stderr)
                 
                 if attempt < config.max_retry_attempts and config.retry_on_json_error:
-                    print(f"🔄 Retrying extraction with simplified prompt...")
+                    print(f"🔄 Retrying extraction with simplified prompt...", file=sys.stderr)
                     # Retry with simpler, more explicit prompt
                     simple_prompt = f"""Extract entities from this text. Return ONLY the JSON object, no other text:
 
@@ -234,7 +254,7 @@ JSON Response:"""
         entities_raw = extraction_data.get("entities", [])
         relationships_raw = extraction_data.get("relationships", [])
         
-        print(f"📊 Raw extraction: {len(entities_raw)} entities, {len(relationships_raw)} relationships")
+        print(f"📊 Raw extraction: {len(entities_raw)} entities, {len(relationships_raw)} relationships", file=sys.stderr)
         
         # Filter entities by configuration
         filtered_entities = []
@@ -249,8 +269,7 @@ JSON Response:"""
                 continue
                 
             # Check confidence threshold
-            type_config = config.get_entity_config(config.enabled_entity_types.__class__(entity_type) if entity_type in [et.value for et in config.enabled_entity_types] else None)
-            min_confidence = type_config.confidence_threshold if type_config else config.global_confidence_threshold
+            min_confidence = config.global_confidence_threshold
             
             if confidence < min_confidence:
                 continue
@@ -275,7 +294,7 @@ JSON Response:"""
                 
             filtered_relationships.append(rel_data)
         
-        print(f"🔍 After filtering: {len(filtered_entities)} entities, {len(filtered_relationships)} relationships")
+        print(f"🔍 After filtering: {len(filtered_entities)} entities, {len(filtered_relationships)} relationships", file=sys.stderr)
         
         # Convert to Pydantic models for validation
         entities = []
@@ -299,7 +318,7 @@ JSON Response:"""
                 )
                 entities.append(entity)
             except Exception as e:
-                print(f"⚠️ Skipping invalid entity: {e}")
+                print(f"⚠️ Skipping invalid entity: {e}", file=sys.stderr)
         
         relationships = []
         for rel_data in filtered_relationships:
@@ -313,7 +332,7 @@ JSON Response:"""
                 )
                 relationships.append(relationship)
             except Exception as e:
-                print(f"⚠️ Skipping invalid relationship: {e}")
+                print(f"⚠️ Skipping invalid relationship: {e}", file=sys.stderr)
         
         # Prepare document info
         doc_info = DocumentInfo(
@@ -325,9 +344,9 @@ JSON Response:"""
         
         # For now, return extraction results without storage due to Neo4j properties issue
         # TODO: Fix Neo4j properties storage in existing storage layer
-        print(f"💾 Would store {len(entities)} entities and {len(relationships)} relationships")
-        print(f"📋 Sample entities: {[e.name for e in entities[:3]]}")
-        print(f"🔗 Sample relationships: {[f'{r.source}->{r.target}' for r in relationships[:3]]}")
+        print(f"💾 Would store {len(entities)} entities and {len(relationships)} relationships", file=sys.stderr)
+        print(f"📋 Sample entities: {[e.name for e in entities[:3]]}", file=sys.stderr)
+        print(f"🔗 Sample relationships: {[f'{r.source}->{r.target}' for r in relationships[:3]]}", file=sys.stderr)
         
         storage_result = {
             "entities_created": len(entities), 
@@ -363,7 +382,7 @@ JSON Response:"""
         return result
         
     except Exception as e:
-        print(f"❌ Error in extract_and_store_entities: {e}")
+        print(f"❌ Error in extract_and_store_entities: {e}", file=sys.stderr)
         return {
             "success": False,
             "error": str(e),
