@@ -1,5 +1,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
+const { execSync } = require('child_process');
+const http = require('http');
 
 // Keep a global reference of the window object
 let mainWindow;
@@ -470,28 +472,59 @@ ipcMain.handle('extract-entities', async (event, documentId, extractionConfig = 
       extractionMode = extractionConfig;
     }
 
-    const response = await fetch(`http://localhost:8001/api/documents/${documentId}/extract-entities`, {
+    const postData = JSON.stringify({
+      extraction_mode: extractionMode,
+      chunking_strategy: chunkingStrategy,
+      template: extractionConfig.template || null
+    });
+
+    const options = {
+      hostname: '127.0.0.1',  // Use IPv4 explicitly instead of localhost
+      port: 8001,
+      path: `/api/documents/${documentId}/extract-entities`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        extraction_mode: extractionMode,
-        chunking_strategy: chunkingStrategy,
-        template: extractionConfig.template || null
-      })
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request(options, (res) => {
+        let data = '';
+        
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) {
+              reject(new Error(`API request failed: ${res.statusCode} ${res.statusMessage}`));
+              return;
+            }
+            
+            const response = JSON.parse(data);
+            console.log('✅ Entity extraction API response:', response);
+            resolve(response);
+          } catch (parseError) {
+            reject(new Error(`Failed to parse API response: ${parseError.message}`));
+          }
+        });
+      });
+      
+      req.on('error', (error) => {
+        reject(new Error(`HTTP request failed: ${error.message}`));
+      });
+      
+      req.write(postData);
+      req.end();
     });
 
-    if (!response.ok) {
-      return {
-        success: false,
-        error: `Backend API error: ${response.status} ${response.statusText}`
-      };
-    }
-
-    const result = await response.json();
     return result;
+
   } catch (error) {
+    console.error('❌ Entity extraction API error:', error);
     return {
       success: false,
       error: `Failed to extract entities: ${error.message}`

@@ -127,6 +127,7 @@ def store_complete_grobid_result(grobid_result: dict, file_path: str, rename_fil
                     d.abstract = $abstract,
                     d.keywords = $keywords,
                     d.authors = $authors,
+                    d.journal = $journal,
                     d.references_count = $references_count,
                     d.figures_count = $figures_count,
                     d.tables_count = $tables_count
@@ -148,6 +149,9 @@ def store_complete_grobid_result(grobid_result: dict, file_path: str, rename_fil
                 keywords=grobid_result.get("metadata", {}).get("keywords", []),
                 authors=[a.get("name", a) if isinstance(a, dict) else a 
                         for a in grobid_result.get("metadata", {}).get("authors", [])],
+                journal=(grobid_result.get("metadata", {}).get("journal", "") or 
+                        grobid_result.get("metadata", {}).get("venue", "") or 
+                        grobid_result.get("metadata", {}).get("publication", "")),
                 references_count=len(references),
                 figures_count=len(figures),
                 tables_count=len(tables)

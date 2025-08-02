@@ -84,6 +84,7 @@ class GrobidProcessor:
                         "authors": parsed_data.get("authors", []),
                         "abstract": parsed_data.get("abstract", ""),
                         "keywords": parsed_data.get("keywords", []),
+                        "journal": parsed_data.get("journal", ""),
                         "references": parsed_data.get("references", []),
                         "citations": parsed_data.get("citations", []),
                         "figures": parsed_data.get("figures", []),
@@ -96,6 +97,7 @@ class GrobidProcessor:
                 print(f"✅ GROBID processing complete!")
                 print(f"   📄 Title: {parsed_data.get('title', 'Unknown')[:60]}...")
                 print(f"   👥 Authors: {len(parsed_data.get('authors', []))}")
+                print(f"   📰 Journal: '{parsed_data.get('journal', 'Not found')}'")
                 print(f"   📚 References: {len(parsed_data.get('references', []))}")
                 print(f"   🔗 Citations: {len(parsed_data.get('citations', []))}")
                 print(f"   📊 Tables: {len(parsed_data.get('tables', []))}")
@@ -125,6 +127,7 @@ class GrobidProcessor:
                 "authors": [],
                 "abstract": "",
                 "keywords": [],
+                "journal": "",
                 "full_text": "",
                 "references": [],
                 "citations": [],
@@ -136,6 +139,16 @@ class GrobidProcessor:
             title_elem = root.find('.//tei:titleStmt/tei:title[@type="main"]', ns)
             if title_elem is not None and title_elem.text:
                 result["title"] = title_elem.text.strip()
+            
+            # Extract journal/venue information from sourceDesc
+            journal_elem = root.find('.//tei:sourceDesc//tei:title[@level="j"]', ns)
+            if journal_elem is not None and journal_elem.text:
+                result["journal"] = journal_elem.text.strip()
+            else:
+                # Try alternative locations for journal information
+                monogr_title = root.find('.//tei:sourceDesc//tei:monogr/tei:title', ns)
+                if monogr_title is not None and monogr_title.text:
+                    result["journal"] = monogr_title.text.strip()
             
             # Extract authors
             for author in root.findall('.//tei:sourceDesc//tei:author', ns):

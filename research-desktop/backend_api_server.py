@@ -21,8 +21,11 @@ sys.path.insert(0, str(current_dir))
 # FastAPI for HTTP server
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import asyncio
+import json as json_lib
 
 # Import existing backend tools
 from storage.neo4j.storage import Neo4jStorage
@@ -211,6 +214,86 @@ async def process_grobid(request: GrobidProcessRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/documents/{document_id}/extract-entities/stream")
+async def extract_entities_stream(document_id: str, extraction_mode: str = "academic", chunking_strategy: str = "hierarchical"):
+    """Stream entity extraction progress with real-time LLM responses"""
+    
+    async def generate_extraction_stream():
+        try:
+            # Send initial status
+            yield f"data: {json_lib.dumps({'type': 'status', 'message': 'Initializing entity extraction...', 'document_id': document_id})}\n\n"
+            
+            # Get document details
+            doc_result = session_manager.get_document_details(document_id)
+            
+            if not doc_result.get("success"):
+                yield f"data: {json_lib.dumps({'type': 'error', 'message': 'Document not found'})}\n\n"
+                return
+            
+            full_text = doc_result.get("fullText", "")
+            if not full_text:
+                yield f"data: {json_lib.dumps({'type': 'error', 'message': 'No document content found'})}\n\n"
+                return
+            
+            # Send document info
+            doc_title = doc_result.get("title", "Unknown Document")
+            yield f"data: {json_lib.dumps({'type': 'document_info', 'title': doc_title, 'length': len(full_text)})}\n\n"
+            
+            # Import and use the actual entity extraction system
+            from tools.storage.enhanced_entity_storage import extract_and_store_entities
+            from processor.chunking_strategies import get_chunking_strategy
+            
+            # Create document info for entity extraction
+            document_info = {
+                "title": doc_title,
+                "id": document_id,
+                "path": doc_result.get("path", ""),
+                "type": "academic_paper"
+            }
+            
+            # Apply chunking strategy to the document
+            yield f"data: {json_lib.dumps({'type': 'status', 'message': f'Applying {chunking_strategy} chunking strategy...'})}\n\n"
+            chunker = get_chunking_strategy(chunking_strategy)
+            chunks = chunker.chunk_text(full_text, document_info)
+            
+            yield f"data: {json_lib.dumps({'type': 'chunking_complete', 'chunks_count': len(chunks), 'strategy': chunking_strategy})}\n\n"
+            
+            total_entities = 0
+            total_relationships = 0
+            
+            # Process each chunk with entity extraction
+            for i, chunk in enumerate(chunks):
+                try:
+                    yield f"data: {json_lib.dumps({'type': 'chunk_start', 'chunk_number': i+1, 'total_chunks': len(chunks), 'chunk_length': len(chunk)})}\n\n"
+                    
+                    # Run entity extraction on this chunk using proper tool invocation
+                    result = extract_and_store_entities.invoke({
+                        "content": chunk, 
+                        "document_info": document_info
+                    })
+                    
+                    if result.get("success"):
+                        entities_count = result.get("entities_found", 0)
+                        relationships_count = result.get("relationships_found", 0)
+                        total_entities += entities_count
+                        total_relationships += relationships_count
+                        
+                        yield f"data: {json_lib.dumps({'type': 'chunk_complete', 'chunk_number': i+1, 'entities_found': entities_count, 'relationships_found': relationships_count, 'message': result.get('message', '')})}\n\n"
+                    else:
+                        yield f"data: {json_lib.dumps({'type': 'chunk_error', 'chunk_number': i+1, 'error': result.get('error', 'Unknown error')})}\n\n"
+                        
+                except Exception as chunk_error:
+                    yield f"data: {json_lib.dumps({'type': 'chunk_error', 'chunk_number': i+1, 'error': str(chunk_error)})}\n\n"
+                    continue
+            
+            # Send final results
+            yield f"data: {json_lib.dumps({'type': 'extraction_complete', 'total_entities': total_entities, 'total_relationships': total_relationships, 'document_id': document_id, 'document_title': doc_title})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json_lib.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(generate_extraction_stream(), media_type="text/plain")
+
 @app.post("/api/documents/{document_id}/extract-entities")
 async def extract_entities(document_id: str, request: EntityExtractionRequest):
     """Extract entities from a document."""
@@ -225,17 +308,63 @@ async def extract_entities(document_id: str, request: EntityExtractionRequest):
         if not full_text:
             raise HTTPException(status_code=400, detail="No document content found")
         
-        # For now, return a simple response - full entity extraction would require 
-        # the complete LLM integration which is complex
+        # Import and use the actual entity extraction system
+        from tools.storage.enhanced_entity_storage import extract_and_store_entities
+        from processor.chunking_strategies import get_chunking_strategy
+        
+        # Get document metadata for context
+        doc_title = doc_result.get("title", "Unknown Document")
+        doc_path = doc_result.get("path", "")
+        
+        # Create document info for entity extraction
+        document_info = {
+            "title": doc_title,
+            "id": document_id,
+            "path": doc_path,
+            "type": "academic_paper"
+        }
+        
+        # Apply chunking strategy to the document
+        chunker = get_chunking_strategy(request.chunking_strategy)
+        chunks = chunker.chunk_text(full_text)
+        
+        total_entities = 0
+        total_relationships = 0
+        
+        # Process each chunk with entity extraction
+        for i, chunk in enumerate(chunks):
+            try:
+                # Run entity extraction on this chunk using proper tool invocation
+                result = extract_and_store_entities.invoke({
+                    "content": chunk, 
+                    "document_info": document_info
+                })
+                
+                if result.get("success"):
+                    entities_count = result.get("entities_found", 0)
+                    relationships_count = result.get("relationships_found", 0)
+                    total_entities += entities_count
+                    total_relationships += relationships_count
+                    
+                    print(f"✅ Processed chunk {i+1}/{len(chunks)}: {entities_count} entities, {relationships_count} relationships")
+                else:
+                    print(f"⚠️ Failed to process chunk {i+1}/{len(chunks)}: {result.get('error', 'Unknown error')}")
+                    
+            except Exception as chunk_error:
+                print(f"❌ Error processing chunk {i+1}: {chunk_error}")
+                continue
+        
         return {
             "success": True,
-            "message": f"Entity extraction requested for document {document_id}",
+            "message": f"Entity extraction completed for document {document_id}",
             "document_id": document_id,
+            "document_title": doc_title,
             "extraction_mode": request.extraction_mode,
             "chunking_strategy": request.chunking_strategy,
             "document_length": len(full_text),
-            "entities_found": 0,  # Placeholder
-            "relationships_found": 0  # Placeholder
+            "chunks_processed": len(chunks),
+            "entities_found": total_entities,
+            "relationships_found": total_relationships
         }
         
     except HTTPException:

@@ -32,13 +32,43 @@ const ProcessingProgress = ({
                 }
               </span>
               <span className="font-medium">
-                {Math.round((batchProgress.completed / Math.max(batchProgress.total, 1)) * 100)}%
+                {(() => {
+                  // Calculate progress based on completed steps
+                  const completedSteps = processingSteps.filter(step => step.status === 'completed').length;
+                  const totalSteps = processingSteps.length;
+                  const stepProgress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+                  
+                  // For batch processing, combine step progress with batch progress
+                  if (batchProgress.total > 1) {
+                    const batchProgressPercent = (batchProgress.completed / batchProgress.total) * 100;
+                    const currentFileProgress = stepProgress / batchProgress.total;
+                    return Math.round(batchProgressPercent + currentFileProgress);
+                  }
+                  
+                  return Math.round(stepProgress);
+                })()}%
               </span>
             </div>
             <div className="bg-gray-700 rounded-full h-4 mb-3">
               <div 
                 className="bg-gradient-to-r from-blue-500 to-green-500 h-4 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${Math.max(5, (batchProgress.completed / Math.max(batchProgress.total, 1)) * 100)}%` }}
+                style={{ 
+                  width: `${(() => {
+                    // Calculate progress based on completed steps
+                    const completedSteps = processingSteps.filter(step => step.status === 'completed').length;
+                    const totalSteps = processingSteps.length;
+                    const stepProgress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+                    
+                    // For batch processing, combine step progress with batch progress
+                    if (batchProgress.total > 1) {
+                      const batchProgressPercent = (batchProgress.completed / batchProgress.total) * 100;
+                      const currentFileProgress = stepProgress / batchProgress.total;
+                      return Math.max(5, batchProgressPercent + currentFileProgress);
+                    }
+                    
+                    return Math.max(5, stepProgress);
+                  })()}%`
+                }}
               ></div>
             </div>
             {batchQueue && batchQueue[currentFileIndex] && (

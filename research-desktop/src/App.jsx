@@ -521,8 +521,10 @@ Document content:
           entityList: []
         };
         
-        // Add to current results immediately for better UX
-        setResults(prevResults => [processedDoc, ...prevResults]);
+        // Reload documents from API to get properly formatted data
+        if (currentSession) {
+          await loadSessionDocuments(currentSession.id);
+        }
         
       } else {
         updateProcessingStep(5, 'failed');
@@ -593,26 +595,136 @@ Document content:
           console.log('🔍 Processing document:', doc.title);
           setCurrentExtractionDoc(doc.title || 'Unknown Document');
           
-          // Pass the complete template configuration and chunking strategy to the backend
-          console.log('📞 Calling electronAPI.api.extractEntities with chunking:', chunkingStrategy);
-          const result = await window.electronAPI.api.extractEntities(docId, {
-            mode: extractionConfig,
-            template: selectedTemplate,
-            chunking_strategy: chunkingStrategy
+          // Use Server-Sent Events for real-time streaming
+          await new Promise((resolve, reject) => {
+            const eventSource = new EventSource(
+              `http://localhost:8001/api/documents/${docId}/extract-entities/stream?extraction_mode=${extractionConfig}&chunking_strategy=${chunkingStrategy}`
+            );
+            
+            eventSource.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                console.log('📡 SSE received:', data);
+                
+                // Add log entry based on message type
+                switch (data.type) {
+                  case 'status':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'info',
+                      message: data.message,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'document_info':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'info',
+                      message: `📄 Document: ${data.title} (${data.length.toLocaleString()} chars)`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'chunking_complete':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'success',
+                      message: `🔧 ${data.strategy} chunking: ${data.chunks_count} chunks created`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'chunk_start':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'info',
+                      message: `🧠 Processing chunk ${data.chunk_number}/${data.total_chunks} (${data.chunk_length} chars)`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'chunk_complete':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'success',
+                      message: `✅ Chunk ${data.chunk_number}: ${data.entities_found} entities, ${data.relationships_found} relationships`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'chunk_error':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'error',
+                      message: `❌ Chunk ${data.chunk_number} failed: ${data.error}`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    break;
+                    
+                  case 'extraction_complete':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'success',
+                      message: `🎉 Complete! Total: ${data.total_entities} entities, ${data.total_relationships} relationships`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    
+                    // Add to results
+                    setEntityResults(prev => [...prev, {
+                      success: true,
+                      document_id: data.document_id,
+                      document_title: data.document_title,
+                      entities_found: data.total_entities,
+                      relationships_found: data.total_relationships,
+                      extraction_mode: extractionConfig,
+                      chunking_strategy: chunkingStrategy,
+                      message: `Extracted ${data.total_entities} entities and ${data.total_relationships} relationships`
+                    }]);
+                    
+                    eventSource.close();
+                    resolve();
+                    break;
+                    
+                  case 'error':
+                    setExtractionLogs(prev => [...prev, {
+                      type: 'error',
+                      message: `❌ Error: ${data.message}`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }]);
+                    eventSource.close();
+                    reject(new Error(data.message));
+                    break;
+                }
+              } catch (parseError) {
+                console.error('Failed to parse SSE data:', parseError);
+              }
+            };
+            
+            eventSource.onerror = (error) => {
+              console.error('SSE connection error:', error);
+              setExtractionLogs(prev => [...prev, {
+                type: 'warning',
+                message: '⚠️ Connection error - falling back to standard extraction',
+                timestamp: new Date().toLocaleTimeString()
+              }]);
+              eventSource.close();
+              
+              // Fallback to original extraction method
+              window.electronAPI.api.extractEntities(docId, {
+                mode: extractionConfig,
+                template: selectedTemplate,
+                chunking_strategy: chunkingStrategy
+              }).then(result => {
+                if (result.success) {
+                  setEntityResults(prev => [...prev, result]);
+                }
+                resolve();
+              }).catch(reject);
+            };
           });
-          
-          console.log('📥 Received result:', result);
-          
-          if (result.success) {
-            setEntityResults(prev => [...prev, result]);
-            console.log('✅ Added result to entityResults');
-          } else {
-            console.error('❌ Extraction failed:', result.error);
-          }
         }
       }
     } catch (error) {
       console.error('Entity extraction failed:', error);
+      setExtractionLogs(prev => [...prev, {
+        type: 'error',
+        message: `💥 Extraction failed: ${error.message}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
     } finally {
       setExtractingEntities(false);
       setCurrentExtractionDoc('');
@@ -649,9 +761,6 @@ Document content:
 
   const handleDeleteDocument = async (documentId) => {
     try {
-      // Remove from frontend state immediately for better UX (optimistic update)
-      setResults(prev => prev.filter(doc => doc.id !== documentId));
-      
       // Remove from selected documents if it was selected
       setSelectedDocuments(prev => {
         const newSet = new Set(prev);
@@ -671,12 +780,13 @@ Document content:
       
       if (!result.success) {
         console.error('Backend deletion failed:', result.error);
-        // Reload documents on failure to sync state
-        if (currentSession) {
-          loadSessionDocuments(currentSession.id);
-        }
       } else {
         console.log('Document permanently deleted from database:', documentId);
+      }
+      
+      // Always reload documents from API to ensure consistency
+      if (currentSession) {
+        await loadSessionDocuments(currentSession.id);
       }
       
     } catch (error) {

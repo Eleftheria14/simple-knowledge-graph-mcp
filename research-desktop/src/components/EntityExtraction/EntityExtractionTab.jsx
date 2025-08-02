@@ -66,6 +66,7 @@ const EntityExtractionTab = ({
                 onChange={(e) => setChunkingStrategy(e.target.value)}
                 className="w-full max-w-md px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-green-500"
               >
+                <option value="no_chunking">No Chunking - Process entire document (large context models)</option>
                 <option value="simple_truncate">Simple Truncate - Take first 4000 characters (fastest)</option>
                 <option value="recursive_character">Recursive Character - Smart paragraph and sentence splits</option>
                 <option value="token_aware">Token Aware - Precise token control for LLM processing</option>
@@ -82,6 +83,13 @@ const EntityExtractionTab = ({
               <div className="mt-3 p-3 bg-gray-800 rounded border border-gray-700">
                 <div className="text-xs text-gray-400 mb-2">Strategy Info:</div>
                 <div className="text-sm text-gray-300">
+                  {chunkingStrategy === 'no_chunking' && (
+                    <div>
+                      <div><strong>Performance:</strong> <span className="text-purple-400">Variable</span></div>
+                      <div><strong>Coverage:</strong> <span className="text-green-400">Complete</span></div>
+                      <div className="text-xs text-green-400 mt-1">Best for large context models (32k+ tokens) - processes entire document at once</div>
+                    </div>
+                  )}
                   {chunkingStrategy === 'simple_truncate' && (
                     <div>
                       <div><strong>Performance:</strong> <span className="text-green-400">High Speed</span></div>
@@ -152,7 +160,7 @@ const EntityExtractionTab = ({
                       <div className="text-xs text-green-400 mt-1">Maintains natural paragraph structure and flow</div>
                     </div>
                   )}
-                  {!['simple_truncate', 'recursive_character', 'hierarchical', 'multi_level', 'content_aware', 'token_aware', 'sentence_aware', 'sliding_window', 'semantic_topic', 'paragraph_based'].includes(chunkingStrategy) && (
+                  {!['no_chunking', 'simple_truncate', 'recursive_character', 'hierarchical', 'multi_level', 'content_aware', 'token_aware', 'sentence_aware', 'sliding_window', 'semantic_topic', 'paragraph_based'].includes(chunkingStrategy) && (
                     <div className="text-xs text-gray-400">
                       Advanced chunking strategy selected
                     </div>
@@ -225,8 +233,13 @@ const EntityExtractionTab = ({
                             {doc.authors.length > 2 && ` et al.`}
                           </span>
                         )}
-                        <span>{new Date(doc.timestamp).toLocaleDateString()}</span>
-                        <span>{doc.content_length?.toLocaleString()} chars</span>
+                        {(doc.metadata?.journal || doc.journal || doc.venue || doc.publication || doc.source) && (
+                          <span className="truncate text-gray-400">
+                            {doc.metadata?.journal || doc.journal || doc.venue || doc.publication || doc.source}
+                          </span>
+                        )}
+                        <span>{doc.timestamp ? new Date(doc.timestamp).getFullYear() : new Date().getFullYear()}</span>
+                        <span>{(doc.content_length || doc.fullText?.length || doc.content?.length || doc.full_text?.length || 0).toLocaleString()} chars</span>
                       </div>
                     </div>
                   </div>
@@ -263,12 +276,46 @@ const EntityExtractionTab = ({
               </div>
             )}
 
-            {/* Extraction Logs */}
-            {extractionLogs.length === 0 && (
-              <div className="mt-4 text-sm text-gray-400">
-                Preparing extraction pipeline...
+            {/* LLM Response Console */}
+            <div className="mt-6">
+              <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                Live LLM Analysis (Groq Llama 3.1 8B)
+              </h4>
+              <div className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-64 overflow-y-auto border border-gray-600">
+                {extractionLogs.length === 0 ? (
+                  <div className="text-green-400">
+                    <div className="flex items-center">
+                      <span className="text-blue-400">[SYSTEM]</span>
+                      <span className="ml-2">Initializing Groq LLM connection...</span>
+                    </div>
+                    <div className="flex items-center mt-1">
+                      <span className="text-purple-400">[CONFIG]</span>
+                      <span className="ml-2">Model: llama-3.1-8b-instant | Temperature: 0.1 | Strategy: {chunkingStrategy}</span>
+                    </div>
+                    <div className="flex items-center mt-1">
+                      <span className="text-yellow-400">[PIPELINE]</span>
+                      <span className="ml-2">Preparing extraction pipeline...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {extractionLogs.map((log, index) => (
+                      <div key={index} className="flex items-start">
+                        <span className={`text-${log.type === 'info' ? 'blue' : log.type === 'success' ? 'green' : log.type === 'warning' ? 'yellow' : 'red'}-400 flex-shrink-0`}>
+                          [{log.type.toUpperCase()}]
+                        </span>
+                        <span className="ml-2 text-gray-300 break-words">{log.message}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center mt-2 text-green-400">
+                      <span className="animate-pulse">▊</span>
+                      <span className="ml-1">Processing...</span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 

@@ -68,7 +68,6 @@ const UploadArea = ({
         } ${!grobidConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         onClick={grobidConnected ? handleFileSelect : undefined}
       >
-        {
         <div>
           <div className="text-4xl mb-4">
             <HiUpload className="w-16 h-16 mx-auto text-gray-400" />

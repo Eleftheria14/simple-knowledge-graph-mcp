@@ -145,6 +145,7 @@ class SessionManager:
                                d.content_length as content_length,
                                d.abstract as abstract,
                                d.authors as authors,
+                               d.journal as journal,
                                d.keywords as keywords,
                                d.references_count as references_count,
                                d.figures_count as figures_count,
@@ -171,12 +172,14 @@ class SessionManager:
                             "original_filename": record.get("original_filename"),
                             "file_renamed": record.get("file_renamed", False),
                             "created": created_str,
+                            "timestamp": created_str,  # Add timestamp field for frontend sorting
                             "success": record.get("success", False),
                             "error": record.get("error", ""),
                             "content_length": record.get("content_length", 0),
                             "full_text": "",  # Empty for performance
                             "abstract": record.get("abstract", ""),
                             "authors": record.get("authors", []),
+                            "journal": record.get("journal", ""),
                             "keywords": record.get("keywords", []),
                             "references_count": record.get("references_count", 0),
                             "figures_count": record.get("figures_count", 0),
@@ -225,12 +228,15 @@ class SessionManager:
                         "original_filename": doc.get("original_filename"),
                         "file_renamed": doc.get("file_renamed", False),
                         "created": created_str,
+                        "timestamp": created_str,  # Add timestamp field for frontend sorting
                         "success": doc.get("success", False),
                         "error": doc.get("error", ""),
                         "content_length": doc.get("content_length", 0),
                         "full_text": doc.get("full_text", ""),
+                        "fullText": doc.get("full_text", ""),  # Add fullText alias for frontend compatibility
                         "abstract": doc.get("abstract", ""),
                         "authors": doc.get("authors", []),
+                        "journal": doc.get("journal", ""),
                         "keywords": doc.get("keywords", []),
                         "references_count": doc.get("references_count", 0),
                         "figures_count": doc.get("figures_count", 0),

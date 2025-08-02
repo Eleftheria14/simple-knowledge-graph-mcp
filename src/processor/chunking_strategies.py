@@ -16,6 +16,7 @@ from langchain.text_splitter import (
 
 class ChunkingStrategy(Enum):
     """Available chunking strategies"""
+    NO_CHUNKING = "no_chunking"                   # Process entire document as one chunk
     SIMPLE_TRUNCATE = "simple_truncate"           # Just take first N characters
     RECURSIVE_CHARACTER = "recursive_character"   # LangChain recursive splitter
     TOKEN_AWARE = "token_aware"                   # Token-based splitting
@@ -113,6 +114,7 @@ class DocumentChunker:
             return []
         
         strategy_map = {
+            ChunkingStrategy.NO_CHUNKING: self._no_chunking,
             ChunkingStrategy.SIMPLE_TRUNCATE: self._simple_truncate,
             ChunkingStrategy.RECURSIVE_CHARACTER: self._recursive_character_chunking,
             ChunkingStrategy.TOKEN_AWARE: self._token_aware_chunking,
@@ -133,6 +135,22 @@ class DocumentChunker:
             chunks = chunks[:self.config.max_chunks]
         
         return chunks
+    
+    def _no_chunking(self, content: str, doc_info: Dict) -> List[TextChunk]:
+        """No chunking - process entire document as one chunk for large context models"""
+        return [TextChunk(
+            content=content,
+            start_pos=0,
+            end_pos=len(content),
+            chunk_id="no_chunk_1",
+            chunk_number=1,
+            section_type="full_document",
+            metadata={
+                "strategy": "no_chunking", 
+                "full_document": True,
+                "original_length": len(content)
+            }
+        )]
     
     def _simple_truncate(self, content: str, doc_info: Dict) -> List[TextChunk]:
         """Simple truncation - just take first N characters"""
@@ -531,6 +549,13 @@ class DocumentChunker:
 def get_chunking_strategies() -> Dict[str, Dict[str, str]]:
     """Get all available chunking strategies with descriptions"""
     return {
+        "no_chunking": {
+            "name": "No Chunking",
+            "description": "Process entire document as one chunk - for large context models",
+            "best_for": "Large context models (32k+ tokens), complete document analysis",
+            "speed": "⚡⚡⚡",
+            "quality": "⭐⭐⭐⭐⭐"
+        },
         "simple_truncate": {
             "name": "Simple Truncate",
             "description": "Just take first 4000 characters - fastest but loses content",
@@ -603,13 +628,49 @@ def get_chunking_strategies() -> Dict[str, Dict[str, str]]:
         }
     }
 
+class ChunkerWrapper:
+    """Simple wrapper to provide chunk_text method compatibility"""
+    def __init__(self, chunker: DocumentChunker):
+        self.chunker = chunker
+    
+    def chunk_text(self, content: str, document_info: Dict[str, Any] = None) -> List[str]:
+        """Convert TextChunk objects to simple strings for compatibility"""
+        chunks = self.chunker.chunk_document(content, document_info)
+        return [chunk.content for chunk in chunks]
+
+def get_chunking_strategy(strategy_name: str, config: ChunkingConfig = None) -> ChunkerWrapper:
+    """Get a configured DocumentChunker instance for the specified strategy"""
+    if config is None:
+        config = ChunkingConfig()
+    
+    # Set the strategy based on the name
+    strategy_mapping = {
+        "no_chunking": ChunkingStrategy.NO_CHUNKING,
+        "simple_truncate": ChunkingStrategy.SIMPLE_TRUNCATE,
+        "recursive_character": ChunkingStrategy.RECURSIVE_CHARACTER,
+        "token_aware": ChunkingStrategy.TOKEN_AWARE,
+        "sentence_aware": ChunkingStrategy.SENTENCE_AWARE,
+        "hierarchical": ChunkingStrategy.HIERARCHICAL,
+        "sliding_window": ChunkingStrategy.SLIDING_WINDOW,
+        "semantic_topic": ChunkingStrategy.SEMANTIC_TOPIC,
+        "multi_level": ChunkingStrategy.MULTI_LEVEL,
+        "paragraph_based": ChunkingStrategy.PARAGRAPH_BASED,
+        "content_aware": ChunkingStrategy.CONTENT_AWARE
+    }
+    
+    config.strategy = strategy_mapping.get(strategy_name, ChunkingStrategy.RECURSIVE_CHARACTER)
+    return ChunkerWrapper(DocumentChunker(config))
+
 def get_recommended_strategy(document_info: Dict[str, Any]) -> str:
     """Recommend a chunking strategy based on document characteristics"""
     content_length = document_info.get('content_length', 0)
     has_sections = any(keyword in document_info.get('title', '').lower() 
                       for keyword in ['abstract', 'introduction', 'method', 'result', 'discussion'])
     
-    if content_length < 5000:
+    # For very large documents with modern LLMs, suggest no chunking
+    if content_length > 100000:
+        return "no_chunking"
+    elif content_length < 5000:
         return "simple_truncate"
     elif content_length < 15000:
         return "recursive_character"

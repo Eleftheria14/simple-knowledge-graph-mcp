@@ -43,10 +43,19 @@ class BackendStorageIntegration:
             
             # Extract metadata
             metadata = grobid_result.get("metadata", {})
+            print(f"🔍 GROBID metadata keys: {list(metadata.keys())}")
             title = metadata.get("title", "Untitled Document")
             authors = metadata.get("authors", [])
             abstract = metadata.get("abstract", "")
             keywords = metadata.get("keywords", [])
+            journal = metadata.get("journal", "") or metadata.get("venue", "") or metadata.get("publication", "")
+            print(f"📰 Journal extracted: '{journal}' from fields: journal='{metadata.get('journal', 'N/A')}', venue='{metadata.get('venue', 'N/A')}', publication='{metadata.get('publication', 'N/A')}'")
+            
+            # Also check top-level grobid_result for journal info
+            top_level_journal = grobid_result.get("journal", "") or grobid_result.get("venue", "") or grobid_result.get("publication", "")
+            if top_level_journal and not journal:
+                journal = top_level_journal
+                print(f"📰 Using top-level journal: '{journal}'")
             
             # Extract references, figures, tables
             references = metadata.get("references", [])
@@ -78,6 +87,7 @@ class BackendStorageIntegration:
                 "abstract": abstract,
                 "keywords": keywords,
                 "authors": [a.get("name", a) if isinstance(a, dict) else a for a in authors],
+                "journal": journal,
                 "references_count": len(references),
                 "figures_count": len(figures),
                 "tables_count": len(tables)

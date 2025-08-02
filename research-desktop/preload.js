@@ -72,15 +72,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
           title: result.metadata?.title || 'Untitled Document',
           authors: result.metadata?.authors?.map(a => a.name || a) || [],
           abstract: result.metadata?.abstract || '',
+          journal: result.metadata?.journal || result.journal || '', // Map journal field
           references: referencesArray, // Array of reference objects for display
+          references_count: referencesArray.length, // Count references
           entities: 0, // Will be extracted by LLM later
           entityList: [], // Will be populated by LLM entity extraction
           content: result.content || '',
           fullText: result.content || '',
+          content_length: (result.content || '').length, // Calculate content length
           metadata: result.metadata || {},
           citations: referencesArray, // Same data, different field name for compatibility
           figures: result.metadata?.figures || [],
+          figures_count: (result.metadata?.figures || []).length, // Count figures
           tables: result.metadata?.tables || [],
+          tables_count: (result.metadata?.tables || []).length, // Count tables
           keywords: result.metadata?.keywords || [],
           filePath
         };
@@ -167,15 +172,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
           title: doc.title,
           authors: doc.authors,
           abstract: doc.abstract,
+          journal: doc.journal, // Map journal field from backend
           references: doc.references || [], // Array of reference objects for display
+          references_count: doc.references_count || 0, // Number of references
           entities: 0, // Entities would be extracted by LLM separately
           success: doc.success,
           error: doc.error,
-          timestamp: doc.created,
-          fullText: doc.full_text,
+          timestamp: doc.timestamp || doc.created, // Use timestamp first, fallback to created
+          created: doc.created, // Keep original created field
+          fullText: doc.full_text || doc.fullText, // Support both field names
+          content_length: doc.content_length, // Map content length
           citations: doc.references || [], // Same data, different field name for compatibility
           figures: doc.figures || [],
+          figures_count: doc.figures_count || 0, // Number of figures
           tables: doc.tables || [],
+          tables_count: doc.tables_count || 0, // Number of tables
           keywords: doc.keywords || [],
           entityList: []
         }));
@@ -258,15 +269,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
           title: doc.title,
           authors: doc.authors,
           abstract: doc.abstract,
+          journal: doc.journal, // Map journal field from backend
           references: doc.references || [], // Array of reference objects for display
+          references_count: doc.references_count || 0, // Number of references for display
           entities: 0, // Entities would be extracted by LLM separately
           success: doc.success,
           error: doc.error,
-          timestamp: doc.created,
-          fullText: doc.full_text,
+          timestamp: doc.timestamp || doc.created, // Use timestamp first, fallback to created
+          created: doc.created, // Keep original created field
+          fullText: doc.full_text || doc.fullText, // Support both field names
+          content_length: doc.content_length, // Map content length for character count display
           citations: doc.references || [], // Same data, different field name for compatibility
           figures: doc.figures || [],
+          figures_count: doc.figures_count || 0, // Number of figures
           tables: doc.tables || [],
+          tables_count: doc.tables_count || 0, // Number of tables
           keywords: doc.keywords || [],
           entityList: []
         }));
