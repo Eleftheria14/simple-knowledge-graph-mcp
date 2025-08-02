@@ -245,6 +245,32 @@ See `src/prompts/entity_extraction.md` for detailed guidance patterns.
 - **Unified storage** - Neo4j handles both graph entities and vector embeddings
 - **Zero API costs** - GROBID replaces expensive services like LlamaParse
 
+## Recommended Icon Libraries
+
+### For Web/UI Development
+**Primary Recommendations:**
+1. **Lucide** - Clean outlined icons, 1000+ icons, excellent React/Vue support
+2. **Heroicons** - Tailwind's official set, outline/solid variants, web-optimized
+3. **Phosphor Icons** - Largest collection (7000+), multiple weights, great variety
+4. **Tabler Icons** - 4000+ free SVG icons, consistent design system
+5. **Feather Icons** - Minimalist outlined icons, lightweight and simple
+
+**Comprehensive Collections:**
+6. **React Icons** - Meta-library combining FontAwesome, Feather, Material, etc.
+7. **Material Design Icons** - Google's comprehensive system, familiar UX patterns
+8. **Remix Icon** - 2000+ neutral-style icons, good for business apps
+9. **Bootstrap Icons** - 1800+ icons, works well with Bootstrap framework
+10. **Iconify** - Unified access to 100+ icon sets, massive selection
+
+**Platform-Specific:**
+- **SF Symbols** - Apple's system icons (macOS/iOS apps)
+- **Fluent UI Icons** - Microsoft's design system
+- **Ant Design Icons** - For Ant Design React projects
+
+**Selection Criteria:** Consider your framework (React/Vue/vanilla), design style (outlined/filled), bundle size requirements, and whether you need academic/technical specific icons.
+
+**For Academic Projects:** Lucide or Heroicons provide the cleanest, most professional appearance that complements research-focused interfaces.
+
 ## Common Development Patterns
 
 ### Adding Dual-Purpose Tools (MCP + LangChain)

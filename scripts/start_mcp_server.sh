@@ -45,18 +45,8 @@ except Exception as e:
     print(f'   ❌ Neo4j connection failed: {e}')
     sys.exit(1)
 
-try:
-    import chromadb
-    from chromadb.config import Settings
-    client = chromadb.PersistentClient(
-        path='./chroma_db',
-        settings=Settings(anonymized_telemetry=False)
-    )
-    client.heartbeat()
-    print('   ✅ ChromaDB connection verified')
-except Exception as e:
-    print(f'   ❌ ChromaDB connection failed: {e}')
-    sys.exit(1)
+# Note: Using Neo4j for both graph and vector storage (ChromaDB removed)
+print('   ✅ Vector storage: Using Neo4j (unified storage)')
 "
 
 # Test MCP server imports
@@ -67,7 +57,7 @@ sys.path.insert(0, 'src')
 try:
     from server.main import mcp
     from storage.neo4j import Neo4jStorage, Neo4jQuery
-    from storage.chroma import ChromaDBStorage, ChromaDBQuery
+    # ChromaDB removed - using Neo4j for unified storage
     from storage.embedding import EmbeddingService
     print('   ✅ All MCP server imports successful')
 except Exception as e:

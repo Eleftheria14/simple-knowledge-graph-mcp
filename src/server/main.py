@@ -15,6 +15,13 @@ The server initializes storage managers and registers all tools from their
 respective modules, providing a clean separation of concerns.
 """
 
+import sys
+from pathlib import Path
+
+# Add the src directory to Python path
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
+
 from fastmcp import FastMCP
 
 # Import our storage managers

@@ -9,9 +9,8 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 
-# ChromaDB Configuration
-CHROMADB_PATH = os.getenv("CHROMADB_PATH", "./chroma_db")
-CHROMADB_COLLECTION = os.getenv("CHROMADB_COLLECTION", "knowledge_graph")
+# Vector Storage Configuration (using Neo4j)
+VECTOR_INDEX_NAME = os.getenv("VECTOR_INDEX_NAME", "text_vector_index")
 
 # Embedding Configuration
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")

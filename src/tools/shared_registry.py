@@ -58,6 +58,17 @@ class SharedToolRegistry:
         register_enhanced_entity_tools(mcp, neo4j_storage)
         register_vector_storage_tools(mcp, neo4j_storage)
         
+        # Register PDF processing tools
+        @mcp.tool()
+        def grobid_extract_mcp(file_path: str) -> dict:
+            """Extract academic content from PDF using GROBID (specialized for academic papers)"""
+            try:
+                # Call the LangChain tool
+                result = grobid_extract.invoke({"file_path": file_path})
+                return result
+            except Exception as e:
+                return {"error": str(e), "success": False}
+        
         # Register MCP-only tools
         register_search_tools(mcp, neo4j_query, neo4j_storage)
         register_literature_tools(mcp, neo4j_query, neo4j_storage)
