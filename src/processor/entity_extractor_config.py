@@ -192,7 +192,7 @@ QUALITY REQUIREMENTS:
 
 {{context_instructions}}
 
-Return ONLY valid JSON format:
+IMPORTANT: Return ONLY valid JSON format with no additional text, explanations, or markdown formatting. Do not use backticks or code blocks. Start directly with {{ and end with }}.
 {{
   "entities": [
     {{

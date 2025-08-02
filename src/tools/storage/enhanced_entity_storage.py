@@ -2,6 +2,7 @@
 from typing import List, Dict, Any, Optional
 import json
 import uuid
+import re
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from fastmcp import FastMCP
@@ -129,18 +130,56 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
         response = llm.invoke(extraction_prompt)
         print(f"📥 Received LLM response - Length: {len(str(response))} chars")
         
-        # Parse LLM response with retry logic
+        # Parse LLM response with improved retry logic and better JSON extraction
         extraction_data = None
         for attempt in range(config.max_retry_attempts + 1):
             try:
-                # Find JSON in response
+                # Get response content
                 content_text = response.content if hasattr(response, 'content') else str(response)
-                json_start = content_text.find('{')
-                json_end = content_text.rfind('}') + 1
+                print(f"🔍 LLM Response content (attempt {attempt + 1}): {content_text[:500]}...")
                 
-                if json_start >= 0 and json_end > json_start:
-                    json_str = content_text[json_start:json_end]
+                # Try multiple JSON extraction strategies
+                json_str = None
+                
+                # Strategy 1: Find complete JSON object with proper brace matching
+                json_start = content_text.find('{')
+                if json_start >= 0:
+                    brace_count = 0
+                    json_end = json_start
+                    for i, char in enumerate(content_text[json_start:], json_start):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    
+                    if brace_count == 0:
+                        json_str = content_text[json_start:json_end]
+                
+                # Strategy 2: If no balanced braces, try simple start/end finding
+                if not json_str:
+                    json_start = content_text.find('{')
+                    json_end = content_text.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = content_text[json_start:json_end]
+                
+                # Strategy 3: Look for ```json code blocks
+                if not json_str:
+                    json_match = re.search(r'```json\s*(\{.*?\})\s*```', content_text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                
+                if json_str:
+                    print(f"📝 Extracted JSON string: {json_str[:200]}...")
+                    # Clean up common JSON issues
+                    json_str = json_str.strip()
+                    # Remove any trailing commas before closing braces/brackets
+                    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+                    
                     extraction_data = json.loads(json_str)
+                    print(f"✅ Successfully parsed JSON with {len(extraction_data.get('entities', []))} entities")
                     break
                 else:
                     raise json.JSONDecodeError("No JSON found in response", content_text, 0)
@@ -150,11 +189,14 @@ def extract_and_store_entities(content: str, document_info: Dict[str, Any]) -> D
                 
                 if attempt < config.max_retry_attempts and config.retry_on_json_error:
                     print(f"🔄 Retrying extraction with simplified prompt...")
-                    # Retry with simpler prompt
-                    simple_prompt = f"""Extract entities from this text and return only JSON:
-{{"entities": [{{"id": "id", "name": "name", "type": "type", "confidence": 0.8}}], "relationships": []}}
+                    # Retry with simpler, more explicit prompt
+                    simple_prompt = f"""Extract entities from this text. Return ONLY the JSON object, no other text:
 
-Text: {content[:2000]}"""
+{{"entities": [{{"id": "sample_id", "name": "Sample Entity", "type": "concept", "properties": {{}}, "confidence": 0.8}}], "relationships": [{{"source": "id1", "target": "id2", "type": "RELATED_TO", "context": "context", "confidence": 0.7}}], "metadata": {{"total_entities": 1, "total_relationships": 1, "extraction_mode": "academic", "confidence_threshold": {config.global_confidence_threshold}}}}}
+
+Text to analyze: {content[:1500]}
+
+JSON Response:"""
                     response = llm.invoke(simple_prompt)
                     continue
                 else:
